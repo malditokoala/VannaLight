@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="VannaLight.ConsoleApp/VannaLight.ConsoleApp.csproj" />
+  <Project Path="VannaLight.Core/VannaLight.Core.csproj" />
+  <Project Path="VannaLight.Infrastructure/VannaLight.Infrastructure.csproj" />
+</Solution>
