@@ -11,6 +11,7 @@
     <PackageReference Include="LLamaSharp.Backend.Cuda12" Version="0.26.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.4" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.3" />
   </ItemGroup>
 
   <PropertyGroup>

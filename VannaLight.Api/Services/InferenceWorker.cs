@@ -18,7 +18,6 @@ public class InferenceWorker(
     {
         logger.LogInformation("InferenceWorker iniciado. Esperando trabajos...");
 
-        // 1. Obtenemos las rutas y la conexión a la base de datos (Northwind para el Dry-Run)
         string sqlitePath = configuration["Paths:Sqlite"] ?? "vanna_memory.db";
         string sqlServerConnString = configuration.GetConnectionString("OperationalDb")
             ?? throw new InvalidOperationException("Falta la cadena de conexión en el appsettings.");
@@ -27,76 +26,87 @@ public class InferenceWorker(
         {
             try
             {
+                // 1. Sacamos el trabajo de la cola
                 var workItem = await queue.DequeueAsync(ct);
 
-                using var scope = scopeFactory.CreateScope();
-                var jobStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
-                var askUseCase = scope.ServiceProvider.GetRequiredService<AskUseCase>();
-
-                await jobStore.UpdateStatusAsync(workItem.JobId, "Analyzing");
-                await hubContext.Clients.Client(workItem.ConnectionId)
-                    .SendAsync("JobStatusUpdated", new { workItem.JobId, Status = "Analyzing" }, ct);
-
-                // 2. Llamamos a tu UseCase con los 4 parámetros exactos que pide tu código
-                var result = await askUseCase.ExecuteAsync(
-                    workItem.Question,
-                    sqlitePath,
-                    sqlServerConnString,
-                    ct);
-
-                // 3. Evaluamos usando tus propiedades: Success, Sql, Error
-                // ... tu código anterior (var result = await askUseCase...)
-
-                if (result.Success)
+                // 2. AISLAMOS EL TRABAJO: Si este Job específico falla, lo cachamos aquí adentro.
+                try
                 {
-                    // 1. EL NUEVO PASO: ¡Ejecutar el SQL de verdad!
-                    IEnumerable<dynamic> queryResults = Array.Empty<dynamic>();
-                    string? executionError = null;
+                    using var scope = scopeFactory.CreateScope();
+                    var jobStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
+                    var askUseCase = scope.ServiceProvider.GetRequiredService<AskUseCase>();
 
-                    try
-                    {
-                        using var connection = new SqlConnection(sqlServerConnString);
-                        // Dapper ejecuta la consulta y mapea las columnas mágicamente
-                        queryResults = await connection.QueryAsync(result.Sql);
-                    }
-                    catch (Exception ex)
-                    {
-                        executionError = ex.Message;
-                    }
+                    await jobStore.UpdateStatusAsync(workItem.JobId, "Analyzing");
+                    await hubContext.Clients.Client(workItem.ConnectionId)
+                        .SendAsync("JobStatusUpdated", new { workItem.JobId, Status = "Analyzing" }, ct);
 
-                    if (executionError == null)
+                    var result = await askUseCase.ExecuteAsync(
+                        workItem.Question,
+                        sqlitePath,
+                        sqlServerConnString,
+                        ct);
+
+                    if (result.Success)
                     {
-                        // Se ejecutó perfecto, mandamos SQL y los DATOS
-                        await jobStore.SetResultAsync(workItem.JobId, result.Sql);
-                        await hubContext.Clients.Client(workItem.ConnectionId)
-                            .SendAsync("JobCompleted", new
-                            {
-                                workItem.JobId,
-                                Sql = result.Sql,
-                                Data = queryResults // <--- Aquí va el JSON con tus filas de Northwind
-                            }, ct);
+                        IEnumerable<dynamic> queryResults = Array.Empty<dynamic>();
+                        string? executionError = null;
+
+                        try
+                        {
+                            using var connection = new SqlConnection(sqlServerConnString);
+                            queryResults = await connection.QueryAsync(result.Sql);
+                        }
+                        catch (Exception ex)
+                        {
+                            executionError = ex.Message;
+                        }
+
+                        if (executionError == null)
+                        {
+                            await jobStore.SetResultAsync(workItem.JobId, result.Sql);
+                            await hubContext.Clients.Client(workItem.ConnectionId)
+                                .SendAsync("JobCompleted", new
+                                {
+                                    workItem.JobId,
+                                    Sql = result.Sql,
+                                    Data = queryResults
+                                }, ct);
+                        }
+                        else
+                        {
+                            await jobStore.SetErrorAsync(workItem.JobId, $"Error de ejecución: {executionError}", "Failed");
+                            await hubContext.Clients.Client(workItem.ConnectionId)
+                                .SendAsync("JobFailed", new { workItem.JobId, Error = $"El SQL es válido pero falló al ejecutarse: {executionError}" }, ct);
+                        }
                     }
                     else
                     {
-                        // Compiló en el Dry-Run pero falló al ejecutar (ej. timeout o error de datos)
-                        await jobStore.SetErrorAsync(workItem.JobId, $"Error de ejecución: {executionError}", "Failed");
+                        await jobStore.SetErrorAsync(workItem.JobId, result.Error ?? "Error desconocido", "Failed");
                         await hubContext.Clients.Client(workItem.ConnectionId)
-                            .SendAsync("JobFailed", new { workItem.JobId, Error = $"El SQL es válido pero falló al ejecutarse: {executionError}" }, ct);
+                            .SendAsync("JobFailed", new { workItem.JobId, Error = result.Error }, ct);
                     }
                 }
-                else
+                catch (Exception jobEx)
                 {
-                    // ... el else original que ya tenías ...
-                    await jobStore.SetErrorAsync(workItem.JobId, result.Error ?? "Error desconocido", "Failed");
+                    // 3. AQUÍ MATAMOS AL ZOMBIE 🧟‍♂️
+                    logger.LogError(jobEx, "Error crítico procesando el Job {JobId}.", workItem.JobId);
+
+                    // Creamos un nuevo Scope de emergencia por si el anterior se corrompió con el error
+                    using var fallbackScope = scopeFactory.CreateScope();
+                    var fallbackJobStore = fallbackScope.ServiceProvider.GetRequiredService<IJobStore>();
+
+                    // Actualizamos la base de datos para no dejar el estado pegado en 'Analyzing'
+                    await fallbackJobStore.SetErrorAsync(workItem.JobId, $"Fallo crítico interno: {jobEx.Message}", "Failed");
+
+                    // Le enviamos la señal al frontend para quitar el loader y mostrar el recuadro rojo
                     await hubContext.Clients.Client(workItem.ConnectionId)
-                        .SendAsync("JobFailed", new { workItem.JobId, Error = result.Error }, ct);
+                        .SendAsync("JobFailed", new { workItem.JobId, Error = $"Fallo crítico interno: {jobEx.Message}" }, ct);
                 }
-               
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error crítico procesando inferencia.");
+                logger.LogError(ex, "Error fatal en el bucle de cola del InferenceWorker.");
             }
         }
     }

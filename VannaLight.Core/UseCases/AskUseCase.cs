@@ -53,8 +53,9 @@ public class AskUseCase(
 
     private string BuildPrompt(string question, RetrievalContext context)
     {
-        // Usamos el formato ChatML estricto que Qwen2.5 y Llama3 entienden
-        var prompt = "<|im_start|>system\nEres un desarrollador experto en T-SQL para SQL Server. Tu única tarea es devolver código T-SQL válido. NO des explicaciones, NO platiques, SOLO devuelve el código.\n\n";
+        // 1. INYECTAMOS LA REGLA DE ORO DIRECTO EN EL CEREBRO DE QWEN
+        var prompt = "<|im_start|>system\nEres un desarrollador experto en T-SQL para SQL Server. Tu única tarea es devolver código T-SQL válido. NO des explicaciones, NO platiques, SOLO devuelve el código.\n" +
+                     "REGLA CRÍTICA DE LA PLANTA: La tabla de detalles de órdenes se llama exactamente OrderDetails (SIN ESPACIOS). NUNCA generes [Order Details].\n\n";
 
         if (context.SchemaDocs.Any())
         {

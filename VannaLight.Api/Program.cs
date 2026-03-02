@@ -47,6 +47,8 @@ builder.Services.AddTransient<IJobStore, SqlServerJobStore>();
 // EL WORKER: El guardaespaldas de tu GPU
 builder.Services.AddHostedService<InferenceWorker>();
 
+builder.Services.AddMemoryCache();
+
 var app = builder.Build();
 
 // 4. INICIALIZACIÓN AUTOMÁTICA DE LA BASE DE DATOS

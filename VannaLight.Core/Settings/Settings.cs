@@ -12,10 +12,13 @@ public sealed record LlmSettings(
     int Threads
 );
 
+// 1. ACTUALIZAMOS LA FIRMA DEL RECORD
 public sealed record RetrievalSettings(
     int TopExamples,
     double MinExampleScore, // si no llega a este umbral, se considera "sin match" fuerte
-    int TopSchemaDocs
+    int TopSchemaDocs,
+    int FallbackSchemaDocs, // <-- NUEVA VARIABLE
+    string? Domain          // <-- NUEVA VARIABLE
 );
 
 public sealed record SecuritySettings(
@@ -31,7 +34,8 @@ public sealed record AppSettings(
 
 public static class AppSettingsFactory
 {
-    public static AppSettings Create(RuntimeProfile profile, string modelPath)
+    // Le agregamos 'domain' opcional para que no te rompa tu Program.cs
+    public static AppSettings Create(RuntimeProfile profile, string modelPath, string? domain = "northwind")
     {
         // Valores conservadores y "offline-friendly"
         return profile switch
@@ -50,7 +54,9 @@ public static class AppSettingsFactory
                 new RetrievalSettings(
                     TopExamples: 3,
                     MinExampleScore: 2.5, // BM25 depende de corpus; ajustable
-                    TopSchemaDocs: 5
+                    TopSchemaDocs: 5,
+                    FallbackSchemaDocs: 10, // <-- INYECTAMOS VALOR (Perfil Medio)
+                    Domain: domain          // <-- INYECTAMOS DOMINIO
                 ),
                 new SecuritySettings(
                     DryRunEnabledByDefault: true
@@ -70,7 +76,9 @@ public static class AppSettingsFactory
                 new RetrievalSettings(
                     TopExamples: 5,
                     MinExampleScore: 2.0,
-                    TopSchemaDocs: 10
+                    TopSchemaDocs: 10,
+                    FallbackSchemaDocs: 15, // <-- INYECTAMOS VALOR (Perfil Alto)
+                    Domain: domain          // <-- INYECTAMOS DOMINIO
                 ),
                 new SecuritySettings(
                     DryRunEnabledByDefault: true
