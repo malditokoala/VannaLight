@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\VannaLight.Api\VannaLight.Api.csproj" />
     <ProjectReference Include="..\VannaLight.Core\VannaLight.Core.csproj" />
     <ProjectReference Include="..\VannaLight.Infrastructure\VannaLight.Infrastructure.csproj" />
   </ItemGroup>

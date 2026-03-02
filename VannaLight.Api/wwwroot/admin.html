@@ -1,0 +1,195 @@
+﻿<!DOCTYPE html>
+<html lang="es" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <title>LIA - Panel de Entrenamiento</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #121212;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .history-item {
+            cursor: pointer;
+            transition: 0.2s;
+            border-left: 4px solid transparent;
+        }
+
+            .history-item:hover {
+                background-color: #2a2a2a;
+                border-left-color: #00ffcc;
+            }
+
+        .editor-textarea {
+            font-family: 'Consolas', monospace;
+            font-size: 0.9rem;
+            color: #00ffcc;
+            background-color: #0a0a0a;
+            border: 1px solid #333;
+        }
+
+            .editor-textarea:focus {
+                background-color: #0a0a0a;
+                color: #00ffcc;
+                border-color: #00ffcc;
+                box-shadow: none;
+            }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark border-bottom border-secondary mb-4 shadow-sm">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1"><i class="fa-solid fa-graduation-cap text-warning"></i> Centro de Entrenamiento (RAG)</span>
+            <a href="/index.html" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-arrow-left"></i> Volver al Chat</a>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4">
+        <div class="row">
+            <div class="col-md-5">
+                <h5 class="mb-3"><i class="fa-solid fa-clock-rotate-left"></i> Historial Reciente</h5>
+                <div class="list-group shadow-sm" id="historyList" style="max-height: 75vh; overflow-y: auto;">
+                    <div class="text-center text-muted mt-5"><span class="spinner-border spinner-border-sm"></span> Cargando historial...</div>
+                </div>
+            </div>
+
+            <div class="col-md-7">
+                <div class="card shadow-lg border-secondary">
+                    <div class="card-header bg-dark border-secondary">
+                        <h5 class="mb-0"><i class="fa-solid fa-pen-to-square text-info"></i> Editor de T-SQL</h5>
+                    </div>
+                    <div class="card-body bg-dark">
+                        <div class="mb-3">
+                            <label class="form-label text-muted">Pregunta Original del Usuario</label>
+                            <input type="text" id="txtQuestion" class="form-control bg-dark text-light border-secondary" placeholder="Selecciona una consulta del historial..." readonly>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label text-muted d-flex justify-content-between">
+                                <span>Código SQL (Modifica lo que esté mal)</span>
+                                <span class="badge bg-secondary" id="statusBadge"></span>
+                            </label>
+                            <textarea id="txtSql" class="form-control editor-textarea" rows="12" placeholder="El SQL generado aparecerá aquí..."></textarea>
+                        </div>
+
+                        <div id="errorContainer" class="alert alert-danger" style="display:none; font-size: 0.85rem;"></div>
+
+                        <div class="text-end mt-4">
+                            <button class="btn btn-warning" id="btnSave" onclick="saveCorrection()" disabled>
+                                <i class="fa-solid fa-brain"></i> Guardar en Memoria RAG
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. Variable global para guardar las consultas
+        let globalJobs = [];
+
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/admin/history');
+                const jobs = await response.json();
+
+                globalJobs = jobs; // Guardamos todo en memoria
+
+                const list = document.getElementById('historyList');
+                list.innerHTML = '';
+
+                jobs.forEach((job, index) => {
+                    // Normalizamos nombres (por si el backend manda minúsculas o mayúsculas)
+                    const status = job.status || job.Status;
+                    const question = job.question || job.Question;
+                    const createdUtc = job.createdUtc || job.CreatedUtc;
+
+                    const isSuccess = status === 'Completed';
+                    const icon = isSuccess ? '<i class="fa-solid fa-check text-success"></i>' : '<i class="fa-solid fa-xmark text-danger"></i>';
+
+                    // 2. MAGIA: Solo pasamos el 'index' numérico. ¡Cero problemas con comillas!
+                    list.innerHTML += `
+                        <div class="list-group-item list-group-item-action bg-dark text-light border-secondary history-item p-3"
+                             onclick="loadEditor(${index})">
+                            <div class="d-flex w-100 justify-content-between mb-1">
+                                <strong class="text-truncate" style="max-width: 80%;">${question}</strong>
+                                <small class="text-muted">${new Date(createdUtc).toLocaleTimeString()}</small>
+                            </div>
+                            <small class="text-muted">${icon} ${status}</small>
+                        </div>
+                    `;
+                });
+            } catch (err) {
+                console.error("Error cargando historial", err);
+            }
+        }
+
+        // 3. Cargamos los datos extrayéndolos del arreglo global
+        function loadEditor(index) {
+            const job = globalJobs[index];
+
+            const question = job.question || job.Question;
+            const sql = job.sqlText || job.SqlText || '';
+            const status = job.status || job.Status;
+            const error = job.errorText || job.ErrorText;
+
+            document.getElementById('txtQuestion').value = question;
+            document.getElementById('txtSql').value = sql;
+
+            const badge = document.getElementById('statusBadge');
+            badge.innerText = status;
+            badge.className = status === 'Completed' ? 'badge bg-success' : 'badge bg-danger';
+
+            const errContainer = document.getElementById('errorContainer');
+            if (error && error !== 'null') {
+                errContainer.innerText = `Error reportado: ${error}`;
+                errContainer.style.display = 'block';
+            } else {
+                errContainer.style.display = 'none';
+            }
+
+            document.getElementById('btnSave').disabled = false;
+        }
+
+        async function saveCorrection() {
+            const question = document.getElementById('txtQuestion').value;
+            const sql = document.getElementById('txtSql').value;
+
+            if (!question || !sql) {
+                alert("Debes tener una pregunta y un código SQL para entrenar el modelo.");
+                return;
+            }
+
+            const btn = document.getElementById('btnSave');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/admin/train', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ Question: question, SqlText: sql })
+                });
+
+                if (response.ok) {
+                    alert("¡Excelente! Este par Pregunta-SQL ha sido guardado en la memoria vectorial. LIA lo usará como ejemplo la próxima vez.");
+                } else {
+                    alert("Hubo un error al guardar en SQLite.");
+                }
+            } catch (err) {
+                alert("Error de red: " + err);
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Iniciar
+        loadHistory();
+    </script>
+</body>
+</html>
