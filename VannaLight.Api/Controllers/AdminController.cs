@@ -1,8 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Dapper;
+﻿using Dapper;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
-using Microsoft.Data.Sqlite;
 using VannaLight.Api.Services; // <- para WiDocIngestor
+using VannaLight.Core.UseCases;
 
 namespace VannaLight.Api.Controllers;
 
@@ -10,8 +10,29 @@ public record TrainRequest(string Question, string SqlText);
 
 [ApiController]
 [Route("api/[controller]")]
-public class AdminController(IConfiguration config, WiDocIngestor wiIngestor) : ControllerBase
+public class AdminController(IConfiguration config, WiDocIngestor wiIngestor, TrainExampleUseCase useCase) : ControllerBase
 {
+    private readonly TrainExampleUseCase _useCase = useCase;
+
+
+
+    [HttpPost("train")]
+    public async Task<IActionResult> Train([FromBody] TrainRequest request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { Error = "Body inválido." });
+
+        try
+        {
+            await _useCase.TrainAsync(request.Question, request.SqlText, ct);
+            return Ok(new { Message = "Entrenamiento guardado en la memoria RAG exitosamente." });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
+    }
+
     // 1. Obtener el historial de la tabla operativa (SQL Server)
     [HttpGet("history")]
     public async Task<IActionResult> GetHistory()
@@ -27,47 +48,10 @@ public class AdminController(IConfiguration config, WiDocIngestor wiIngestor) : 
         return Ok(jobs);
     }
 
-    // 2. Guardar la corrección en la memoria RAG (SQLite)
-    [HttpPost("train")]
-    public async Task<IActionResult> Train([FromBody] TrainRequest request)
-    {
-        if (request == null)
-            return BadRequest(new { Error = "Body inválido." });
+  
 
-        string cleanQuestion = request.Question?
-            .Replace("\0", "")
-            .Replace("\uFFFF", "")
-            .Replace("홚", "")
-            .Trim() ?? "";
-
-        string cleanSql = request.SqlText?
-            .Replace("\0", "")
-            .Replace("\uFFFF", "")
-            .Trim() ?? "";
-
-        if (string.IsNullOrEmpty(cleanQuestion) || string.IsNullOrEmpty(cleanSql))
-            return BadRequest(new { Error = "La pregunta o el SQL están vacíos o corruptos." });
-
-        string sqlitePath = config["Paths:Sqlite"] ?? "vanna_memory.db";
-        await using var connection = new SqliteConnection($"Data Source={sqlitePath}");
-        await connection.OpenAsync();
-
-        const string sql = @"INSERT INTO TrainingExamples (Question, Sql, CreatedUtc, LastUsedUtc) 
-                             VALUES (@Question, @Sql, @CreatedUtc, @LastUsedUtc)";
-
-        await connection.ExecuteAsync(sql, new
-        {
-            Question = cleanQuestion,
-            Sql = cleanSql,
-            CreatedUtc = DateTime.UtcNow,
-            LastUsedUtc = DateTime.UtcNow
-        });
-
-        return Ok(new { Message = "Entrenamiento guardado en la memoria RAG exitosamente." });
-    }
-
-    // 3. (FASE 3) Reindexar Work Instructions (PDFs) a SQLite
-    [HttpPost("reindex-wi")]
+// 3. (FASE 3) Reindexar Work Instructions (PDFs) a SQLite
+[HttpPost("reindex-wi")]
     public async Task<IActionResult> ReindexWi(CancellationToken ct)
     {
         // WiRootPath lo tomará del appsettings: Docs:WiRootPath

@@ -16,12 +16,12 @@
     },
     {
       "key": "EstandarPorHora",
-      "displayLabel": "Estándar por hora",
+      "displayLabel": "Estï¿½ndar por hora",
       "order": 2,
       "tags": [ "estandar", "hora", "pzs", "pcs" ],
       "patternType": "number-unit",
       "expectedUnits": [ "pzs", "pcs", "pzas" ],
-      "anchorLabels": [ "ESTANDAR POR HORA", "ESTÁNDAR POR HORA", "STANDARD PER HOUR" ]
+      "anchorLabels": [ "ESTANDAR POR HORA", "ESTï¿½NDAR POR HORA", "STANDARD PER HOUR" ]
     },
     {
       "key": "ResinaNP",
@@ -33,19 +33,33 @@
       "anchorLabels": [ "RESINA", "RESIN" ]
     },
     {
-      "key": "ResinaLbs",
-      "displayLabel": "Resina requerida",
+      "key": "ResinaTurno",
+      "displayLabel": "Resina por turno",
       "order": 4,
-      "tags": [ "resina", "lbs" ],
+      "tags": [ "resina", "turno", "lbs" ],
       "patternType": "number-unit",
       "expectedUnits": [ "lbs" ],
-      "anchorLabels": [ "RESINA POR", "RESIN PER" ]
+      "anchorLabels": [
+        "RESINA POR",
+        "RESIN PER",
+        "RESINA REQUERIDA",
+        "RESIN REQUIRED"
+      ]
     },
     {
-      "key": "Empaque",
-      "displayLabel": "Empaque",
+      "key": "Resina2Horas",
+      "displayLabel": "Resina por 2 horas",
       "order": 5,
-      "tags": [ "empaque", "caja", "separador" ],
+      "tags": [ "resina", "2 horas", "dos horas", "lbs" ],
+      "patternType": "number-unit",
+      "expectedUnits": [ "lbs" ],
+      "anchorLabels": [ "RESINA POR 2 HORAS", "RESINA POR DOS HORAS", "RESIN PER 2 HOURS" ]
+    },
+    {
+      "key": "EmpaqueTurno",
+      "displayLabel": "Empaque por turno",
+      "order": 6,
+      "tags": [ "empaque", "turno", "caja", "separador" ],
       "patternType": "number-unit",
       "isList": true,
       "expectedUnits": [ "caja", "cajas", "separador", "separadores", "celdas", "pad", "divisor" ],
@@ -55,7 +69,23 @@
         "separador": "Separadores",
         "separadores": "Separadores"
       },
-      "anchorLabels": [ "EMPAQUE POR TURNO", "EMPAQUE POR 2 HORAS", "EMPAQUE POR DOS HORAS", "EMPAQUE" ]
+      "anchorLabels": [ "EMPAQUE POR TURNO", "PACK PER SHIFT" ]
+    },
+    {
+      "key": "Empaque2Horas",
+      "displayLabel": "Empaque por 2 horas",
+      "order": 7,
+      "tags": [ "empaque", "2 horas", "dos horas", "caja", "separador" ],
+      "patternType": "number-unit",
+      "isList": true,
+      "expectedUnits": [ "caja", "cajas", "separador", "separadores", "celdas", "pad", "divisor" ],
+      "unitMap": {
+        "caja": "Cajas",
+        "cajas": "Cajas",
+        "separador": "Separadores",
+        "separadores": "Separadores"
+      },
+      "anchorLabels": [ "EMPAQUE POR 2 HORAS", "EMPAQUE POR DOS HORAS", "PACK PER 2 HOURS" ]
     }
   ]
 }

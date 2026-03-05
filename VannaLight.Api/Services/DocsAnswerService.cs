@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using VannaLight.Api.Contracts;
+using VannaLight.Api.Services.Docs;
 
 namespace VannaLight.Api.Services;
 
@@ -10,26 +11,53 @@ public sealed class DocsAnswerService
 {
     private readonly IConfiguration _config;
     private readonly DocTypeSchema _wiSchema;
+    private readonly ILogger<DocsAnswerService> _log;
+    private readonly IHostEnvironment _env;
 
-    public DocsAnswerService(IConfiguration config)
+    private readonly string _sqlitePath;
+    private readonly int _topK;
+    private readonly int _maxCites;
+    private readonly bool _debugLogs;
+
+    public DocsAnswerService(IConfiguration config, IHostEnvironment env, ILogger<DocsAnswerService> log)
     {
         _config = config;
+        _log = log;
+        _env = env;
 
-        // Carga del esquema JSON. 
-        // (En una arquitectura más avanzada, esto se inyectaría mediante un ISchemaLoader)
-        var schemaPath = _config["Paths:SchemasPath"] ?? @"C:\VannaLight\Schemas";
-        var file = Path.Combine(schemaPath, "work-instructions.json");
+        // ---- Settings cache (no recalcular por request) ----
+        var sqliteRel = _config["Paths:Sqlite"] ?? "Data/vanna_memory.db";
+        _sqlitePath = Path.GetFullPath(Path.Combine(_env.ContentRootPath, sqliteRel));
+        Directory.CreateDirectory(Path.GetDirectoryName(_sqlitePath)!);
+
+        _topK = int.TryParse(_config["Docs:TopKPages"], out var k) ? k : 6;
+        _maxCites = int.TryParse(_config["Docs:MaxAnswerCitations"], out var mc) ? mc : 4;
+
+        _debugLogs = _env.IsDevelopment() || _config.GetValue<bool>("Docs:DebugLogs");
+
+        // ---- Schema load ----
+        var schemaRel = _config["Paths:SchemasPath"] ?? "Schemas";
+        var schemaDir = Path.GetFullPath(Path.Combine(_env.ContentRootPath, schemaRel));
+        var file = Path.Combine(schemaDir, "work-instructions.json");
 
         if (File.Exists(file))
         {
             var json = File.ReadAllText(file);
-            _wiSchema = JsonSerializer.Deserialize<DocTypeSchema>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+            _wiSchema = JsonSerializer.Deserialize<DocTypeSchema>(
+                json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+            )!;
         }
         else
         {
-            // Fallback de seguridad por si el archivo no existe aún
-            _wiSchema = new DocTypeSchema("default", "Documento", new ScoringConfig(new List<string>()), new List<FieldDef>());
+            _wiSchema = new DocTypeSchema("default", "Documento", new ScoringConfig(new()), new());
         }
+
+        _log.LogInformation("[Docs] Schema file={File} Exists={Exists} Fields={Fields}",
+            file, File.Exists(file), _wiSchema.Fields.Count);
+
+        _log.LogInformation("[Docs] SqlitePath={SqlitePath} TopK={TopK} MaxCites={MaxCites} DebugLogs={Debug}",
+            _sqlitePath, _topK, _maxCites, _debugLogs);
     }
 
     public async Task<DocsAnswerResult> AnswerAsync(string question, CancellationToken ct)
@@ -38,18 +66,21 @@ public sealed class DocsAnswerService
         if (q.Length == 0)
             return new DocsAnswerResult(false, null, Array.Empty<DocCitation>(), "Pregunta vacía.");
 
-        var sqlitePath = _config["Paths:Sqlite"] ?? "vanna_memory.db";
-        var topK = int.TryParse(_config["Docs:TopKPages"], out var k) ? k : 6;
-        var maxCites = int.TryParse(_config["Docs:MaxAnswerCitations"], out var mc) ? mc : 4;
+        var intent = DocsIntentParser.Parse(q);
+        var partNumbers = ExtractPartNumbers(q);
 
-        await using var conn = new SqliteConnection($"Data Source={sqlitePath}");
+        await using var conn = new SqliteConnection($"Data Source={_sqlitePath}");
         await conn.OpenAsync(ct);
 
-        // 1. Análisis de la pregunta usando el esquema dinámico
-        var partNumbers = ExtractPartNumbers(q);
         var keywords = BuildDynamicKeywords(q, _wiSchema);
 
-        // 2. Recuperación de fragmentos (Chunks)
+        if (_debugLogs)
+        {
+            _log.LogInformation("[Docs] Q={Q}", q);
+            _log.LogInformation("[Docs] PartNumbers={PN} KeywordsCount={KWCount}",
+                string.Join(", ", partNumbers), keywords.Count);
+        }
+
         var chunks = (await conn.QueryAsync<DocChunkRow>(@"
 SELECT d.DocId, d.FileName, c.PageNumber, c.Text
 FROM DocChunks c
@@ -61,7 +92,7 @@ LIMIT 2000;")).ToList();
         if (chunks.Count == 0)
             return new DocsAnswerResult(false, null, Array.Empty<DocCitation>(), "No hay WI indexadas (DocChunks vacío).");
 
-        // Barandal NP: si pidieron NP y no existe en ninguna WI => no inventar.
+        // Barandal NP
         if (partNumbers.Count > 0 && !chunks.Any(c => ContainsAny(c.Text, partNumbers)))
         {
             return new DocsAnswerResult(
@@ -73,163 +104,107 @@ LIMIT 2000;")).ToList();
             );
         }
 
-        // 3. Rankeo (Scoring)
         var scored = chunks
             .Select(c =>
             {
                 var score = ScoreChunk(c.Text, q, keywords, (int)c.PageNumber);
                 if (partNumbers.Count > 0 && ContainsAny(c.Text, partNumbers))
-                    score += 25; // Super boost si contiene el NP exacto
-
+                    score += 25;
                 return new ScoredChunk(c, score);
             })
             .Where(x => x.Score > 0)
             .OrderByDescending(x => x.Score)
-            .Take(topK)
+            .Take(_topK)
             .ToList();
 
         if (scored.Count == 0)
             return new DocsAnswerResult(false, null, Array.Empty<DocCitation>(), "No encontré evidencia en las WI indexadas.");
 
-        // 4. Extracción y Construcción de Respuesta
+        _log.LogInformation("[Docs] ScoredTopK={Count} Best={Best}",
+            scored.Count,
+            $"{scored[0].Chunk.FileName} p{scored[0].Chunk.PageNumber} score={scored[0].Score}");
+
+        // ---------- Con NP (winner + page1 hard) ----------
         if (partNumbers.Count > 0)
         {
-            // Con NP => Forzamos ganador y Página 1
             var winner = ResolveWinnerDoc(scored, chunks, partNumbers);
             var page1Text = await GetPageTextAsync(conn, winner.DocId, pageNumber: 1, ct);
 
-            // Fallback: páginas topK del doc ganador con NP
             var fallbackTexts = scored
                 .Where(s => s.Chunk.DocId == winner.DocId && ContainsAny(s.Chunk.Text, partNumbers))
                 .Select(s => s.Chunk.Text)
                 .ToList();
 
             var textsForExtraction = !string.IsNullOrWhiteSpace(page1Text)
-                ? page1Text // Priorizamos la página 1 unificada
+                ? page1Text
                 : string.Join("\n", fallbackTexts);
 
-            // LLAMADA AL MOTOR GENERALISTA
+            if (_debugLogs)
+            {
+                _log.LogInformation("[Docs] Winner DocId={DocId} File={File} Page1Len={P1Len} ExtractTextLen={Len}",
+                    winner.DocId, winner.FileName, page1Text?.Length ?? 0, textsForExtraction?.Length ?? 0);
+
+                _log.LogInformation("[Docs] HasAnchors EmpTurno={EmpT} Emp2H={Emp2} ResTurno={ResT} Res2H={Res2}",
+                    textsForExtraction.Contains("EMPAQUE POR TURNO", StringComparison.OrdinalIgnoreCase),
+                    textsForExtraction.Contains("EMPAQUE POR 2 HORAS", StringComparison.OrdinalIgnoreCase) ||
+                    textsForExtraction.Contains("EMPAQUE POR DOS HORAS", StringComparison.OrdinalIgnoreCase),
+                    textsForExtraction.Contains("RESINA POR TURNO", StringComparison.OrdinalIgnoreCase),
+                    textsForExtraction.Contains("RESINA POR 2 HORAS", StringComparison.OrdinalIgnoreCase) ||
+                    textsForExtraction.Contains("RESINA POR DOS HORAS", StringComparison.OrdinalIgnoreCase));
+            }
+
             var facts = ExtractionEngine.ExtractAll(_wiSchema, textsForExtraction);
-            var answer = BuildDynamicAnswer(facts, _wiSchema, q);
+
+            if (_debugLogs)
+            {
+                _log.LogInformation("[Docs] FactsCount={Count} Facts={Facts}",
+                    facts.Count,
+                    facts.Count == 0 ? "(none)" : string.Join(" | ", facts.Select(kv => $"{kv.Key}={kv.Value}")));
+            }
 
             var citations = BuildWinnerCitations(
                 winner.DocId,
                 winner.FileName,
                 hasPage1: !string.IsNullOrWhiteSpace(page1Text),
                 fallback: scored.Where(s => s.Chunk.DocId == winner.DocId).ToList(),
-                maxCites: maxCites);
+                maxCites: _maxCites);
 
             if (facts.Count == 0)
-                answer = "Encontré páginas relevantes, pero no pude extraer el dato de forma confiable. Revisa las citas (página exacta).";
+                return new DocsAnswerResult(true,
+                    "Encontré páginas relevantes, pero no pude extraer el dato de forma confiable. Revisa las citas (página exacta).",
+                    citations);
 
+            var answer = WiAnswerBuilder.Build(facts, intent);
             return new DocsAnswerResult(true, answer, citations);
         }
-        else
+
+        // ---------- Sin NP (topK concatenado) ----------
+        var combinedText = string.Join("\n", scored.Select(x => x.Chunk.Text));
+        var factsNoPn = ExtractionEngine.ExtractAll(_wiSchema, combinedText);
+
+        if (_debugLogs)
         {
-            // Sin NP => Extraemos sobre el TopK concatenado
-            var combinedText = string.Join("\n", scored.Select(x => x.Chunk.Text));
-
-            // LLAMADA AL MOTOR GENERALISTA
-            var facts = ExtractionEngine.ExtractAll(_wiSchema, combinedText);
-            var answer = BuildDynamicAnswer(facts, _wiSchema, q);
-
-            var citations = scored
-                .Select(x => new DocCitation(x.Chunk.DocId, x.Chunk.FileName, (int)x.Chunk.PageNumber))
-                .Distinct()
-                .Take(maxCites)
-                .ToList();
-
-            if (facts.Count == 0)
-                answer = "Encontré páginas relevantes, pero no pude extraer el dato de forma confiable. Revisa las citas (página exacta).";
-
-            return new DocsAnswerResult(true, answer, citations);
+            _log.LogInformation("[Docs] NoPN CombinedTextLen={Len} FactsCount={Count}",
+                combinedText.Length, factsNoPn.Count);
         }
-    }
 
-    // =========================
-    // Dynamic Helpers (Basados en Esquema)
-    // =========================
-
-    private string BuildDynamicAnswer(Dictionary<string, string> facts, DocTypeSchema schema, string questionText)
-    {
-        if (facts.Count == 0)
-            return "Encontré páginas relevantes, pero no pude extraer el dato de forma confiable.";
-
-        var lines = new List<string> { $"Ficha (según {schema.DisplayName}):" };
-        var qLower = questionText.ToLowerInvariant();
-
-        // Filtrar intención: verificamos si la pregunta menciona algún tag de los campos definidos
-        var askedFields = schema.Fields
-            .Where(f => f.Tags != null && f.Tags.Any(tag => qLower.Contains(tag)))
+        var citationsNoPn = scored
+            .Select(x => new DocCitation(x.Chunk.DocId, x.Chunk.FileName, (int)x.Chunk.PageNumber))
+            .Distinct()
+            .Take(_maxCites)
             .ToList();
 
-        // Si el usuario no especificó, mostramos todo
-        var fieldsToRender = askedFields.Count > 0 ? askedFields : schema.Fields;
+        if (factsNoPn.Count == 0)
+            return new DocsAnswerResult(true,
+                "Encontré páginas relevantes, pero no pude extraer el dato de forma confiable. Revisa las citas (página exacta).",
+                citationsNoPn);
 
-        // Renderizamos dinámicamente respetando el "Order" del JSON
-        foreach (var field in fieldsToRender.OrderBy(f => f.Order))
-        {
-            if (facts.TryGetValue(field.Key, out var extractedValue))
-            {
-                lines.Add($"- {field.DisplayLabel}: {extractedValue}");
-            }
-        }
-
-        return string.Join(Environment.NewLine, lines);
-    }
-
-    private List<string> BuildDynamicKeywords(string question, DocTypeSchema schema)
-    {
-        var qLower = (question ?? "").ToLowerInvariant();
-        var list = new List<string>();
-
-        // Agregamos como keywords de búsqueda todos los tags del esquema que el usuario haya mencionado
-        foreach (var field in schema.Fields)
-        {
-            if (field.Tags != null && field.Tags.Any(t => qLower.Contains(t)))
-            {
-                list.AddRange(field.Tags);
-            }
-        }
-
-        // Agregamos los NP explícitos
-        list.AddRange(ExtractPartNumbers(question));
-
-        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-    }
-
-    private int ScoreChunk(string text, string q, List<string> keywords, int pageNumber)
-    {
-        if (string.IsNullOrEmpty(text)) return 0;
-        int score = 0;
-
-        // Boost por keywords dinámicas
-        foreach (var kw in keywords)
-            if (text.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0) score += 3;
-
-        // Boost por tokens de la pregunta (largo > 3)
-        foreach (var token in q.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (token.Length < 4) continue;
-            if (text.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0) score += 1;
-        }
-
-        // Boost por página 1 (Header/Portada)
-        if (pageNumber == 1) score += 8;
-
-        // Boost por etiquetas importantes definidas en el JSON
-        if (_wiSchema.Scoring?.BoostLabels != null)
-        {
-            foreach (var label in _wiSchema.Scoring.BoostLabels)
-                if (text.IndexOf(label, StringComparison.OrdinalIgnoreCase) >= 0)
-                    score += 3;
-        }
-
-        return score;
+        var answerNoPn = WiAnswerBuilder.Build(factsNoPn, intent);
+        return new DocsAnswerResult(true, answerNoPn, citationsNoPn);
     }
 
     // =========================
-    // Static Routing & DB Helpers
+    // Helpers
     // =========================
 
     private static List<string> ExtractPartNumbers(string q)
@@ -248,17 +223,45 @@ LIMIT 2000;")).ToList();
         foreach (var x in parenParts)
         {
             if (x.Suffix.Length == 1 && x.Base.Length >= 1)
-            {
-                var expanded = x.Base.Substring(0, x.Base.Length - 1) + x.Suffix;
-                baseParts.Add(expanded);
-            }
+                baseParts.Add(x.Base.Substring(0, x.Base.Length - 1) + x.Suffix);
             else
-            {
                 baseParts.Add($"{x.Base}({x.Suffix})");
-            }
         }
 
         return baseParts.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private List<string> BuildDynamicKeywords(string question, DocTypeSchema schema)
+    {
+        var qLower = (question ?? "").ToLowerInvariant();
+        var list = new List<string>();
+
+        foreach (var field in schema.Fields)
+            if (field.Tags != null && field.Tags.Any(t => qLower.Contains(t)))
+                list.AddRange(field.Tags);
+
+        list.AddRange(ExtractPartNumbers(question));
+        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private int ScoreChunk(string text, string q, List<string> keywords, int pageNumber)
+    {
+        if (string.IsNullOrEmpty(text)) return 0;
+        var score = 0;
+
+        foreach (var kw in keywords)
+            if (text.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0) score += 3;
+
+        foreach (var token in q.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            if (token.Length >= 4 && text.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0) score += 1;
+
+        if (pageNumber == 1) score += 8;
+
+        if (_wiSchema.Scoring?.BoostLabels != null)
+            foreach (var label in _wiSchema.Scoring.BoostLabels)
+                if (text.IndexOf(label, StringComparison.OrdinalIgnoreCase) >= 0) score += 3;
+
+        return score;
     }
 
     private static bool ContainsAny(string text, List<string> needles)
@@ -320,7 +323,7 @@ ORDER BY rowid ASC;", new { DocId = docId, PageNumber = pageNumber })).ToList();
     }
 
     // =========================
-    // Small models (Local to Service)
+    // Local models
     // =========================
     private sealed record DocChunkRow(string DocId, string FileName, long PageNumber, string Text);
     private sealed record ScoredChunk(DocChunkRow Chunk, int Score);

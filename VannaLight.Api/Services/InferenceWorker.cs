@@ -19,7 +19,7 @@ public class InferenceWorker(
     {
         logger.LogInformation("InferenceWorker iniciado. Esperando trabajos...");
 
-        string sqlitePath = configuration["Paths:Sqlite"] ?? "vanna_memory.db";
+        string sqlitePath = configuration["Paths:Sqlite"] ?? "Data/vanna_memory.db";
         string sqlServerConnString = configuration.GetConnectionString("OperationalDb")
             ?? throw new InvalidOperationException("Falta la cadena de conexión en el appsettings.");
 

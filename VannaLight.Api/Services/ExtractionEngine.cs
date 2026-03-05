@@ -32,45 +32,74 @@ public static class ExtractionEngine
 
     private static string ExtractField(FieldDef field, string text)
     {
-        Regex valueRegex = BuildRegex(field);
+        var valueRegex = BuildRegex(field);
         var matches = valueRegex.Matches(text);
         if (matches.Count == 0) return string.Empty;
 
-        // Encontrar los índices de las anclas en el texto
-        var anchorIdx = field.AnchorLabels
-            .Select(a => text.IndexOf(a, StringComparison.OrdinalIgnoreCase))
-            .Where(i => i >= 0).ToArray();
+        // ✅ CAMBIO 1: encontrar TODAS las ocurrencias de anchors (no solo la primera con IndexOf)
+        var anchorIdx = FindAllAnchorIndexes(text, field.AnchorLabels);
+        if (anchorIdx.Count == 0) return string.Empty; // sin ancla => no es seguro extraer
 
-        if (anchorIdx.Length == 0) return string.Empty; // Si no hay ancla, no es seguro extraer
-
-        // Magia: Elegir los matches más cercanos al ancla (Distancia Absoluta)
+        // ✅ CAMBIO 2: score contra TODOS los anchors (min distancia)
         var scoredMatches = matches.Cast<Match>()
-            .Select(m => new { Match = m, Dist = anchorIdx.Min(a => Math.Abs(m.Index - a)) })
+            .Select(m => new
+            {
+                Match = m,
+                Dist = anchorIdx.Min(a => Math.Abs(m.Index - a))
+            })
             .OrderBy(x => x.Dist)
             .ToList();
 
         if (!field.IsList)
         {
-            // Escalar: Devolvemos el más cercano formateado
+            // Scalar: mejor match
             var best = scoredMatches.First().Match;
             return FormatMatch(best, field);
         }
-        else
+
+        // ✅ CAMBIO 3: Para listas, no tomar "el primero por unidad";
+        //              guardar el MEJOR (menor distancia) por unidad.
+        var bestByUnit = new Dictionary<string, (int Dist, string Value)>(StringComparer.OrdinalIgnoreCase);
+
+        // radio razonable (puedes subir/bajar)
+        const int radius = 300;
+
+        foreach (var item in scoredMatches.Where(x => x.Dist < radius))
         {
-            // Lista: Agrupamos las unidades cercanas al ancla
-            var uniqueUnits = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var unitRaw = item.Match.Groups["u"].Value.ToLowerInvariant();
+            var unitCanon = field.UnitMap?.GetValueOrDefault(unitRaw) ?? unitRaw;
 
-            // Tomamos los que estén en un radio razonable (ej. 300 caracteres del ancla)
-            foreach (var item in scoredMatches.Where(x => x.Dist < 300))
-            {
-                var unitRaw = item.Match.Groups["u"].Value.ToLower();
-                var unitCanon = field.UnitMap?.GetValueOrDefault(unitRaw) ?? unitRaw;
+            var val = $"{item.Match.Groups["n"].Value} {unitCanon}";
 
-                if (!uniqueUnits.ContainsKey(unitCanon))
-                    uniqueUnits[unitCanon] = $"{item.Match.Groups["n"].Value} {unitCanon}";
-            }
-            return string.Join(", ", uniqueUnits.Values);
+            if (!bestByUnit.TryGetValue(unitCanon, out var cur) || item.Dist < cur.Dist)
+                bestByUnit[unitCanon] = (item.Dist, val);
         }
+
+        // Orden por cercanía al anchor (más cercano primero)
+        return string.Join(", ", bestByUnit.Values.OrderBy(x => x.Dist).Select(x => x.Value));
+    }
+
+    private static List<int> FindAllAnchorIndexes(string text, List<string> anchors)
+    {
+        var hits = new List<int>();
+        if (string.IsNullOrEmpty(text) || anchors is null || anchors.Count == 0) return hits;
+
+        foreach (var anchor in anchors)
+        {
+            if (string.IsNullOrWhiteSpace(anchor)) continue;
+
+            var start = 0;
+            while (true)
+            {
+                var idx = text.IndexOf(anchor, start, StringComparison.OrdinalIgnoreCase);
+                if (idx < 0) break;
+
+                hits.Add(idx);
+                start = idx + Math.Max(1, anchor.Length);
+            }
+        }
+
+        return hits;
     }
 
     private static Regex BuildRegex(FieldDef field)

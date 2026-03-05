@@ -2,11 +2,33 @@
 using Microsoft.Data.Sqlite;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.Models;
+using Microsoft.Data.Sqlite;
+using VannaLight.Core.Settings;
 
 namespace VannaLight.Infrastructure.Data;
 
 public class SqliteTrainingStore : ITrainingStore
 {
+    private readonly SqliteOptions _opt;
+
+    public SqliteTrainingStore(SqliteOptions opt)
+        => _opt = opt;
+
+    public async Task UpsertByQuestionAsync(string question, string sql, CancellationToken ct)
+    {
+        await using var conn = new SqliteConnection($"Data Source={_opt.DbPath}");
+        await conn.OpenAsync(ct);
+
+        // Requiere UNIQUE(Question) o PK/UNIQUE similar
+        const string q = @"
+INSERT INTO TrainingExamples (Question, Sql, CreatedUtc, LastUsedUtc)
+VALUES (@Question, @Sql, @Now, @Now)
+ON CONFLICT(Question) DO UPDATE SET
+    Sql = excluded.Sql,
+    LastUsedUtc = excluded.LastUsedUtc;";
+
+        await conn.ExecuteAsync(q, new { Question = question, Sql = sql, Now = DateTime.UtcNow });
+    }
     public async Task InitializeAsync(string sqlitePath, CancellationToken ct)
     {
         using var connection = new SqliteConnection($"Data Source={sqlitePath}");

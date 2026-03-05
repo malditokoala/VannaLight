@@ -20,7 +20,7 @@ public sealed class WiDocIngestor
     public async Task<WiReindexResult> ReindexAsync(CancellationToken ct)
     {
         string wiRoot = _config["Docs:WiRootPath"] ?? @"C:\VannaLight\WI_DROP";
-        string sqlitePath = _config["Paths:Sqlite"] ?? "vanna_memory.db";
+        string sqlitePath = _config["Paths:Sqlite"] ?? "Data/vanna_memory.db";
 
         if (!Directory.Exists(wiRoot))
             throw new DirectoryNotFoundException($"No existe Docs:WiRootPath: {wiRoot}");
