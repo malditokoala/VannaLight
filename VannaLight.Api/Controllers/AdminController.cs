@@ -2,6 +2,7 @@
 using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.Data.Sqlite;
+using VannaLight.Api.Services; // <- para WiDocIngestor
 
 namespace VannaLight.Api.Controllers;
 
@@ -9,7 +10,7 @@ public record TrainRequest(string Question, string SqlText);
 
 [ApiController]
 [Route("api/[controller]")]
-public class AdminController(IConfiguration config) : ControllerBase
+public class AdminController(IConfiguration config, WiDocIngestor wiIngestor) : ControllerBase
 {
     // 1. Obtener el historial de la tabla operativa (SQL Server)
     [HttpGet("history")]
@@ -30,11 +31,13 @@ public class AdminController(IConfiguration config) : ControllerBase
     [HttpPost("train")]
     public async Task<IActionResult> Train([FromBody] TrainRequest request)
     {
-        // 1. FILTRO SANITARIO: Limpiamos la basura de memoria (Null bytes y Unicode inválido)
+        if (request == null)
+            return BadRequest(new { Error = "Body inválido." });
+
         string cleanQuestion = request.Question?
-            .Replace("\0", "")        // Quita los bytes nulos
-            .Replace("\uFFFF", "")    // Quita los marcadores inválidos
-            .Replace("홚", "")        // Quita el artefacto asiático de memoria que se coló
+            .Replace("\0", "")
+            .Replace("\uFFFF", "")
+            .Replace("홚", "")
             .Trim() ?? "";
 
         string cleanSql = request.SqlText?
@@ -43,28 +46,40 @@ public class AdminController(IConfiguration config) : ControllerBase
             .Trim() ?? "";
 
         if (string.IsNullOrEmpty(cleanQuestion) || string.IsNullOrEmpty(cleanSql))
-        {
             return BadRequest(new { Error = "La pregunta o el SQL están vacíos o corruptos." });
-        }
 
         string sqlitePath = config["Paths:Sqlite"] ?? "vanna_memory.db";
-        using var connection = new SqliteConnection($"Data Source={sqlitePath}");
+        await using var connection = new SqliteConnection($"Data Source={sqlitePath}");
         await connection.OpenAsync();
 
-        // 2. Usamos las variables LIMPIAS en el INSERT
-        // 1. Agregamos LastUsedUtc a la lista de columnas y valores
-        string sql = @"INSERT INTO TrainingExamples (Question, Sql, CreatedUtc, LastUsedUtc) 
-                       VALUES (@Question, @Sql, @CreatedUtc, @LastUsedUtc)";
+        const string sql = @"INSERT INTO TrainingExamples (Question, Sql, CreatedUtc, LastUsedUtc) 
+                             VALUES (@Question, @Sql, @CreatedUtc, @LastUsedUtc)";
 
-        // 2. Le pasamos la hora actual a ambos campos de fecha
         await connection.ExecuteAsync(sql, new
         {
             Question = cleanQuestion,
             Sql = cleanSql,
             CreatedUtc = DateTime.UtcNow,
-            LastUsedUtc = DateTime.UtcNow // <-- ¡El pase VIP final para SQLite!
+            LastUsedUtc = DateTime.UtcNow
         });
 
         return Ok(new { Message = "Entrenamiento guardado en la memoria RAG exitosamente." });
+    }
+
+    // 3. (FASE 3) Reindexar Work Instructions (PDFs) a SQLite
+    [HttpPost("reindex-wi")]
+    public async Task<IActionResult> ReindexWi(CancellationToken ct)
+    {
+        // WiRootPath lo tomará del appsettings: Docs:WiRootPath
+        var result = await wiIngestor.ReindexAsync(ct);
+
+        return Ok(new
+        {
+            Message = "Reindex de WI completado.",
+            result.TotalFiles,
+            result.Indexed,
+            result.Skipped,
+            result.Errors
+        });
     }
 }

@@ -39,6 +39,8 @@ builder.Services.AddSingleton<ISqlValidator, StaticSqlValidator>();
 builder.Services.AddSingleton<ISqlDryRunner, SqlServerDryRunner>();
 builder.Services.AddSingleton<ILlmClient, LlmClient>(); // Singleton crucial para evitar OOM
 builder.Services.AddTransient<AskUseCase>();
+builder.Services.AddSingleton<WiDocIngestor>();
+builder.Services.AddSingleton<DocsAnswerService>();
 
 // 3. Registrar Dependencias de la API y el Worker
 builder.Services.AddSingleton<IAskRequestQueue, AskRequestQueue>();

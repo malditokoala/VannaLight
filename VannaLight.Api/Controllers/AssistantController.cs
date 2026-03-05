@@ -5,10 +5,18 @@ using Microsoft.Data.SqlClient;
 using VannaLight.Api.Data;
 using VannaLight.Api.Services;
 using VannaLight.Api.Hubs;
+using VannaLight.Api.Contracts;
 
 namespace VannaLight.Api.Controllers;
 
-public record AskRequest(string Question, string? UserId, string? ConnectionId);
+//public enum AskMode { Data, Docs, Predict }
+
+public record AskRequest(
+    string Question,
+    string? UserId,
+    string? ConnectionId,
+    AskMode Mode = AskMode.Data
+);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -22,56 +30,61 @@ public class AssistantController(
     public async Task<IActionResult> AskAsync([FromBody] AskRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Question))
-        {
             return BadRequest(new { Error = "La pregunta no puede estar vacía." });
-        }
 
-        string sqlConn = config.GetConnectionString("OperationalDb") ?? throw new Exception("Falta BD");
-        using var connection = new SqlConnection(sqlConn);
         string cleanQuestion = request.Question.Trim();
+        string userId = request.UserId ?? "UsuarioPlanta_01";
+        string connectionId = request.ConnectionId ?? string.Empty;
 
-        // --- 1. SISTEMA DE CACHÉ (Cero duplicados, cero uso de GPU) ---
-        // Buscamos si esta pregunta exacta ya se respondió con éxito anteriormente
-        // --- 1. SISTEMA DE CACHÉ (Cero duplicados, cero uso de GPU) ---
-        // MAGIA AQUÍ: Agregamos <QuestionJob> para que deje de ser 'dynamic'
-        var cachedJob = await connection.QueryFirstOrDefaultAsync<QuestionJob>(
-            @"SELECT TOP 1 JobId, SqlText 
-              FROM QuestionJobs 
-              WHERE Question = @q AND Status = 'Completed' 
-              ORDER BY CreatedUtc DESC",
-            new { q = cleanQuestion }
-        );
-
-        if (cachedJob != null && !string.IsNullOrEmpty(cachedJob.SqlText))
+        // --- 1) CACHÉ: SOLO PARA DATA (SQL) ---
+        if (request.Mode == AskMode.Data)
         {
-            // ¡CACHÉ HIT! 
-            IEnumerable<dynamic> queryResults = Array.Empty<dynamic>();
-            try
-            {
-                // Ahora cachedJob.SqlText es un string 100% real, no fake
-                queryResults = await connection.QueryAsync(cachedJob.SqlText);
-            }
-            catch { /* Si falla la ejecución, lo ignoramos y dejamos que fluya normal */ }
+            string sqlConn = config.GetConnectionString("OperationalDb") ?? throw new Exception("Falta BD");
+            using var connection = new SqlConnection(sqlConn);
 
-            // 2. Respondemos INMEDIATAMENTE por SignalR
-            if (!string.IsNullOrEmpty(request.ConnectionId))
+            var cachedJob = await connection.QueryFirstOrDefaultAsync<QuestionJob>(
+                @"SELECT TOP 1 JobId, SqlText 
+                  FROM QuestionJobs 
+                  WHERE Question = @q AND Status = 'Completed' 
+                  ORDER BY CreatedUtc DESC",
+                new { q = cleanQuestion }
+            );
+
+            if (cachedJob != null && !string.IsNullOrEmpty(cachedJob.SqlText))
             {
-                await hubContext.Clients.Client(request.ConnectionId).SendAsync("JobCompleted", new
+                // Cache hit: intentamos ejecutar el SQL cacheado para devolver data
+                IEnumerable<dynamic> queryResults = Array.Empty<dynamic>();
+                try
                 {
-                    JobId = cachedJob.JobId,
-                    Sql = cachedJob.SqlText,
-                    Data = queryResults
-                });
-            }
+                    queryResults = await connection.QueryAsync(cachedJob.SqlText);
+                }
+                catch
+                {
+                    // Si falla, dejamos fluir al worker (podría ser un cambio de esquema/datos)
+                    // OJO: No salimos aquí si hubo excepción.
+                    cachedJob = null;
+                }
 
-            // 3. Salimos aquí. NO creamos registro nuevo y NO mandamos al Worker.
-            return Accepted(new { Message = "Respuesta servida desde la caché en milisegundos." });
+                if (cachedJob != null)
+                {
+                    if (!string.IsNullOrEmpty(connectionId))
+                    {
+                        await hubContext.Clients.Client(connectionId).SendAsync("JobCompleted", new
+                        {
+                            JobId = cachedJob.JobId,
+                            Mode = AskMode.Data.ToString(),
+                            Sql = cachedJob.SqlText,
+                            Data = queryResults
+                        });
+                    }
+
+                    return Accepted(new { Message = "Respuesta servida desde la caché en milisegundos." });
+                }
+            }
         }
 
-
-        // --- 2. FLUJO NORMAL (Si no está en caché, la LLM debe trabajar) ---
+        // --- 2) FLUJO NORMAL: ENCOLAR TRABAJO ---
         var jobId = Guid.NewGuid();
-        var userId = request.UserId ?? "UsuarioPlanta_01";
 
         var job = new QuestionJob
         {
@@ -84,14 +97,13 @@ public class AssistantController(
             UpdatedUtc = DateTime.UtcNow
         };
 
-        // Guardar en la bitácora
         await jobStore.CreateJobAsync(job);
 
-        // Mandar a la cola de la GPU
-        var workItem = new AskWorkItem(jobId, cleanQuestion, userId, request.ConnectionId ?? string.Empty);
+        // IMPORTANTe: AskWorkItem ahora debe incluir Mode
+        var workItem = new AskWorkItem(jobId, cleanQuestion, userId, connectionId, request.Mode);
         await queue.EnqueueAsync(workItem);
 
-        return Accepted(new { JobId = jobId, Status = "Queued" });
+        return Accepted(new { JobId = jobId, Status = "Queued", Mode = request.Mode.ToString() });
     }
 
     [HttpGet("status/{jobId:guid}")]
@@ -99,6 +111,13 @@ public class AssistantController(
     {
         var job = await jobStore.GetJobAsync(jobId);
         if (job == null) return NotFound(new { Error = "Trabajo no encontrado." });
-        return Ok(new { job.JobId, job.Status, job.SqlText, job.ErrorText });
+
+        return Ok(new
+        {
+            job.JobId,
+            job.Status,
+            job.SqlText,
+            job.ErrorText
+        });
     }
 }

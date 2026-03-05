@@ -1,7 +1,9 @@
 ﻿using System.Threading.Channels;
+using VannaLight.Api.Contracts;
+
 namespace VannaLight.Api.Services;
 
-public record AskWorkItem(Guid JobId, string Question, string UserId, string ConnectionId);
+public record AskWorkItem(Guid JobId, string Question, string UserId, string ConnectionId, AskMode Mode);
 
 public interface IAskRequestQueue
 {
@@ -13,9 +15,7 @@ public class AskRequestQueue : IAskRequestQueue
 {
     private readonly Channel<AskWorkItem> _queue = Channel.CreateUnbounded<AskWorkItem>();
 
-    public async ValueTask EnqueueAsync(AskWorkItem workItem) =>
-        await _queue.Writer.WriteAsync(workItem);
+    public ValueTask EnqueueAsync(AskWorkItem workItem) => _queue.Writer.WriteAsync(workItem);
 
-    public async ValueTask<AskWorkItem> DequeueAsync(CancellationToken ct) =>
-        await _queue.Reader.ReadAsync(ct);
+    public ValueTask<AskWorkItem> DequeueAsync(CancellationToken ct) => _queue.Reader.ReadAsync(ct);
 }

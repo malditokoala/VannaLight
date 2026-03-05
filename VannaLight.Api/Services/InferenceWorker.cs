@@ -1,6 +1,7 @@
 ﻿using Dapper;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Data.SqlClient;
+using VannaLight.Api.Contracts;          // ✅ AskMode único
 using VannaLight.Api.Data;
 using VannaLight.Api.Hubs;
 using VannaLight.Core.UseCases;
@@ -24,21 +25,86 @@ public class InferenceWorker(
 
         while (!ct.IsCancellationRequested)
         {
+            AskWorkItem? workItem = null;
+
             try
             {
                 // 1. Sacamos el trabajo de la cola
-                var workItem = await queue.DequeueAsync(ct);
+                workItem = await queue.DequeueAsync(ct);
+
+                // ✅ Debug visible para confirmar que el Mode viaja bien
+                logger.LogInformation("[Worker] Job={JobId} Mode={Mode} Question={Question}",
+                    workItem.JobId, workItem.Mode, workItem.Question);
 
                 // 2. AISLAMOS EL TRABAJO: Si este Job específico falla, lo cachamos aquí adentro.
                 try
                 {
                     using var scope = scopeFactory.CreateScope();
                     var jobStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
-                    var askUseCase = scope.ServiceProvider.GetRequiredService<AskUseCase>();
 
                     await jobStore.UpdateStatusAsync(workItem.JobId, "Analyzing");
-                    await hubContext.Clients.Client(workItem.ConnectionId)
-                        .SendAsync("JobStatusUpdated", new { workItem.JobId, Status = "Analyzing" }, ct);
+                    if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
+                    {
+                        await hubContext.Clients.Client(workItem.ConnectionId)
+                            .SendAsync("JobStatusUpdated", new { workItem.JobId, Status = "Analyzing" }, ct);
+                    }
+
+                    // ==========================================================
+                    // ✅ FASE 3: ROUTING POR MODO (Docs / Predict / Data)
+                    // ==========================================================
+
+                    // 1) DOCS MODE (NO SQL SERVER)
+                    if (workItem.Mode == AskMode.Docs)
+                    {
+                        var docsService = scope.ServiceProvider.GetRequiredService<DocsAnswerService>();
+                        var docsResult = await docsService.AnswerAsync(workItem.Question, ct);
+
+                        if (!docsResult.Success)
+                        {
+                            await jobStore.SetErrorAsync(workItem.JobId, docsResult.Error ?? "Docs: sin evidencia.", "Failed");
+
+                            if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
+                            {
+                                await hubContext.Clients.Client(workItem.ConnectionId)
+                                    .SendAsync("JobFailed", new { workItem.JobId, Error = docsResult.Error }, ct);
+                            }
+                            continue;
+                        }
+
+                        // Por ahora guardamos Answer en SqlText (rápido). Luego lo movemos a AnswerText/ResultJson.
+                        await jobStore.SetResultAsync(workItem.JobId, docsResult.Answer ?? "");
+
+                        if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
+                        {
+                            await hubContext.Clients.Client(workItem.ConnectionId)
+                                .SendAsync("JobCompleted", new
+                                {
+                                    workItem.JobId,
+                                    Mode = "Docs",
+                                    Answer = docsResult.Answer,
+                                    Citations = docsResult.Citations
+                                }, ct);
+                        }
+
+                        continue;
+                    }
+
+                    // 2) PREDICT MODE (STUB)
+                    if (workItem.Mode == AskMode.Predict)
+                    {
+                        await jobStore.SetErrorAsync(workItem.JobId, "Predict mode aún no disponible (Fase 3 - stub).", "Failed");
+
+                        if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
+                        {
+                            await hubContext.Clients.Client(workItem.ConnectionId)
+                                .SendAsync("JobFailed", new { workItem.JobId, Error = "Predict mode aún no disponible." }, ct);
+                        }
+
+                        continue;
+                    }
+
+                    // 3) DATA MODE (SQL) - flujo actual
+                    var askUseCase = scope.ServiceProvider.GetRequiredService<AskUseCase>();
 
                     var result = await askUseCase.ExecuteAsync(
                         workItem.Question,
@@ -64,26 +130,43 @@ public class InferenceWorker(
                         if (executionError == null)
                         {
                             await jobStore.SetResultAsync(workItem.JobId, result.Sql);
-                            await hubContext.Clients.Client(workItem.ConnectionId)
-                                .SendAsync("JobCompleted", new
-                                {
-                                    workItem.JobId,
-                                    Sql = result.Sql,
-                                    Data = queryResults
-                                }, ct);
+
+                            if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
+                            {
+                                await hubContext.Clients.Client(workItem.ConnectionId)
+                                    .SendAsync("JobCompleted", new
+                                    {
+                                        workItem.JobId,
+                                        Mode = "Data",
+                                        Sql = result.Sql,
+                                        Data = queryResults
+                                    }, ct);
+                            }
                         }
                         else
                         {
                             await jobStore.SetErrorAsync(workItem.JobId, $"Error de ejecución: {executionError}", "Failed");
-                            await hubContext.Clients.Client(workItem.ConnectionId)
-                                .SendAsync("JobFailed", new { workItem.JobId, Error = $"El SQL es válido pero falló al ejecutarse: {executionError}" }, ct);
+
+                            if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
+                            {
+                                await hubContext.Clients.Client(workItem.ConnectionId)
+                                    .SendAsync("JobFailed", new
+                                    {
+                                        workItem.JobId,
+                                        Error = $"El SQL es válido pero falló al ejecutarse: {executionError}"
+                                    }, ct);
+                            }
                         }
                     }
                     else
                     {
                         await jobStore.SetErrorAsync(workItem.JobId, result.Error ?? "Error desconocido", "Failed");
-                        await hubContext.Clients.Client(workItem.ConnectionId)
-                            .SendAsync("JobFailed", new { workItem.JobId, Error = result.Error }, ct);
+
+                        if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
+                        {
+                            await hubContext.Clients.Client(workItem.ConnectionId)
+                                .SendAsync("JobFailed", new { workItem.JobId, Error = result.Error }, ct);
+                        }
                     }
                 }
                 catch (Exception jobEx)
@@ -91,21 +174,25 @@ public class InferenceWorker(
                     // 3. AQUÍ MATAMOS AL ZOMBIE 🧟‍♂️
                     logger.LogError(jobEx, "Error crítico procesando el Job {JobId}.", workItem.JobId);
 
-                    // Creamos un nuevo Scope de emergencia por si el anterior se corrompió con el error
                     using var fallbackScope = scopeFactory.CreateScope();
                     var fallbackJobStore = fallbackScope.ServiceProvider.GetRequiredService<IJobStore>();
 
-                    // Actualizamos la base de datos para no dejar el estado pegado en 'Analyzing'
                     await fallbackJobStore.SetErrorAsync(workItem.JobId, $"Fallo crítico interno: {jobEx.Message}", "Failed");
 
-                    // Le enviamos la señal al frontend para quitar el loader y mostrar el recuadro rojo
-                    await hubContext.Clients.Client(workItem.ConnectionId)
-                        .SendAsync("JobFailed", new { workItem.JobId, Error = $"Fallo crítico interno: {jobEx.Message}" }, ct);
+                    if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
+                    {
+                        await hubContext.Clients.Client(workItem.ConnectionId)
+                            .SendAsync("JobFailed", new { workItem.JobId, Error = $"Fallo crítico interno: {jobEx.Message}" }, ct);
+                    }
                 }
             }
-            catch (OperationCanceledException) { break; }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
             catch (Exception ex)
             {
+                // Si workItem es null aquí, fue un fallo antes del dequeue
                 logger.LogError(ex, "Error fatal en el bucle de cola del InferenceWorker.");
             }
         }

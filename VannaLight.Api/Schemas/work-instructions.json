@@ -1,0 +1,61 @@
+{
+  "typeId": "work-instructions",
+  "displayName": "Work Instructions",
+  "scoring": {
+    "boostLabels": [ "MOLDE", "MOLD", "RESINA", "RESIN", "ESTANDAR", "STANDARD", "EMPAQUE", "PACK", "INSTRUCCION DE TRABAJO" ]
+  },
+  "fields": [
+    {
+      "key": "Molde",
+      "displayLabel": "Molde",
+      "order": 1,
+      "tags": [ "molde", "tool" ],
+      "patternType": "code-prefix",
+      "prefix": "H-",
+      "anchorLabels": [ "MOLDE", "MOLD" ]
+    },
+    {
+      "key": "EstandarPorHora",
+      "displayLabel": "Estándar por hora",
+      "order": 2,
+      "tags": [ "estandar", "hora", "pzs", "pcs" ],
+      "patternType": "number-unit",
+      "expectedUnits": [ "pzs", "pcs", "pzas" ],
+      "anchorLabels": [ "ESTANDAR POR HORA", "ESTÁNDAR POR HORA", "STANDARD PER HOUR" ]
+    },
+    {
+      "key": "ResinaNP",
+      "displayLabel": "Resina (N/P)",
+      "order": 3,
+      "tags": [ "resina", "material" ],
+      "patternType": "part-number",
+      "prefix": "9",
+      "anchorLabels": [ "RESINA", "RESIN" ]
+    },
+    {
+      "key": "ResinaLbs",
+      "displayLabel": "Resina requerida",
+      "order": 4,
+      "tags": [ "resina", "lbs" ],
+      "patternType": "number-unit",
+      "expectedUnits": [ "lbs" ],
+      "anchorLabels": [ "RESINA POR", "RESIN PER" ]
+    },
+    {
+      "key": "Empaque",
+      "displayLabel": "Empaque",
+      "order": 5,
+      "tags": [ "empaque", "caja", "separador" ],
+      "patternType": "number-unit",
+      "isList": true,
+      "expectedUnits": [ "caja", "cajas", "separador", "separadores", "celdas", "pad", "divisor" ],
+      "unitMap": {
+        "caja": "Cajas",
+        "cajas": "Cajas",
+        "separador": "Separadores",
+        "separadores": "Separadores"
+      },
+      "anchorLabels": [ "EMPAQUE POR TURNO", "EMPAQUE POR 2 HORAS", "EMPAQUE POR DOS HORAS", "EMPAQUE" ]
+    }
+  ]
+}
