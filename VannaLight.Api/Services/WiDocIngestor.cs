@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using UglyToad.PdfPig;
 using VannaLight.Api.Contracts;
+using VannaLight.Core.Models;
 
 namespace VannaLight.Api.Services;
 

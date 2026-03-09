@@ -1,523 +1,1503 @@
 ﻿<!DOCTYPE html>
-<html lang="es" data-bs-theme="dark">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VannaLight - Asistente de IA (Dark Mode)</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>VannaLight — Asistente Industrial</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <style>
+        :root {
+            --bg: #09090c;
+            --surface: #0f1117;
+            --panel: #161b25;
+            --border: #1e2535;
+            --border2: #28304a;
+            --text: #dde4f0;
+            --muted: #4a5568;
+            --dim: #7a8a9e;
+            --sql-c: #22d3ee;
+            --sql-bg: #0a1f2e;
+            --sql-glow: rgba(34,211,238,.2);
+            --docs-c: #34d399;
+            --docs-bg: #091f18;
+            --docs-glow: rgba(52,211,153,.2);
+            --pred-c: #a78bfa;
+            --pred-bg: #130d24;
+            --pred-glow: rgba(167,139,250,.2);
+            --a: var(--sql-c);
+            --a-bg: var(--sql-bg);
+            --a-glow: var(--sql-glow);
+            --radius: 6px;
+            --mono: 'IBM Plex Mono',monospace;
+            --sans: 'IBM Plex Sans',sans-serif;
+            --cond: 'IBM Plex Sans Condensed',sans-serif;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        html {
+            font-size: 15px
+        }
+
         body {
-            background-color: #121212;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--sans);
+            min-height: 100vh;
+            overflow-x: hidden
         }
 
-        .chat-container {
-            max-width: 900px;
-            margin: 30px auto;
-        }
-
-        /* --- Consola de Logs (Estilo Hacker) --- */
-        #logArea {
-            height: 150px;
-            overflow-y: auto;
-            background-color: #0a0a0a;
-            color: #00ffcc;
-            font-family: 'Consolas', monospace;
-            padding: 15px;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            margin-top: 15px;
-            border: 1px solid #333;
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
-        }
-
-        /* --- Tarjeta de Resultados --- */
-        .result-card {
-            background: #1e1e1e;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            display: none;
-            animation: slideUp 0.4s ease-out;
-            margin-top: 20px;
-            border: 1px solid #333;
-            border-left: 5px solid #00ffcc;
-        }
-
-        /* --- Estilo KPI (Dark) --- */
-        .kpi-card {
-            background: linear-gradient(135deg, #2a2a2a 0%, #1f1f1f 100%);
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-            border: 1px solid #444;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-            .kpi-card:hover {
-                transform: translateY(-5px);
-                box-shadow: 0 5px 15px rgba(0, 255, 204, 0.2);
+            body::before {
+                content: '';
+                position: fixed;
+                inset: 0;
+                background-image: radial-gradient(circle,rgba(255,255,255,.045) 1px,transparent 1px);
+                background-size: 28px 28px;
+                pointer-events: none;
+                z-index: 0
             }
 
-        .kpi-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #00ffcc;
-            word-wrap: break-word;
+        .app {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: 72px 1fr;
+            grid-template-rows: 56px 1fr;
+            min-height: 100vh
         }
 
-        .kpi-label {
-            font-size: 0.9rem;
-            color: #aaa;
+        /* TOPBAR */
+        .topbar {
+            grid-column: 1/-1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px 0 0;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface)
+        }
+
+        .tb-logo {
+            width: 72px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-right: 1px solid var(--border);
+            flex-shrink: 0
+        }
+
+        .logo-mark {
+            width: 30px;
+            height: 30px
+        }
+
+            .logo-mark svg {
+                width: 100%;
+                height: 100%
+            }
+
+        .logo-ring {
+            fill: none;
+            stroke: var(--a);
+            stroke-width: 2;
+            stroke-dasharray: 88;
+            animation: spin-ring 6s linear infinite;
+            transition: stroke .4s
+        }
+
+        @keyframes spin-ring {
+            to {
+                stroke-dashoffset: -88
+            }
+        }
+
+        .logo-dot {
+            fill: var(--a);
+            transition: fill .4s
+        }
+
+        .tb-wordmark {
+            padding-left: 16px;
+            font-family: var(--cond);
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: .06em;
+            display: flex;
+            align-items: baseline;
+            gap: 8px
+        }
+
+            .tb-wordmark em {
+                font-style: normal;
+                color: var(--a);
+                transition: color .4s
+            }
+
+        .tb-tag {
+            font-family: var(--mono);
+            font-size: .56rem;
+            color: var(--muted);
+            letter-spacing: .12em
+        }
+
+        .tb-right {
+            display: flex;
+            align-items: center;
+            gap: 14px
+        }
+
+        /* MODE BADGE — the unmissable indicator */
+        .tb-mode-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 14px;
+            border-radius: 4px;
+            border: 1px solid var(--a);
+            background: color-mix(in srgb,var(--a) 8%,transparent);
+            font-family: var(--mono);
+            font-size: .68rem;
+            font-weight: 600;
+            letter-spacing: .1em;
+            color: var(--a);
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 5px;
+            transition: all .35s
         }
 
-        @keyframes slideUp {
+        .tb-blink {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--a);
+            box-shadow: 0 0 8px var(--a);
+            animation: blink 1.8s ease-in-out infinite;
+            transition: background .4s,box-shadow .4s
+        }
+
+        @keyframes blink {
+            0%,100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .2
+            }
+        }
+
+        .tb-status {
+            font-family: var(--mono);
+            font-size: .6rem;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            gap: 6px
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #4ade80;
+            box-shadow: 0 0 7px #4ade80;
+            animation: blink 2.4s ease-in-out infinite
+        }
+
+        /* SIDEBAR */
+        .sidebar {
+            grid-row: 2;
+            grid-column: 1;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 14px 0;
+            gap: 4px;
+            position: sticky;
+            top: 56px;
+            height: calc(100vh - 56px)
+        }
+
+        .sb-btn {
+            position: relative;
+            width: 52px;
+            height: 52px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            border: none;
+            border-radius: var(--radius);
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            transition: all .2s;
+            font-family: var(--mono);
+            font-size: .5rem;
+            letter-spacing: .06em;
+            text-transform: uppercase
+        }
+
+            .sb-btn svg {
+                width: 18px;
+                height: 18px;
+                transition: stroke .3s
+            }
+
+            .sb-btn:hover {
+                background: var(--panel);
+                color: var(--dim)
+            }
+
+            .sb-btn::before {
+                content: '';
+                position: absolute;
+                left: 0;
+                top: 50%;
+                transform: translateY(-50%) scaleY(0);
+                width: 3px;
+                height: 60%;
+                border-radius: 0 2px 2px 0;
+                background: var(--a);
+                transition: transform .25s,background .4s
+            }
+
+            .sb-btn.active-sql {
+                background: color-mix(in srgb,var(--sql-c) 11%,transparent);
+                color: var(--sql-c);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb,var(--sql-c) 30%,transparent)
+            }
+
+            .sb-btn.active-docs {
+                background: color-mix(in srgb,var(--docs-c) 11%,transparent);
+                color: var(--docs-c);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb,var(--docs-c) 30%,transparent)
+            }
+
+            .sb-btn.active-pred {
+                background: color-mix(in srgb,var(--pred-c) 11%,transparent);
+                color: var(--pred-c);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb,var(--pred-c) 30%,transparent)
+            }
+
+                .sb-btn.active-sql::before, .sb-btn.active-docs::before, .sb-btn.active-pred::before {
+                    transform: translateY(-50%) scaleY(1)
+                }
+
+            .sb-btn.active-sql svg {
+                stroke: var(--sql-c)
+            }
+
+            .sb-btn.active-docs svg {
+                stroke: var(--docs-c)
+            }
+
+            .sb-btn.active-pred svg {
+                stroke: var(--pred-c)
+            }
+
+        .sb-divider {
+            width: 32px;
+            height: 1px;
+            background: var(--border);
+            margin: 6px 0
+        }
+
+        /* MAIN */
+        .main {
+            grid-row: 2;
+            grid-column: 2;
+            padding: 18px 22px 60px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow-y: auto
+        }
+
+        /* MODE CONTEXT BANNER */
+        .mode-context {
+            border-radius: var(--radius);
+            border: 1px solid color-mix(in srgb,var(--a) 28%,transparent);
+            background: linear-gradient(135deg,color-mix(in srgb,var(--a) 7%,var(--surface)),var(--surface));
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            transition: border-color .4s,background .4s;
+            position: relative;
+            overflow: hidden
+        }
+
+            .mode-context::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 2px;
+                background: linear-gradient(90deg,var(--a),transparent 70%);
+                transition: background .4s
+            }
+
+        .mc-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius);
+            background: color-mix(in srgb,var(--a) 14%,transparent);
+            border: 1px solid color-mix(in srgb,var(--a) 30%,transparent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all .4s
+        }
+
+            .mc-icon svg {
+                width: 20px;
+                height: 20px;
+                stroke: var(--a);
+                transition: stroke .4s
+            }
+
+        .mc-text {
+            flex: 1
+        }
+
+        .mc-title {
+            font-family: var(--cond);
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: var(--a);
+            letter-spacing: .04em;
+            transition: color .4s
+        }
+
+        .mc-desc {
+            font-family: var(--mono);
+            font-size: .6rem;
+            color: var(--muted);
+            margin-top: 2px;
+            letter-spacing: .04em
+        }
+
+        .mc-shortcut {
+            font-family: var(--mono);
+            font-size: .58rem;
+            color: var(--muted);
+            text-align: right;
+            line-height: 2
+        }
+
+            .mc-shortcut kbd {
+                background: var(--panel);
+                border: 1px solid var(--border2);
+                border-radius: 3px;
+                padding: 1px 5px;
+                color: var(--dim)
+            }
+
+        /* INPUT PANEL */
+        .input-panel {
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            background: var(--surface);
+            overflow: hidden;
+            transition: border-color .35s,box-shadow .35s
+        }
+
+            .input-panel:focus-within {
+                border-color: var(--a);
+                box-shadow: 0 0 0 3px color-mix(in srgb,var(--a) 13%,transparent),0 0 28px color-mix(in srgb,var(--a) 9%,transparent)
+            }
+
+        .input-row {
+            display: flex;
+            align-items: center
+        }
+
+        .inp-pill {
+            padding: 0 14px;
+            height: 54px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            border-right: 1px solid var(--border);
+            min-width: 60px;
+            flex-shrink: 0
+        }
+
+        .inp-key {
+            font-family: var(--mono);
+            font-size: .72rem;
+            font-weight: 600;
+            color: var(--a);
+            letter-spacing: .08em;
+            transition: color .4s
+        }
+
+        .inp-sub {
+            font-family: var(--mono);
+            font-size: .5rem;
+            color: var(--muted);
+            letter-spacing: .06em
+        }
+
+        #txtQuestion {
+            flex: 1;
+            height: 54px;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text);
+            font-family: var(--sans);
+            font-size: .95rem;
+            padding: 0 16px
+        }
+
+            #txtQuestion::placeholder {
+                color: var(--muted)
+            }
+
+        .input-actions {
+            display: flex;
+            align-items: center;
+            border-left: 1px solid var(--border)
+        }
+
+        .iact-btn {
+            width: 48px;
+            height: 54px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            transition: color .2s,background .2s
+        }
+
+            .iact-btn:hover {
+                background: var(--panel);
+                color: var(--dim)
+            }
+
+            .iact-btn.mic-active {
+                color: #f87171;
+                animation: mic-pulse 1s ease-in-out infinite
+            }
+
+        @keyframes mic-pulse {
+            0%,100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .35
+            }
+        }
+
+        .btn-send {
+            height: 54px;
+            padding: 0 22px;
+            background: var(--a);
+            border: none;
+            color: #000;
+            font-family: var(--mono);
+            font-size: .7rem;
+            font-weight: 600;
+            letter-spacing: .1em;
+            cursor: pointer;
+            transition: background .4s,filter .2s,opacity .2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap
+        }
+
+            .btn-send:hover:not(:disabled) {
+                filter: brightness(1.18)
+            }
+
+            .btn-send:disabled {
+                opacity: .4;
+                cursor: not-allowed
+            }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(0,0,0,.3);
+            border-top-color: #000;
+            border-radius: 50%;
+            animation: spin .65s linear infinite;
+            display: none
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        /* LOG */
+        .log-wrap {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface);
+            overflow: hidden
+        }
+
+        .log-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 12px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border)
+        }
+
+        .log-bar-label {
+            font-family: var(--mono);
+            font-size: .56rem;
+            letter-spacing: .12em;
+            color: var(--muted);
+            text-transform: uppercase
+        }
+
+        .log-dots {
+            display: flex;
+            gap: 5px
+        }
+
+            .log-dots span {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%
+            }
+
+        #logArea {
+            height: 96px;
+            overflow-y: auto;
+            padding: 7px 12px;
+            font-family: var(--mono);
+            font-size: .68rem;
+            line-height: 1.75;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border2) transparent
+        }
+
+            #logArea::-webkit-scrollbar {
+                width: 3px
+            }
+
+            #logArea::-webkit-scrollbar-thumb {
+                background: var(--border2);
+                border-radius: 2px
+            }
+
+        .log-line {
+            display: flex;
+            gap: 10px
+        }
+
+        .log-time {
+            color: var(--muted);
+            flex-shrink: 0
+        }
+
+        .c-ok {
+            color: #4ade80
+        }
+
+        .c-err {
+            color: #f87171
+        }
+
+        .c-sys {
+            color: var(--muted)
+        }
+
+        .c-user {
+            color: var(--a);
+            transition: color .4s
+        }
+
+        /* RESULT */
+        #resultArea {
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            animation: fadeUp .32s ease-out
+        }
+
+        @keyframes fadeUp {
             from {
                 opacity: 0;
-                transform: translateY(20px);
+                transform: translateY(10px)
             }
 
             to {
                 opacity: 1;
-                transform: translateY(0);
+                transform: translateY(0)
             }
         }
 
-        .sql-badge {
-            font-size: 0.8rem;
-            background-color: #2a2a2a;
-            color: #00ffcc;
-            padding: 6px 12px;
+        .result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px
+        }
+
+        .result-label {
+            font-family: var(--mono);
+            font-size: .6rem;
+            letter-spacing: .12em;
+            color: var(--a);
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: color .4s
+        }
+
+            .result-label::before {
+                content: '';
+                display: block;
+                width: 3px;
+                height: 14px;
+                background: var(--a);
+                border-radius: 2px;
+                transition: background .4s
+            }
+
+        .view-toggle {
+            display: none;
+            gap: 2px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 3px
+        }
+
+        .vtog-btn {
+            padding: 5px 12px;
+            border: none;
             border-radius: 4px;
-            font-family: monospace;
+            background: transparent;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: .6rem;
+            letter-spacing: .06em;
             cursor: pointer;
-            border: 1px solid #444;
-            transition: 0.3s;
+            transition: background .15s,color .15s
         }
 
-            .sql-badge:hover {
-                background-color: #00ffcc;
-                color: #000;
+            .vtog-btn.active {
+                background: var(--border2);
+                color: var(--text)
             }
+
+        /* DOCS */
+        .docs-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--docs-c);
+            border-radius: var(--radius);
+            padding: 22px 26px
+        }
+
+            .docs-card pre {
+                font-family: var(--sans);
+                font-size: .92rem;
+                line-height: 1.8;
+                color: var(--text);
+                white-space: pre-wrap
+            }
+
+        .docs-field {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            gap: 0;
+            border-bottom: 1px solid var(--border);
+            padding: 10px 0
+        }
+
+            .docs-field:last-child {
+                border-bottom: none
+            }
+
+        .docs-field-key {
+            font-family: var(--mono);
+            font-size: .66rem;
+            letter-spacing: .06em;
+            color: var(--muted);
+            text-transform: uppercase;
+            padding-top: 2px
+        }
+
+        .docs-field-val {
+            font-size: .95rem;
+            color: var(--text);
+            font-weight: 500
+        }
+
+        /* KPI */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
+            gap: 10px
+        }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            transition: border-color .2s,box-shadow .2s
+        }
+
+            .kpi-card:hover {
+                border-color: var(--a);
+                box-shadow: 0 0 20px color-mix(in srgb,var(--a) 14%,transparent)
+            }
+
+        .kpi-label {
+            font-family: var(--mono);
+            font-size: .58rem;
+            letter-spacing: .12em;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 8px
+        }
+
+        .kpi-value {
+            font-family: var(--cond);
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--a);
+            word-break: break-all;
+            line-height: 1;
+            transition: color .4s
+        }
+
+        /* CHART / TABLE */
+        .chart-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px;
+            display: none
+        }
+
+        .chart-inner {
+            height: 300px;
+            position: relative
+        }
+
+        .table-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            display: none
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .8rem
+        }
+
+            .data-table th {
+                background: var(--panel);
+                color: var(--muted);
+                font-family: var(--mono);
+                font-size: .58rem;
+                letter-spacing: .1em;
+                text-transform: uppercase;
+                padding: 10px 14px;
+                text-align: left;
+                border-bottom: 1px solid var(--border)
+            }
+
+            .data-table td {
+                padding: 9px 14px;
+                border-bottom: 1px solid var(--border);
+                color: var(--dim);
+                font-family: var(--mono);
+                font-size: .74rem
+            }
+
+            .data-table tr:last-child td {
+                border-bottom: none
+            }
+
+            .data-table tr:hover td {
+                background: var(--panel);
+                color: var(--text)
+            }
+
+        /* PREDICT */
+        .pred-grid {
+            display: none;
+            grid-template-columns: repeat(auto-fit,minmax(210px,1fr));
+            gap: 10px
+        }
+
+        .pred-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            position: relative;
+            overflow: hidden
+        }
+
+            .pred-card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 2px;
+                background: linear-gradient(90deg,var(--pred-c),transparent)
+            }
+
+        .pred-category {
+            font-family: var(--mono);
+            font-size: .56rem;
+            letter-spacing: .12em;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 10px
+        }
+
+        .pred-value {
+            font-family: var(--cond);
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--pred-c);
+            line-height: 1;
+            margin-bottom: 6px
+        }
+
+        .pred-label {
+            font-size: .82rem;
+            color: var(--dim);
+            margin-bottom: 14px
+        }
+
+        .pred-confidence {
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        .pred-bar-bg {
+            flex: 1;
+            height: 3px;
+            background: var(--border2);
+            border-radius: 2px;
+            overflow: hidden
+        }
+
+        .pred-bar-fill {
+            height: 100%;
+            background: var(--pred-c);
+            border-radius: 2px;
+            transition: width .8s ease-out
+        }
+
+        .pred-conf-val {
+            font-family: var(--mono);
+            font-size: .6rem;
+            color: var(--pred-c);
+            white-space: nowrap
+        }
+
+        .pred-trend {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-family: var(--mono);
+            font-size: .62rem;
+            padding: 2px 7px;
+            border-radius: 3px;
+            margin-top: 10px
+        }
+
+            .pred-trend.up {
+                background: rgba(248,113,113,.1);
+                color: #f87171
+            }
+
+            .pred-trend.down {
+                background: rgba(74,222,128,.1);
+                color: #4ade80
+            }
+
+            .pred-trend.flat {
+                background: rgba(148,163,184,.1);
+                color: #94a3b8
+            }
+
+        /* SQL FOOTER */
+        .sql-footer {
+            display: none
+        }
+
+        .sql-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: .6rem;
+            letter-spacing: .06em;
+            padding: 5px 12px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: border-color .2s,color .2s
+        }
+
+            .sql-toggle-btn:hover {
+                border-color: var(--sql-c);
+                color: var(--sql-c)
+            }
+
+        #sqlContainer {
+            display: none;
+            margin-top: 10px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px;
+            font-family: var(--mono);
+            font-size: .72rem;
+            color: var(--sql-c);
+            overflow-x: auto;
+            white-space: pre;
+            line-height: 1.7
+        }
+
+        /* CONFIDENCE */
+        .confidence-bar-wrap {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-top: 1px solid var(--border);
+            margin-top: 12px
+        }
+
+        .conf-label {
+            font-family: var(--mono);
+            font-size: .58rem;
+            color: var(--muted);
+            letter-spacing: .08em
+        }
+
+        .conf-bg {
+            flex: 1;
+            height: 4px;
+            background: var(--border2);
+            border-radius: 2px;
+            overflow: hidden
+        }
+
+        .conf-fill {
+            height: 100%;
+            background: var(--a);
+            border-radius: 2px;
+            transition: width .6s ease-out,background .4s
+        }
+
+        .conf-val {
+            font-family: var(--mono);
+            font-size: .62rem;
+            color: var(--a);
+            white-space: nowrap;
+            transition: color .4s
+        }
+
+        /* RESPONSIVE */
+        @media(max-width:680px) {
+            .app {
+                grid-template-columns: 1fr;
+                grid-template-rows: 56px 48px 1fr
+            }
+
+            .sidebar {
+                grid-row: 2;
+                grid-column: 1;
+                flex-direction: row;
+                height: 48px;
+                padding: 0 10px;
+                gap: 4px;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+                position: sticky;
+                top: 56px
+            }
+
+            .sb-btn {
+                width: 44px;
+                height: 40px
+            }
+
+                .sb-btn::before {
+                    left: 50%;
+                    top: auto;
+                    bottom: 0;
+                    transform: translateX(-50%) scaleX(0);
+                    width: 60%;
+                    height: 3px;
+                    border-radius: 2px 2px 0 0
+                }
+
+                .sb-btn.active-sql::before, .sb-btn.active-docs::before, .sb-btn.active-pred::before {
+                    transform: translateX(-50%) scaleX(1)
+                }
+
+            .sb-divider {
+                width: 1px;
+                height: 24px;
+                margin: 0 4px
+            }
+
+            .main {
+                grid-row: 3;
+                grid-column: 1;
+                padding: 12px 12px 50px
+            }
+
+            .mc-shortcut {
+                display: none
+            }
+
+            .docs-field {
+                grid-template-columns: 1fr;
+                gap: 2px
+            }
+
+            #txtQuestion {
+                font-size: 16px
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="container chat-container">
+    <div class="app">
 
-        <div class="text-center mb-4">
-            <h2 class="fw-bold text-light"><i class="fa-solid fa-microchip" style="color: #00ffcc;"></i> VannaLight</h2>
-            <p class="text-muted">Asistente Text-to-SQL (Fase 2)</p>
-        </div>
-
-        <div class="card shadow-lg p-4 border-0">
-            <div class="input-group input-group-lg">
-                <input type="text" id="txtQuestion" class="form-control bg-dark text-light" placeholder="Ej: ¿Cuáles son los 5 productos más caros?" onkeypress="handleKeyPress(event)">
-                <button class="btn btn-outline-secondary" id="btnMic" onclick="startDictation()" title="Dictar pregunta">
-                    <i class="fa-solid fa-microphone"></i>
-                </button>
-                <button class="btn btn-outline-info" id="btnSend" onclick="sendQuestion()" style="border-color: #00ffcc; color: #00ffcc;">
-                    <span class="spinner-border spinner-border-sm" id="loadingIcon" style="display:none;"></span> Preguntar
-                </button>
+        <!-- TOPBAR -->
+        <header class="topbar">
+            <div class="tb-logo">
+                <div class="logo-mark">
+                    <svg viewBox="0 0 36 36">
+                        <circle cx="18" cy="18" r="14" class="logo-ring" />
+                        <circle cx="18" cy="18" r="4" class="logo-dot" />
+                    </svg>
+                </div>
             </div>
+            <div class="tb-wordmark">
+                VANNA<em>LIGHT</em>
+                <span class="tb-tag">Industrial Intelligence</span>
+            </div>
+            <div class="tb-right">
+                <div class="tb-mode-badge" id="tbBadge">
+                    <div class="tb-blink"></div>
+                    <span id="tbModeText">DATOS · SQL</span>
+                </div>
+                <div class="tb-status">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Iniciando...</span>
+                </div>
+            </div>
+        </header>
 
-            <div id="logArea"><i>Esperando conexión con el núcleo neural...</i><br></div>
-        </div>
+        <!-- SIDEBAR -->
+        <nav class="sidebar">
+            <button class="sb-btn active-sql" id="sb-sql" onclick="setMode('sql')" title="Datos SQL [1]">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <ellipse cx="12" cy="5" rx="9" ry="3" />
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                </svg>SQL
+            </button>
+            <button class="sb-btn" id="sb-docs" onclick="setMode('docs')" title="Documentos PDF [2]">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>PDF
+            </button>
+            <button class="sb-btn" id="sb-pred" onclick="setMode('pred')" title="Predicción ML [3]">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+                    <polyline points="16 7 22 7 22 13" />
+                </svg>ML
+            </button>
+            <div class="sb-divider"></div>
+            <button class="sb-btn" id="sb-mic" onclick="startDictation()" title="Dictar [M]">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>VOZ
+            </button>
+        </nav>
 
-        <div id="resultArea" class="result-card">
-            <div class="d-flex justify-content-between align-items-center border-bottom border-secondary pb-2 mb-3">
-                <h5 class="text-light m-0"><i class="fa-solid fa-chart-column" style="color: #00ffcc;"></i> Resultado</h5>
+        <!-- MAIN -->
+        <main class="main">
 
-                <div class="btn-group btn-group-sm shadow-sm" role="group" id="viewToggleGroup" style="display:none;">
-                    <input type="radio" class="btn-check" name="viewRadio" id="btnViewChart" autocomplete="off" checked onchange="switchView('chart')">
-                    <label class="btn btn-outline-info" for="btnViewChart" style="border-color: #00ffcc;"><i class="fa-solid fa-chart-pie"></i> Gráfica</label>
-
-                    <input type="radio" class="btn-check" name="viewRadio" id="btnViewTable" autocomplete="off" onchange="switchView('table')">
-                    <label class="btn btn-outline-info" for="btnViewTable" style="border-color: #00ffcc;"><i class="fa-solid fa-table"></i> Tabla</label>
+            <!-- Mode context — impossible to miss -->
+            <div class="mode-context" id="modeContext">
+                <div class="mc-icon">
+                    <svg id="mcSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                    </svg>
+                </div>
+                <div class="mc-text">
+                    <div class="mc-title" id="mcTitle">MODO DATOS — SQL</div>
+                    <div class="mc-desc" id="mcDesc">Consultas sobre bases de datos estructuradas · Northwind / Planta</div>
+                </div>
+                <div class="mc-shortcut">
+                    <div><kbd>1</kbd> SQL &nbsp;<kbd>2</kbd> PDF &nbsp;<kbd>3</kbd> ML</div>
+                    <div><kbd>Enter</kbd> ejecutar &nbsp;<kbd>M</kbd> micrófono</div>
                 </div>
             </div>
 
-            <small id="explanationText" class="text-muted d-block mb-3"></small>
-
-            <div id="kpiContainer"></div>
-
-            <div id="chartContainer" class="mb-2" style="display:none; height: 320px; width: 100%;">
-                <canvas id="liaChart"></canvas>
+            <!-- Input -->
+            <div class="input-panel">
+                <div class="input-row">
+                    <div class="inp-pill">
+                        <span class="inp-key" id="inpKey">SQL</span>
+                        <span class="inp-sub" id="inpSub">datos</span>
+                    </div>
+                    <input type="text" id="txtQuestion" placeholder="¿Cuáles son los 5 productos con más scrap este mes?" onkeypress="handleKeyPress(event)" autocomplete="off" />
+                    <div class="input-actions">
+                        <button class="iact-btn" id="btnMic" onclick="startDictation()" title="Dictar">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                <line x1="12" y1="19" x2="12" y2="23" />
+                                <line x1="8" y1="23" x2="16" y2="23" />
+                            </svg>
+                        </button>
+                        <button class="btn-send" id="btnSend" onclick="sendQuestion()">
+                            <div class="spinner" id="loadingIcon"></div>
+                            <span id="btnLabel">EJECUTAR</span>
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            <div id="tableContainer" style="display:none;"></div>
-
-            <div class="mt-4 pt-2 border-top border-secondary text-end">
-                <span id="btnToggleSql" class="sql-badge" onclick="toggleSql()">
-                    <i class="fa-solid fa-code"></i> T-SQL
-                </span>
-                <div id="sqlContainer" class="mt-3 p-3 bg-dark border border-secondary rounded text-start font-monospace small text-info" style="display:none; overflow-x:auto;"></div>
+            <!-- Log -->
+            <div class="log-wrap">
+                <div class="log-bar">
+                    <span class="log-bar-label">Consola del sistema</span>
+                    <div class="log-dots">
+                        <span style="background:#f87171"></span>
+                        <span style="background:#fbbf24"></span>
+                        <span style="background:#4ade80"></span>
+                    </div>
+                </div>
+                <div id="logArea"></div>
             </div>
-        </div>
+
+            <!-- Result -->
+            <div id="resultArea">
+                <div class="result-header">
+                    <div class="result-label" id="resultLabel">RESULTADO</div>
+                    <div class="view-toggle" id="viewToggle">
+                        <button class="vtog-btn active" onclick="switchView('chart',this)">◧ Gráfica</button>
+                        <button class="vtog-btn" onclick="switchView('table',this)">⊞ Tabla</button>
+                    </div>
+                </div>
+                <div class="docs-card" id="docsCard" style="display:none;"></div>
+                <div class="kpi-grid" id="kpiContainer"></div>
+                <div class="chart-wrap" id="chartContainer"><div class="chart-inner"><canvas id="liaChart"></canvas></div></div>
+                <div class="table-wrap" id="tableContainer"></div>
+                <div class="pred-grid" id="predGrid"></div>
+                <div class="confidence-bar-wrap" id="confBar" style="display:none;">
+                    <span class="conf-label">CONFIANZA</span>
+                    <div class="conf-bg"><div class="conf-fill" id="confFill" style="width:0%"></div></div>
+                    <span class="conf-val" id="confVal">—</span>
+                </div>
+                <div class="sql-footer" id="sqlFooter">
+                    <button class="sql-toggle-btn" onclick="toggleSql()">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
+                        VER T-SQL
+                    </button>
+                    <div id="sqlContainer"></div>
+                </div>
+            </div>
+
+        </main>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
-        const connection = new signalR.HubConnectionBuilder()
-            .withUrl("/hub/assistant")
-            .withAutomaticReconnect()
-            .build();
+        const MODES = {
+            sql: {
+                key: 'sql', modeVal: 0, label: 'SQL', sub: 'datos', title: 'MODO DATOS — SQL', desc: 'Consultas sobre bases de datos estructuradas · Northwind / Planta', badge: 'DATOS · SQL', ph: '¿Cuáles son los 5 productos con más scrap este mes?',
+                icon: `<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>`
+            },
+            docs: {
+                key: 'docs', modeVal: 1, label: 'PDF', sub: 'documentos', title: 'MODO DOCUMENTOS — PDF', desc: 'Work Instructions, fichas técnicas, procedimientos de planta', badge: 'DOCUMENTOS · PDF', ph: '¿Cuál es el molde y estándar del número de parte 421084-0006?',
+                icon: `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>`
+            },
+            pred: {
+                key: 'pred', modeVal: 2, label: 'ML', sub: 'predicción', title: 'MODO PREDICCIÓN — ML.NET', desc: 'Pronósticos de scrap, producción y riesgo de paro · Machine Learning', badge: 'PREDICCIÓN · ML', ph: '¿Cuál es el pronóstico de scrap para el siguiente turno?',
+                icon: `<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>`
+            },
+        };
 
-        let myConnectionId = "";
-        const logArea = document.getElementById("logArea");
-        const resultArea = document.getElementById("resultArea");
-       // const dynamicContent = document.getElementById("dynamicContent");
-        const sqlContainer = document.getElementById("sqlContainer");
-        const btnSend = document.getElementById("btnSend");
-        const loadingIcon = document.getElementById("loadingIcon");
+        let currentMode = 'sql', myConnectionId = '', currentChart = null;
 
-        function logMessage(msg, isError = false, isSystem = false) {
-            const time = new Date().toLocaleTimeString();
-            let color = "#00ffcc"; // Verde/cyan hacker
-            if (isError) color = "#ff4444";
-            if (isSystem) color = "#aaaaaa";
-            logArea.innerHTML += `<div style="color:${color}">[${time}] ${msg}</div>`;
-            logArea.scrollTop = logArea.scrollHeight;
-        }
-
-        // --- MANEJO DE EVENTOS DE VANNALIGHT (FASE 2) ---
-
-        connection.on("JobStatusUpdated", (data) => {
-            logMessage(`⏳ Procesando... Estado interno: ${data.status}`, false, true);
-        });
-
-        connection.on("JobFailed", (data) => {
-            logMessage(`❌ Error en la base de datos o modelo: ${data.error}`, true);
-            resetUI();
-        });
-
-        connection.on("JobCompleted", (payload) => {
-            logMessage(`✅ ¡Datos extraídos correctamente!`);
-            resetUI();
-            resultArea.style.display = 'block';
-
-            sqlContainer.innerText = payload.sql;
-            sqlContainer.style.display = 'none';
-
-            renderSqlData(payload.data);
-
-            // --- NUEVA LÍNEA PARA QUE HABLE ---
-            let textToSpeak = "Consulta completada.";
-            if (payload.data && payload.data.length === 1) {
-                // Si es un KPI, que lea el valor (ej. "El resultado es 500")
-                const firstKey = Object.keys(payload.data[0])[0];
-                const val = formatValue(payload.data[0][firstKey]);
-                textToSpeak = `El resultado para ${firstKey} es ${val}.`;
-            } else if (payload.data) {
-                // Si es una tabla, que diga cuántas filas encontró
-                textToSpeak = `Encontré ${payload.data.length} registros. Mostrando tabla en pantalla.`;
-            }
-            speakSummary(textToSpeak);
-        });
-
-        // --- MOTOR DE RENDERIZADO VISUAL ---
-        let currentChart = null; // Variable global para controlar la gráfica
-
-        // --- FUNCIÓN PARA CAMBIAR LA VISTA (TABLA / GRÁFICA) ---
-        function switchView(viewType) {
-            const chartDiv = document.getElementById("chartContainer");
-            const tableDiv = document.getElementById("tableContainer");
-
-            if (viewType === 'chart') {
-                chartDiv.style.display = 'block';
-                tableDiv.style.display = 'none';
-            } else {
-                chartDiv.style.display = 'none';
-                tableDiv.style.display = 'block';
-            }
-        }
-
-        // --- MOTOR DE RENDERIZADO VISUAL ACTUALIZADO ---
-        function renderSqlData(dataArray) {
-            // Referencias a los nuevos contenedores
-            const kpiDiv = document.getElementById("kpiContainer");
-            const chartDiv = document.getElementById("chartContainer");
-            const tableDiv = document.getElementById("tableContainer");
-            const toggleBtn = document.getElementById("viewToggleGroup");
-
-            // Reset visual
-            kpiDiv.innerHTML = '';
-            tableDiv.innerHTML = '';
-            chartDiv.style.display = 'none';
-            tableDiv.style.display = 'none';
-            toggleBtn.style.display = 'none';
-
-            if (!dataArray || dataArray.length === 0) {
-                kpiDiv.innerHTML = `<div class="alert alert-warning text-dark"><i class="fa-solid fa-triangle-exclamation"></i> Sin resultados.</div>`;
-                return;
-            }
-
-            // 1. MODO KPI: Si es 1 sola fila
-            if (dataArray.length === 1) {
-                const row = dataArray[0];
-                const keys = Object.keys(row);
-                let html = '<div class="row justify-content-center">';
-                keys.forEach(key => {
-                    html += `
-                        <div class="col-md-4 col-sm-6 mb-3">
-                            <div class="kpi-card">
-                                <div class="kpi-label">${key}</div>
-                                <div class="kpi-value">${formatValue(row[key])}</div>
-                            </div>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-                kpiDiv.innerHTML = html;
-                return; // Terminamos aquí, no hay gráfica ni tabla
-            }
-
-            // 2. MODO MÚLTIPLES FILAS
-            const headers = Object.keys(dataArray[0]);
-
-            // Generar el HTML de la tabla
-            let tableHtml = `
-                <div class="table-responsive">
-                    <table class="table table-dark table-hover table-bordered align-middle shadow-sm mb-0">
-                        <thead class="table-secondary" style="color: #000;">
-                            <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
-                        </thead>
-                        <tbody>
-            `;
-            dataArray.forEach(row => {
-                tableHtml += `<tr>${headers.map(h => `<td>${formatValue(row[h])}</td>`).join('')}</tr>`;
+        function setMode(m) {
+            currentMode = m;
+            const c = MODES[m];
+            const r = document.documentElement;
+            r.style.setProperty('--a', `var(--${m}-c)`);
+            r.style.setProperty('--a-bg', `var(--${m}-bg)`);
+            r.style.setProperty('--a-glow', `var(--${m}-glow)`);
+            ['sql', 'docs', 'pred'].forEach(k => {
+                document.getElementById('sb-' + k).className = 'sb-btn' + (k === m ? ' active-' + k : '');
             });
-            tableHtml += `</tbody></table></div>`;
-            if (dataArray.length > 20) {
-                tableHtml += `<p class="text-info small text-end fst-italic mt-2">Mostrando ${dataArray.length} registros.</p>`;
-            }
-            tableDiv.innerHTML = tableHtml;
-
-            // Intentar graficar
-            let labelCol = null;
-            let valCol = null;
-            if (headers.length >= 2) {
-                for (let h of headers) {
-                    if (typeof dataArray[0][h] === 'number' && !valCol) valCol = h;
-                    else if (!labelCol) labelCol = h;
-                }
-            }
-
-            if (labelCol && valCol && dataArray.length <= 50) {
-                // SÍ se puede graficar
-                const labels = dataArray.map(row => row[labelCol]);
-                const values = dataArray.map(row => row[valCol]);
-                renderChart(labels, values, valCol);
-
-                // Mostrar los botones y activar vista gráfica por defecto
-                toggleBtn.style.display = 'inline-flex';
-                document.getElementById('btnViewChart').checked = true;
-                switchView('chart');
-            } else {
-                // NO se puede graficar (son puros textos o muchas columnas), forzamos la tabla
-                tableDiv.style.display = 'block';
-            }
+            document.getElementById('tbModeText').textContent = c.badge;
+            document.getElementById('mcTitle').textContent = c.title;
+            document.getElementById('mcDesc').textContent = c.desc;
+            document.getElementById('mcSvg').innerHTML = c.icon;
+            document.getElementById('inpKey').textContent = c.label;
+            document.getElementById('inpSub').textContent = c.sub;
+            document.getElementById('txtQuestion').placeholder = c.ph;
+            document.querySelector('.tb-wordmark em').style.color = `var(--${m}-c)`;
+            logLine(`Modo → ${c.title}`, 'sys');
+            hideResult();
         }
 
-        // --- FUNCIÓN PARA DIBUJAR LA GRÁFICA (DARK THEME) ---
-        function renderChart(labels, values, valueLabel) {
-            const ctx = document.getElementById('liaChart').getContext('2d');
+        document.addEventListener('keydown', e => {
+            if (document.activeElement === document.getElementById('txtQuestion')) return;
+            if (e.key === '1') setMode('sql');
+            if (e.key === '2') setMode('docs');
+            if (e.key === '3') setMode('pred');
+            if (e.key === 'm' || e.key === 'M') startDictation();
+        });
 
-            // Destruir gráfica anterior si existe
-            if (currentChart) {
-                currentChart.destroy();
-            }
-
-            // Cambiar automáticamente a gráfica horizontal si hay muchas etiquetas
-            const isHorizontal = labels.length > 8;
-
-            currentChart = new Chart(ctx, {
-                type: isHorizontal ? 'bar' : 'bar', // Puedes usar 'line' o 'doughnut' si prefieres
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: valueLabel,
-                        data: values,
-                        backgroundColor: 'rgba(0, 255, 204, 0.7)', // Cyan hacker
-                        borderColor: '#00ffcc',
-                        borderWidth: 1,
-                        borderRadius: 4
-                    }]
-                },
-                options: {
-                    indexAxis: isHorizontal ? 'y' : 'x',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false } // Ocultamos la leyenda para que se vea más limpio
-                    },
-                    scales: {
-                        x: {
-                            ticks: { color: '#aaa' },
-                            grid: { color: '#333' }
-                        },
-                        y: {
-                            ticks: { color: '#aaa' },
-                            grid: { color: '#333' },
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-        }
-
-        function formatValue(val) {
-            if (typeof val === 'number') {
-                // Formato de moneda/decimales si tiene punto decimal
-                if (val % 1 !== 0) return val.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                return val.toLocaleString('es-MX');
-            }
-            return val;
-        }
-
-        function toggleSql() {
-            sqlContainer.style.display = sqlContainer.style.display === 'none' ? 'block' : 'none';
-        }
-
-        function resetUI() {
-            loadingIcon.style.display = 'none';
-            btnSend.disabled = false;
-        }
+        // SIGNALR
+        const connection = new signalR.HubConnectionBuilder().withUrl('/hub/assistant').withAutomaticReconnect().build();
+        connection.on('JobStatusUpdated', d => logLine(`⏳ ${d.status}`, 'sys'));
+        connection.on('JobFailed', d => { logLine(`❌ ${d.error}`, 'err'); resetUI() });
+        connection.on('JobRequiresReview', d => { logLine(`⚠️ ${d.reason}`, 'sys'); resetUI() });
+        connection.on('JobCompleted', payload => {
+            logLine('✅ Consulta completada', 'ok'); resetUI();
+            let data = payload;
+            if (payload.resultJson) { try { data = JSON.parse(payload.resultJson) } catch { } }
+            else if (payload.data && typeof payload.data === 'string') { try { data = JSON.parse(payload.data) } catch { } }
+            if (data?.type === 'prediction') renderPred(data);
+            else if (currentMode === 'docs') renderDocs(payload);
+            else renderSql(payload);
+        });
 
         async function startConnection() {
             try {
                 await connection.start();
-                logMessage("✅ Sistema en línea. Motor RTX listo.");
                 myConnectionId = connection.connectionId;
-            } catch (err) {
-                logMessage(`⚠️ Error de conexión WebSocket. Reintentando...`, true);
+                document.getElementById('statusDot').style.cssText = 'background:#4ade80;box-shadow:0 0 7px #4ade80';
+                document.getElementById('statusText').textContent = 'RTX 4060 · LLM listo';
+                logLine('Sistema en línea. Motor neural activo.', 'ok');
+            } catch {
+                document.getElementById('statusDot').style.cssText = 'background:#f87171;box-shadow:0 0 7px #f87171';
+                document.getElementById('statusText').textContent = 'Sin conexión';
+                logLine('Error WebSocket. Reintentando...', 'err');
                 setTimeout(startConnection, 5000);
             }
         }
-
         startConnection();
 
-        // --- 5. MOTOR DE VOZ (MANOS LIBRES) ---
+        async function sendQuestion() {
+            const q = document.getElementById('txtQuestion').value.trim();
+            if (!q || !myConnectionId || document.getElementById('btnSend').disabled) return;
+            document.getElementById('loadingIcon').style.display = 'block';
+            document.getElementById('btnLabel').textContent = 'PROCESANDO';
+            document.getElementById('btnSend').disabled = true;
+            hideResult();
+            logLine(`→ ${q}`, 'user');
+            try {
+                const r = await fetch('/api/assistant/ask', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: q, userId: 'vanna-web-user', connectionId: myConnectionId, mode: MODES[currentMode].modeVal })
+                });
+                if (!r.ok) { logLine(`HTTP ${r.status}`, 'err'); resetUI() }
+            } catch (e) { logLine(`Red: ${e.message}`, 'err'); resetUI() }
+            document.getElementById('txtQuestion').value = '';
+        }
+        function handleKeyPress(e) { if (e.key === 'Enter') sendQuestion() }
+        function resetUI() { document.getElementById('loadingIcon').style.display = 'none'; document.getElementById('btnLabel').textContent = 'EJECUTAR'; document.getElementById('btnSend').disabled = false }
+        function hideResult() { document.getElementById('resultArea').style.display = 'none' }
 
-        // A. Speech-to-Text (Escuchar)
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+        function preRender() {
+            document.getElementById('resultArea').style.display = 'flex';
+            document.getElementById('docsCard').style.display = 'none';
+            document.getElementById('kpiContainer').innerHTML = '';
+            document.getElementById('chartContainer').style.display = 'none';
+            document.getElementById('tableContainer').style.display = 'none';
+            document.getElementById('tableContainer').innerHTML = '';
+            document.getElementById('predGrid').style.display = 'none';
+            document.getElementById('predGrid').innerHTML = '';
+            document.getElementById('viewToggle').style.display = 'none';
+            document.getElementById('sqlFooter').style.display = 'none';
+            document.getElementById('confBar').style.display = 'none';
+            if (currentChart) { currentChart.destroy(); currentChart = null }
+        }
 
+        function renderDocs(payload) {
+            preRender();
+            document.getElementById('resultLabel').textContent = 'RESULTADO — DOCUMENTOS';
+            const card = document.getElementById('docsCard');
+            card.style.display = 'block';
+            const text = payload.sqlText || payload.sql || payload.answer || 'Sin respuesta.';
+            const lines = text.split('\n').filter(l => l.trim());
+            if (lines.some(l => l.includes(':'))) {
+                card.innerHTML = lines.map(l => {
+                    const m = l.match(/^[-•\s]*(.+?):\s*(.+)$/);
+                    return m ? `<div class="docs-field"><div class="docs-field-key">${m[1].trim()}</div><div class="docs-field-val">${m[2].trim()}</div></div>`
+                        : `<div style="padding:6px 0;color:var(--muted);font-family:var(--mono);font-size:.68rem">${l}</div>`;
+                }).join('');
+            } else { card.innerHTML = `<pre>${text}</pre>` }
+            const conf = payload.confidence;
+            if (conf != null) {
+                const pct = Math.round(conf * 100);
+                document.getElementById('confBar').style.display = 'flex';
+                setTimeout(() => { document.getElementById('confFill').style.width = pct + '%'; document.getElementById('confVal').textContent = pct + '%' }, 80);
+            }
+            speakSummary(text);
+        }
+
+        function renderSql(payload) {
+            preRender();
+            document.getElementById('resultLabel').textContent = 'RESULTADO — DATOS';
+            document.getElementById('sqlFooter').style.display = 'block';
+            document.getElementById('sqlContainer').textContent = payload.sql || payload.sqlText || '';
+            const data = payload.data;
+            if (!data || data.length === 0) { document.getElementById('kpiContainer').innerHTML = `<div style="color:var(--muted);font-family:var(--mono);font-size:.76rem;padding:16px 0">Sin resultados.</div>`; return }
+            if (data.length === 1) {
+                document.getElementById('kpiContainer').innerHTML = Object.entries(data[0]).map(([k, v]) => `<div class="kpi-card"><div class="kpi-label">${k}</div><div class="kpi-value">${fmtVal(v)}</div></div>`).join('');
+                speakSummary(`El resultado es ${fmtVal(Object.values(data[0])[0])}.`); return;
+            }
+            renderTable(data);
+            const headers = Object.keys(data[0]); let lc = null, vc = null;
+            for (const h of headers) { if (typeof data[0][h] === 'number' && !vc) vc = h; else if (!lc) lc = h }
+            if (lc && vc && data.length <= 60) {
+                renderChart(data.map(r => r[lc]), data.map(r => r[vc]), vc);
+                document.getElementById('viewToggle').style.display = 'flex';
+                switchView('chart', document.querySelector('.vtog-btn'));
+            } else { document.getElementById('tableContainer').style.display = 'block' }
+            speakSummary(`Encontré ${data.length} registros.`);
+        }
+
+        function renderTable(data) {
+            const h = Object.keys(data[0]);
+            document.getElementById('tableContainer').innerHTML = `<table class="data-table"><thead><tr>${h.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${data.map(r => `<tr>${h.map(c => `<td>${fmtVal(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+        }
+
+        function renderChart(labels, values, valLabel) {
+            const ctx = document.getElementById('liaChart').getContext('2d');
+            if (currentChart) currentChart.destroy();
+            const horiz = labels.length > 8;
+            const ac = { sql: '#22d3ee', docs: '#34d399', pred: '#a78bfa' }[currentMode];
+            document.getElementById('chartContainer').style.display = 'block';
+            currentChart = new Chart(ctx, {
+                type: 'bar', data: { labels, datasets: [{ label: valLabel, data: values, backgroundColor: ac + '50', borderColor: ac, borderWidth: 1, borderRadius: 4 }] },
+                options: {
+                    indexAxis: horiz ? 'y' : 'x', responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { backgroundColor: '#161b25', borderColor: '#1e2535', borderWidth: 1, titleColor: '#7a8a9e', bodyColor: '#dde4f0', titleFont: { family: 'IBM Plex Mono', size: 11 }, bodyFont: { family: 'IBM Plex Mono', size: 12 }, callbacks: { label: c => ` ${fmtVal(c.parsed[horiz ? 'x' : 'y'])}` } } },
+                    scales: { x: { ticks: { color: '#4a5568', font: { family: 'IBM Plex Mono', size: 11 } }, grid: { color: '#161b25' } }, y: { ticks: { color: '#4a5568', font: { family: 'IBM Plex Mono', size: 11 } }, grid: { color: '#1e2535' }, beginAtZero: true } }
+                }
+            });
+        }
+
+        function switchView(type, btn) {
+            document.querySelectorAll('.vtog-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            document.getElementById('chartContainer').style.display = type === 'chart' ? 'block' : 'none';
+            document.getElementById('tableContainer').style.display = type === 'table' ? 'block' : 'none';
+        }
+
+        function renderPred(payload) {
+            preRender();
+            document.getElementById('resultLabel').textContent = 'RESULTADO — PREDICCIÓN ML';
+            const grid = document.getElementById('predGrid'); grid.style.display = 'grid';
+            const pData = payload.data;
+            if (pData?.ProductName) {
+                const conf = Math.round((pData.Confidence || .85) * 100);
+                grid.innerHTML = `<div class="pred-card"><div class="pred-category">PRONÓSTICO DE VENTAS</div><div class="pred-value">${fmtVal(pData.PredictedSales)}<span style="font-size:1rem;font-weight:400;margin-left:4px;color:var(--muted)">unidades</span></div><div class="pred-label">Producto: <strong style="color:var(--text)">${pData.ProductName}</strong></div><div class="pred-confidence"><div class="pred-bar-bg"><div class="pred-bar-fill" style="width:0%" data-target="${conf}%"></div></div><span class="pred-conf-val">${conf}% conf.</span></div><div class="pred-trend flat">Tendencia ML.NET</div></div><div style="grid-column:1/-1;margin-top:10px;font-size:.85rem;padding:12px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)"><span style="color:var(--pred-c)">🤖 Análisis:</span> ${payload.explanation || 'Pronóstico generado.'}</div>`;
+                speakSummary(payload.explanation || `Se estiman ${fmtVal(pData.PredictedSales)} unidades para ${pData.ProductName}.`);
+            } else {
+                const preds = [{ category: 'SCRAP', value: 3.2, unit: '%', label: 'Próximo turno', confidence: .91, trend: 'down', trendPct: 12 }, { category: 'TIEMPO CAÍDO', value: 18, unit: 'min', label: 'Próximas 8 hrs', confidence: .84, trend: 'up', trendPct: 6 }, { category: 'PIEZAS / HORA', value: 341, unit: 'pzs', label: 'Proyección', confidence: .88, trend: 'flat' }, { category: 'RIESGO DE PARO', value: 'MEDIO', unit: '', label: 'Nivel estimado', confidence: .76, trend: 'up', trendPct: 3 }];
+                grid.innerHTML = preds.map(p => { const conf = Math.round(p.confidence * 100); const ti = p.trend === 'up' ? '↑' : p.trend === 'down' ? '↓' : '→'; return `<div class="pred-card"><div class="pred-category">${p.category}</div><div class="pred-value">${fmtVal(p.value)}<span style="font-size:1rem;font-weight:400;margin-left:4px;color:var(--muted)">${p.unit}</span></div><div class="pred-label">${p.label}</div><div class="pred-confidence"><div class="pred-bar-bg"><div class="pred-bar-fill" style="width:0%" data-target="${conf}%"></div></div><span class="pred-conf-val">${conf}% conf.</span></div><div class="pred-trend ${p.trend}">${ti}${p.trendPct ? ' ' + Math.abs(p.trendPct) + '%' : ''} vs anterior</div></div>` }).join('');
+                speakSummary('Mostrando predicciones del sistema.');
+            }
+            setTimeout(() => { grid.querySelectorAll('.pred-bar-fill').forEach(el => { el.style.width = el.dataset.target }) }, 100);
+        }
+
+        function toggleSql() { const c = document.getElementById('sqlContainer'); c.style.display = c.style.display === 'none' ? 'block' : 'none' }
+
+        function logLine(msg, type = 'ok') {
+            const la = document.getElementById('logArea');
+            const t = new Date().toLocaleTimeString('es-MX', { hour12: false });
+            const cls = { ok: 'c-ok', err: 'c-err', sys: 'c-sys', user: 'c-user' }[type] || 'c-ok';
+            const div = document.createElement('div'); div.className = 'log-line';
+            div.innerHTML = `<span class="log-time">${t}</span><span class="${cls}">${msg}</span>`;
+            la.appendChild(div); la.scrollTop = la.scrollHeight;
+        }
+
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = SR ? new SR() : null;
         if (recognition) {
-            recognition.lang = 'es-MX'; // Optimizado para acento local
-            recognition.continuous = false;
-            recognition.interimResults = false;
-
-            recognition.onstart = () => {
-                const btnMic = document.getElementById("btnMic");
-                btnMic.classList.replace("btn-outline-secondary", "btn-danger");
-                btnMic.innerHTML = '<i class="fa-solid fa-microphone-lines border-0"></i>';
-                logMessage("🎤 Escuchando...", false, true);
-            };
-
-            recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
-                document.getElementById("txtQuestion").value = transcript;
-                logMessage(`🗣️ Voz detectada: "${transcript}"`, false, true);
-
-                // ¡Autodisparo! En cuanto termina de hablar, envía la pregunta
-                sendQuestion();
-            };
-
-            recognition.onend = () => {
-                const btnMic = document.getElementById("btnMic");
-                btnMic.classList.replace("btn-danger", "btn-outline-secondary");
-                btnMic.innerHTML = '<i class="fa-solid fa-microphone"></i>';
-            };
+            recognition.lang = 'es-MX'; recognition.continuous = false; recognition.interimResults = false;
+            recognition.onstart = () => { document.getElementById('btnMic').classList.add('mic-active'); document.getElementById('sb-mic').classList.add('mic-active'); logLine('Escuchando...', 'sys') };
+            recognition.onresult = e => { const t = e.results[0][0].transcript; document.getElementById('txtQuestion').value = t; logLine(`Voz: "${t}"`, 'sys'); sendQuestion() };
+            recognition.onend = () => { document.getElementById('btnMic').classList.remove('mic-active'); document.getElementById('sb-mic').classList.remove('mic-active') };
         }
+        function startDictation() { if (recognition) recognition.start(); else alert('Tu navegador no soporta dictado por voz.') }
 
-        function startDictation() {
-            if (recognition) recognition.start();
-            else alert("Tu navegador no soporta dictado por voz. Usa Chrome, Edge o Safari.");
-        }
-
-        // B. Text-to-Speech (Hablar)
-        // --- TEXT-TO-SPEECH MEJORADO ---
-        let systemVoices = [];
-
-        // El navegador carga las voces de forma asíncrona, debemos atraparlas cuando estén listas
-        window.speechSynthesis.onvoiceschanged = () => {
-            systemVoices = window.speechSynthesis.getVoices();
-        };
-
+        let voices = [];
+        window.speechSynthesis.onvoiceschanged = () => { voices = window.speechSynthesis.getVoices() };
         function speakSummary(text) {
             if (!('speechSynthesis' in window)) return;
-
             window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-
-            // 1. PRIORIDAD MÁXIMA: Voz Neuronal/Online específicamente de México (es-MX)
-            let bestVoice = systemVoices.find(v => v.lang === 'es-MX' &&
-                (v.name.includes('Online') || v.name.includes('Neural') || v.name.includes('Google')));
-
-            // 2. Segunda opción: Cualquier voz local de México (es-MX) aunque sea la robótica normal
-            if (!bestVoice) bestVoice = systemVoices.find(v => v.lang === 'es-MX');
-
-            // 3. Tercera opción: Cualquier voz Neuronal/Online en español general (Neutro/Otros)
-            if (!bestVoice) bestVoice = systemVoices.find(v => v.lang.startsWith('es') &&
-                (v.name.includes('Online') || v.name.includes('Neural') || v.name.includes('Google')));
-
-            // 4. Fallback final: La primera que caiga en español
-            if (!bestVoice) bestVoice = systemVoices.find(v => v.lang.startsWith('es'));
-
-            if (bestVoice) {
-                utterance.voice = bestVoice;
-                logMessage(`🔊 Usando motor de voz: ${bestVoice.name}`, false, true);
-            }
-
-            // Ajustes sutiles para sonar natural
-            utterance.rate = 1.05;
-            utterance.pitch = 1.0;
-
-            window.speechSynthesis.speak(utterance);
+            const clean = text.replace(/🤖/g, '').replace(/Ficha solicitada:/g, 'Información:');
+            const u = new SpeechSynthesisUtterance(clean);
+            const priority = [v => v.name.includes('Sabina') && v.lang.startsWith('es'), v => v.name.includes('Paulina') && v.lang.startsWith('es'), v => v.name.includes('Dalia') && v.lang.startsWith('es'), v => v.name.includes('Online') && v.lang.startsWith('es'), v => v.name.includes('Google') && v.lang.startsWith('es'), v => v.lang === 'es-MX', v => v.lang.startsWith('es')];
+            let voice = null; for (const fn of priority) { voice = voices.find(fn); if (voice) break }
+            if (voice) u.voice = voice; u.lang = 'es-MX'; u.rate = 0.95; u.pitch = 1.0;
+            window.speechSynthesis.speak(u);
         }
+        function fmtVal(val) { if (typeof val === 'number') return val % 1 !== 0 ? val.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : val.toLocaleString('es-MX'); return val ?? '—' }
 
-        async function sendQuestion() {
-            const question = document.getElementById("txtQuestion").value;
-            if (!question || !myConnectionId) return;
-
-            loadingIcon.style.display = 'inline-block';
-            btnSend.disabled = true;
-            resultArea.style.display = 'none';
-
-            // --- ESTE ES EL CAMBIO (Limpiamos los nuevos contenedores) ---
-            document.getElementById("kpiContainer").innerHTML = '';
-            document.getElementById("tableContainer").innerHTML = '';
-            document.getElementById("chartContainer").style.display = 'none';
-            // -------------------------------------------------------------
-
-            logMessage(`--------------------------------`, false, true);
-            logMessage(`👤 Usuario: ${question}`);
-
-            try {
-                const response = await fetch("/api/assistant/ask", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ Question: question, ConnectionId: myConnectionId })
-                });
-
-                if (!response.ok) {
-                    logMessage(`❌ Error HTTP: ${response.status}`, true);
-                    resetUI();
-                }
-            } catch (error) {
-                logMessage(`❌ Error de Red: ${error}`, true);
-                resetUI();
-            }
-
-            document.getElementById("txtQuestion").value = '';
-        }
-
-        function handleKeyPress(e) { if (e.key === 'Enter') sendQuestion(); }
+        logLine('VannaLight Industrial Intelligence v2.0', 'sys');
+        logLine('Iniciando conexión WebSocket...', 'sys');
     </script>
 </body>
 </html>

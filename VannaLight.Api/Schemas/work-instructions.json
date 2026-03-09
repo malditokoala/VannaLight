@@ -16,12 +16,12 @@
     },
     {
       "key": "EstandarPorHora",
-      "displayLabel": "Est�ndar por hora",
+      "displayLabel": "Estándar por hora",
       "order": 2,
       "tags": [ "estandar", "hora", "pzs", "pcs" ],
       "patternType": "number-unit",
       "expectedUnits": [ "pzs", "pcs", "pzas" ],
-      "anchorLabels": [ "ESTANDAR POR HORA", "EST�NDAR POR HORA", "STANDARD PER HOUR" ]
+      "anchorLabels": [ "ESTANDAR POR HORA", "ESTÁNDAR POR HORA", "STANDARD PER HOUR", "ESTANDAR", "PIEZAS POR HORA" ]
     },
     {
       "key": "ResinaNP",
@@ -30,7 +30,7 @@
       "tags": [ "resina", "material" ],
       "patternType": "part-number",
       "prefix": "9",
-      "anchorLabels": [ "RESINA", "RESIN" ]
+      "anchorLabels": [ "RESINA", "RESIN", "MATERIAL" ]
     },
     {
       "key": "ResinaTurno",
@@ -40,10 +40,9 @@
       "patternType": "number-unit",
       "expectedUnits": [ "lbs" ],
       "anchorLabels": [
-        "RESINA POR",
-        "RESIN PER",
-        "RESINA REQUERIDA",
-        "RESIN REQUIRED"
+        "RESINA POR TURNO",
+        "RESIN PER SHIFT",
+        "RESINA TOTAL"
       ]
     },
     {
@@ -53,7 +52,7 @@
       "tags": [ "resina", "2 horas", "dos horas", "lbs" ],
       "patternType": "number-unit",
       "expectedUnits": [ "lbs" ],
-      "anchorLabels": [ "RESINA POR 2 HORAS", "RESINA POR DOS HORAS", "RESIN PER 2 HOURS" ]
+      "anchorLabels": [ "RESINA POR CADA 2 HORAS", "RESINA POR 2 HORAS", "RESINA POR DOS HORAS", "RESIN PER 2 HOURS" ]
     },
     {
       "key": "EmpaqueTurno",
@@ -69,7 +68,7 @@
         "separador": "Separadores",
         "separadores": "Separadores"
       },
-      "anchorLabels": [ "EMPAQUE POR TURNO", "PACK PER SHIFT" ]
+      "anchorLabels": [ "EMPAQUE POR TURNO", "PACK PER SHIFT", "EMPAQUE" ]
     },
     {
       "key": "Empaque2Horas",
@@ -85,7 +84,17 @@
         "separador": "Separadores",
         "separadores": "Separadores"
       },
-      "anchorLabels": [ "EMPAQUE POR 2 HORAS", "EMPAQUE POR DOS HORAS", "PACK PER 2 HOURS" ]
+      "anchorLabels": [ "EMPAQUE POR CADA 2 HORAS", "EMPAQUE POR 2 HORAS", "EMPAQUE POR DOS HORAS", "PACK PER 2 HOURS" ]
+    },
+    {
+      "key": "EmpaqueNP",
+      "displayLabel": "Empaque (N/P)",
+      "order": 6,
+      "tags": [ "empaque", "np", "numero de parte" ],
+      "patternType": "part-number",
+      "prefix": "7",
+      "isList": true,
+      "anchorLabels": [ "EMPAQUE" ]
     }
   ]
 }

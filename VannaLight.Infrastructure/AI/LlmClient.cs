@@ -1,7 +1,10 @@
 ﻿using LLama;
 using LLama.Common;
-using LLama.Sampling; // <-- Añadimos este using
+using LLama.Sampling;
+using System.Collections.Generic;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.Settings;
 
@@ -28,6 +31,19 @@ public class LlmClient : ILlmClient, IDisposable
 
     public async Task<string> GenerateSqlAsync(string prompt, CancellationToken ct)
     {
+        // Wrapper para tu código existente (Data Mode)
+        return await ExecuteLlamaInferenceAsync(prompt, ct);
+    }
+
+    public async Task<string> CompleteAsync(string prompt, CancellationToken ct)
+    {
+        // Nuevo método generalista (Docs Mode)
+        return await ExecuteLlamaInferenceAsync(prompt, ct);
+    }
+
+    // Método centralizado que contiene el motor de LlamaSharp (DRY)
+    private async Task<string> ExecuteLlamaInferenceAsync(string prompt, CancellationToken ct)
+    {
         var executor = new StatelessExecutor(_weights, _context.Params);
 
         var inferenceParams = new InferenceParams
@@ -50,7 +66,7 @@ public class LlmClient : ILlmClient, IDisposable
             sb.Append(text);
         }
 
-        return sb.ToString();
+        return sb.ToString().Trim();
     }
 
     public void Dispose()

@@ -37,6 +37,7 @@ public interface IRetriever
 public interface ILlmClient
 {
     Task<string> GenerateSqlAsync(string prompt, CancellationToken ct);
+    Task<string> CompleteAsync(string prompt, CancellationToken ct);
 }
 
 // Interfaz para las reglas de seguridad estáticas

@@ -1,29 +1,42 @@
 ﻿using System.Text.Json;
 using System.Text.RegularExpressions;
-using Dapper;
-using Microsoft.Data.Sqlite;
-using VannaLight.Api.Contracts;
+// VannaLight.Api.Contracts;
 using VannaLight.Api.Services.Docs;
+using VannaLight.Core.Abstractions; // Interfaz y DTOs del Core
+using VannaLight.Core.Models;
 
 namespace VannaLight.Api.Services;
 
-public sealed class DocsAnswerService
+// TODO (Deuda Técnica - Fase de Testing): 
+// 1. Extraer lógicas de Dominio (Extracción/Scoring) a servicios de Core.
+// 2. Mover modelos (DocTypeSchema, DocsIntent) a VannaLight.Core.Models.
+// 3. Romper este God Object para facilitar testing unitario.
+public sealed class DocsAnswerService : IDocsAnswerService
 {
     private readonly IConfiguration _config;
     private readonly DocTypeSchema _wiSchema;
     private readonly ILogger<DocsAnswerService> _log;
     private readonly IHostEnvironment _env;
+    private readonly IDocsIntentRouter _router;
+    private readonly IDocChunkRepository _repository; // <-- NUEVA DEPENDENCIA (Clean Architecture)
 
     private readonly string _sqlitePath;
     private readonly int _topK;
     private readonly int _maxCites;
     private readonly bool _debugLogs;
 
-    public DocsAnswerService(IConfiguration config, IHostEnvironment env, ILogger<DocsAnswerService> log)
+    public DocsAnswerService(
+        IConfiguration config,
+        IHostEnvironment env,
+        ILogger<DocsAnswerService> log,
+        IDocsIntentRouter router,
+        IDocChunkRepository repository)
     {
         _config = config;
         _log = log;
         _env = env;
+        _router = router;
+        _repository = repository;
 
         // ---- Settings cache (no recalcular por request) ----
         var sqliteRel = _config["Paths:Sqlite"] ?? "Data/vanna_memory.db";
@@ -66,12 +79,7 @@ public sealed class DocsAnswerService
         if (q.Length == 0)
             return new DocsAnswerResult(false, null, Array.Empty<DocCitation>(), "Pregunta vacía.");
 
-        var intent = DocsIntentParser.Parse(q);
         var partNumbers = ExtractPartNumbers(q);
-
-        await using var conn = new SqliteConnection($"Data Source={_sqlitePath}");
-        await conn.OpenAsync(ct);
-
         var keywords = BuildDynamicKeywords(q, _wiSchema);
 
         if (_debugLogs)
@@ -81,13 +89,10 @@ public sealed class DocsAnswerService
                 string.Join(", ", partNumbers), keywords.Count);
         }
 
-        var chunks = (await conn.QueryAsync<DocChunkRow>(@"
-SELECT d.DocId, d.FileName, c.PageNumber, c.Text
-FROM DocChunks c
-JOIN DocDocuments d ON d.DocId = c.DocId
-WHERE d.Domain = 'work-instructions'
-ORDER BY d.UpdatedUtc DESC
-LIMIT 2000;")).ToList();
+        // =========================================================================
+        // DEUDA SALDADA: LLAMADA LIMPIA AL REPOSITORIO (SIN SQL NI CONEXIONES AQUÍ)
+        // =========================================================================
+        var chunks = (await _repository.GetRecentChunksByDomainAsync(_sqlitePath, "work-instructions", 2000, ct)).ToList();
 
         if (chunks.Count == 0)
             return new DocsAnswerResult(false, null, Array.Empty<DocCitation>(), "No hay WI indexadas (DocChunks vacío).");
@@ -110,7 +115,7 @@ LIMIT 2000;")).ToList();
                 var score = ScoreChunk(c.Text, q, keywords, (int)c.PageNumber);
                 if (partNumbers.Count > 0 && ContainsAny(c.Text, partNumbers))
                     score += 25;
-                return new ScoredChunk(c, score);
+                return new ScoredChunk(c, score); // Usa el DocChunkDto del Core
             })
             .Where(x => x.Score > 0)
             .OrderByDescending(x => x.Score)
@@ -128,7 +133,12 @@ LIMIT 2000;")).ToList();
         if (partNumbers.Count > 0)
         {
             var winner = ResolveWinnerDoc(scored, chunks, partNumbers);
-            var page1Text = await GetPageTextAsync(conn, winner.DocId, pageNumber: 1, ct);
+
+            // =========================================================================
+            // DEUDA SALDADA: LLAMADA LIMPIA AL REPOSITORIO PARA LA PÁGINA 1
+            // =========================================================================
+            var page1Parts = await _repository.GetPageTextPartsAsync(_sqlitePath, winner.DocId, 1, ct);
+            var page1Text = string.Join("\n", page1Parts.Where(p => !string.IsNullOrWhiteSpace(p)));
 
             var fallbackTexts = scored
                 .Where(s => s.Chunk.DocId == winner.DocId && ContainsAny(s.Chunk.Text, partNumbers))
@@ -143,14 +153,6 @@ LIMIT 2000;")).ToList();
             {
                 _log.LogInformation("[Docs] Winner DocId={DocId} File={File} Page1Len={P1Len} ExtractTextLen={Len}",
                     winner.DocId, winner.FileName, page1Text?.Length ?? 0, textsForExtraction?.Length ?? 0);
-
-                _log.LogInformation("[Docs] HasAnchors EmpTurno={EmpT} Emp2H={Emp2} ResTurno={ResT} Res2H={Res2}",
-                    textsForExtraction.Contains("EMPAQUE POR TURNO", StringComparison.OrdinalIgnoreCase),
-                    textsForExtraction.Contains("EMPAQUE POR 2 HORAS", StringComparison.OrdinalIgnoreCase) ||
-                    textsForExtraction.Contains("EMPAQUE POR DOS HORAS", StringComparison.OrdinalIgnoreCase),
-                    textsForExtraction.Contains("RESINA POR TURNO", StringComparison.OrdinalIgnoreCase),
-                    textsForExtraction.Contains("RESINA POR 2 HORAS", StringComparison.OrdinalIgnoreCase) ||
-                    textsForExtraction.Contains("RESINA POR DOS HORAS", StringComparison.OrdinalIgnoreCase));
             }
 
             var facts = ExtractionEngine.ExtractAll(_wiSchema, textsForExtraction);
@@ -174,7 +176,11 @@ LIMIT 2000;")).ToList();
                     "Encontré páginas relevantes, pero no pude extraer el dato de forma confiable. Revisa las citas (página exacta).",
                     citations);
 
-            var answer = WiAnswerBuilder.Build(facts, intent);
+            // <-- RUTEO SEMÁNTICO (LLM) -->
+            var intent = await _router.ParseAsync(q, _wiSchema, ct);
+
+            // <-- RENDERIZADO DUAL -->
+            var answer = WiAnswerBuilder.Build(facts, intent, _wiSchema);
             return new DocsAnswerResult(true, answer, citations);
         }
 
@@ -199,7 +205,11 @@ LIMIT 2000;")).ToList();
                 "Encontré páginas relevantes, pero no pude extraer el dato de forma confiable. Revisa las citas (página exacta).",
                 citationsNoPn);
 
-        var answerNoPn = WiAnswerBuilder.Build(factsNoPn, intent);
+        // <-- RUTEO SEMÁNTICO (LLM) -->
+        var intentNoPn = await _router.ParseAsync(q, _wiSchema, ct);
+
+        // <-- RENDERIZADO DUAL -->
+        var answerNoPn = WiAnswerBuilder.Build(factsNoPn, intentNoPn, _wiSchema);
         return new DocsAnswerResult(true, answerNoPn, citationsNoPn);
     }
 
@@ -272,7 +282,7 @@ LIMIT 2000;")).ToList();
         return false;
     }
 
-    private static WinnerDoc ResolveWinnerDoc(List<ScoredChunk> scoredTopK, List<DocChunkRow> allChunks, List<string> partNumbers)
+    private static WinnerDoc ResolveWinnerDoc(List<ScoredChunk> scoredTopK, List<DocChunkDto> allChunks, List<string> partNumbers)
     {
         var pnOnly = scoredTopK.Where(x => ContainsAny(x.Chunk.Text, partNumbers)).ToList();
 
@@ -299,17 +309,6 @@ LIMIT 2000;")).ToList();
         return new WinnerDoc(winnerDocId, fileName);
     }
 
-    private static async Task<string> GetPageTextAsync(SqliteConnection conn, string docId, int pageNumber, CancellationToken ct)
-    {
-        var parts = (await conn.QueryAsync<string>(@"
-SELECT Text
-FROM DocChunks
-WHERE DocId = @DocId AND PageNumber = @PageNumber
-ORDER BY rowid ASC;", new { DocId = docId, PageNumber = pageNumber })).ToList();
-
-        return string.Join("\n", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
-    }
-
     private static List<DocCitation> BuildWinnerCitations(string docId, string fileName, bool hasPage1, List<ScoredChunk> fallback, int maxCites)
     {
         if (hasPage1)
@@ -325,7 +324,7 @@ ORDER BY rowid ASC;", new { DocId = docId, PageNumber = pageNumber })).ToList();
     // =========================
     // Local models
     // =========================
-    private sealed record DocChunkRow(string DocId, string FileName, long PageNumber, string Text);
-    private sealed record ScoredChunk(DocChunkRow Chunk, int Score);
+    // Nota: DocChunkRow se eliminó en favor de DocChunkDto del Core.
+    private sealed record ScoredChunk(DocChunkDto Chunk, int Score);
     private sealed record WinnerDoc(string DocId, string FileName);
 }

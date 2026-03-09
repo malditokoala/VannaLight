@@ -50,15 +50,37 @@ public static class ExtractionEngine
             .OrderBy(x => x.Dist)
             .ToList();
 
-        if (!field.IsList)
+        // --- MANEJO DE LISTAS (Empaque, Separadores, etc.) ---
+        if (field.IsList)
         {
-            // Scalar: mejor match
-            var best = scoredMatches.First().Match;
-            return FormatMatch(best, field);
+            if (field.PatternType == "number-unit")
+            {
+                var uniqueUnits = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var item in scoredMatches.Where(x => x.Dist < 300))
+                {
+                    var unitRaw = item.Match.Groups["u"].Value.ToLower();
+                    var unitCanon = field.UnitMap?.GetValueOrDefault(unitRaw) ?? unitRaw;
+                    if (!uniqueUnits.ContainsKey(unitCanon))
+                        uniqueUnits[unitCanon] = $"{item.Match.Groups["n"].Value} {unitCanon}";
+                }
+                return string.Join(", ", uniqueUnits.Values);
+            }
+            else
+            {
+                // Para listas de Part Numbers (como los empaques N/P)
+                var uniqueParts = scoredMatches.Where(x => x.Dist < 350)
+                                               .Select(x => x.Match.Value) // Atrapa el string completo (ej. 700009-0030)
+                                               .Distinct()
+                                               .ToList();
+
+                return string.Join(", ", uniqueParts);
+            }
+            // Retorna aquí y corta la ejecución si es una lista.
         }
 
-        // ✅ CAMBIO 3: Para listas, no tomar "el primero por unidad";
-        //              guardar el MEJOR (menor distancia) por unidad.
+        // --- MANEJO DE CAMPOS SIMPLES (Resina, Molde, Estándar, etc.) ---
+
+        // ✅ CAMBIO 3: Para campos normales, guardar el MEJOR (menor distancia) por unidad.
         var bestByUnit = new Dictionary<string, (int Dist, string Value)>(StringComparer.OrdinalIgnoreCase);
 
         // radio razonable (puedes subir/bajar)
@@ -66,13 +88,25 @@ public static class ExtractionEngine
 
         foreach (var item in scoredMatches.Where(x => x.Dist < radius))
         {
-            var unitRaw = item.Match.Groups["u"].Value.ToLowerInvariant();
-            var unitCanon = field.UnitMap?.GetValueOrDefault(unitRaw) ?? unitRaw;
+            string val;
+            string groupingKey;
 
-            var val = $"{item.Match.Groups["n"].Value} {unitCanon}";
+            if (field.PatternType == "number-unit")
+            {
+                var unitRaw = item.Match.Groups["u"].Value.ToLowerInvariant();
+                var unitCanon = field.UnitMap?.GetValueOrDefault(unitRaw) ?? unitRaw;
+                val = $"{item.Match.Groups["n"].Value} {unitCanon}";
+                groupingKey = unitCanon; // Agrupamos por unidad (lbs, pzs)
+            }
+            else
+            {
+                // Para códigos como H-321 o 910035-0001
+                val = item.Match.Value;
+                groupingKey = "default"; // Solo guardamos el mejor de todos
+            }
 
-            if (!bestByUnit.TryGetValue(unitCanon, out var cur) || item.Dist < cur.Dist)
-                bestByUnit[unitCanon] = (item.Dist, val);
+            if (!bestByUnit.TryGetValue(groupingKey, out var cur) || item.Dist < cur.Dist)
+                bestByUnit[groupingKey] = (item.Dist, val);
         }
 
         // Orden por cercanía al anchor (más cercano primero)

@@ -1,12 +1,48 @@
-﻿namespace VannaLight.Api.Services.Docs;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using VannaLight.Api.Contracts;
+using VannaLight.Api.Services; // Asegúrate de incluir el namespace donde vive DocTypeSchema
+
+namespace VannaLight.Api.Services.Docs;
 
 public static class WiAnswerBuilder
 {
-    public static string Build(Dictionary<string, string> facts, DocsIntent intent)
+    // NUEVO: Agregamos DocTypeSchema a la firma del método
+    public static string Build(Dictionary<string, string> facts, DocsIntent intent, DocTypeSchema schema)
     {
         if (facts is null || facts.Count == 0)
             return "Encontré páginas relevantes, pero no pude extraer el dato de forma confiable.";
 
+        // --- 1. MODO NUEVO (Schema-Driven) ---
+        // Se ejecuta solo si el Router LLM detectó campos específicos o solicitó ver todo
+        if ((intent.RequestedFields != null && intent.RequestedFields.Count > 0) || intent.ShowAll)
+        {
+            var newLines = new List<string> { "Ficha solicitada:" };
+
+            var fieldsToRender = intent.ShowAll
+                ? schema.Fields
+                : schema.Fields.Where(f => intent.RequestedFields.Contains(f.Key, StringComparer.OrdinalIgnoreCase)).ToList();
+
+            bool addedAnyNew = false;
+            foreach (var field in fieldsToRender.OrderBy(f => f.Order))
+            {
+                if (facts.TryGetValue(field.Key, out var val) && !string.IsNullOrWhiteSpace(val))
+                {
+                    // Reutilizamos tu método NormalizeEmpaque si el campo es de tipo lista
+                    var finalVal = field.IsList ? NormalizeEmpaque(val) : val;
+                    newLines.Add($"- {field.DisplayLabel}: {finalVal}");
+                    addedAnyNew = true;
+                }
+            }
+
+            // Si logró extraer al menos un dato del modo nuevo, retorna aquí
+            if (addedAnyNew)
+                return string.Join(Environment.NewLine, newLines);
+        }
+
+        // --- 2. MODO LEGACY (Fallback determinístico original) ---
+        // Si llegamos aquí, es porque el LLM falló, devolvió campos vacíos, o no encontró los datos del Schema
         var periodo = intent.Periodo; // "Turno" | "2 Horas" | null
         var lines = new List<string> { "Necesitas:" };
 
@@ -31,6 +67,10 @@ public static class WiAnswerBuilder
 
         return string.Join(Environment.NewLine, lines);
     }
+
+    // =====================================================================
+    // TODOS TUS MÉTODOS PRIVADOS ORIGINALES (INTACTOS PARA EL FALLBACK)
+    // =====================================================================
 
     private static void AddResinaPorPeriodo(List<string> lines, Dictionary<string, string> facts, string? periodo)
     {
@@ -133,6 +173,7 @@ public static class WiAnswerBuilder
         if (TryGet(facts, out var legacy2, "Empaque"))
             lines.Add($"- Empaque: {NormalizeEmpaque(legacy2)}");
     }
+
     private static bool TryGet(Dictionary<string, string> facts, out string value, string key)
         => facts.TryGetValue(key, out value!) && !string.IsNullOrWhiteSpace(value);
 
