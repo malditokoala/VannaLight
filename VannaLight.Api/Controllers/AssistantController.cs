@@ -2,14 +2,15 @@
 using Microsoft.AspNetCore.SignalR;
 using Dapper;
 using Microsoft.Data.SqlClient;
-using VannaLight.Api.Data;
+using Microsoft.Data.Sqlite;
 using VannaLight.Api.Services;
 using VannaLight.Api.Hubs;
 using VannaLight.Api.Contracts;
+using VannaLight.Core.Abstractions;
+using VannaLight.Core.Models;
+using VannaLight.Core.Settings;
 
 namespace VannaLight.Api.Controllers;
-
-//public enum AskMode { Data, Docs, Predict }
 
 public record AskRequest(
     string Question,
@@ -24,6 +25,7 @@ public class AssistantController(
     IJobStore jobStore,
     IAskRequestQueue queue,
     IConfiguration config,
+    RuntimeDbOptions runtimeOptions, // Inyectamos la config de SQLite para la caché
     IHubContext<AssistantHub> hubContext) : ControllerBase
 {
     [HttpPost("ask")]
@@ -39,29 +41,37 @@ public class AssistantController(
         // --- 1) CACHÉ: SOLO PARA DATA (SQL) ---
         if (request.Mode == AskMode.Data)
         {
-            string sqlConn = config.GetConnectionString("OperationalDb") ?? throw new Exception("Falta BD");
-            using var connection = new SqlConnection(sqlConn);
+            // AHORA BUSCAMOS LA CACHÉ EN SQLITE (vanna_runtime.db) EN LUGAR DEL ERP
+            using var sqliteConn = new SqliteConnection($"Data Source={runtimeOptions.DbPath};");
 
-            var cachedJob = await connection.QueryFirstOrDefaultAsync<QuestionJob>(
-                @"SELECT TOP 1 JobId, SqlText 
-                  FROM QuestionJobs 
-                  WHERE Question = @q AND Status = 'Completed' 
-                  ORDER BY CreatedUtc DESC",
-                new { q = cleanQuestion }
+            var cachedJob = await sqliteConn.QueryFirstOrDefaultAsync<CachedQuestionJobRow>(
+                            @"SELECT JobId, SqlText, ResultJson
+                              FROM QuestionJobs
+                              WHERE UserId = @userId
+                                AND Question = @q
+                                AND Status = 'Completed'
+                              ORDER BY UpdatedUtc DESC
+                              LIMIT 1",
+                            new
+                            {
+                                userId,
+                                q = cleanQuestion
+                            }
             );
 
             if (cachedJob != null && !string.IsNullOrEmpty(cachedJob.SqlText))
             {
-                // Cache hit: intentamos ejecutar el SQL cacheado para devolver data
+                // Si hubo hit en caché, ejecutamos el SQL contra el ERP real (SQL Server)
                 IEnumerable<dynamic> queryResults = Array.Empty<dynamic>();
                 try
                 {
-                    queryResults = await connection.QueryAsync(cachedJob.SqlText);
+                    string sqlConn = config.GetConnectionString("OperationalDb") ?? throw new Exception("Falta BD");
+                    using var sqlServerConn = new SqlConnection(sqlConn);
+                    queryResults = await sqlServerConn.QueryAsync(cachedJob.SqlText);
                 }
                 catch
                 {
-                    // Si falla, dejamos fluir al worker (podría ser un cambio de esquema/datos)
-                    // OJO: No salimos aquí si hubo excepción.
+                    // Si falla la ejecución contra el ERP, dejamos que el flujo normal lo procese
                     cachedJob = null;
                 }
 
@@ -78,28 +88,16 @@ public class AssistantController(
                         });
                     }
 
-                    return Accepted(new { Message = "Respuesta servida desde la caché en milisegundos." });
+                    return Accepted(new { Message = "Respuesta servida desde la caché local." });
                 }
             }
         }
 
         // --- 2) FLUJO NORMAL: ENCOLAR TRABAJO ---
-        var jobId = Guid.NewGuid();
 
-        var job = new QuestionJob
-        {
-            JobId = jobId,
-            UserId = userId,
-            Role = "User",
-            Question = cleanQuestion,
-            Status = "Queued",
-            CreatedUtc = DateTime.UtcNow,
-            UpdatedUtc = DateTime.UtcNow
-        };
+        // CORRECCIÓN: Usamos la nueva firma de la interfaz que devuelve el JobId generado
+        var jobId = await jobStore.CreateJobAsync(userId, "User", cleanQuestion);
 
-        await jobStore.CreateJobAsync(job);
-
-        // IMPORTANTe: AskWorkItem ahora debe incluir Mode
         var workItem = new AskWorkItem(jobId, cleanQuestion, userId, connectionId, request.Mode);
         await queue.EnqueueAsync(workItem);
 

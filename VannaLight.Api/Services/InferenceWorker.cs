@@ -7,7 +7,6 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using VannaLight.Api.Contracts;
-using VannaLight.Api.Data;
 using VannaLight.Api.Hubs;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.UseCases;
@@ -138,22 +137,40 @@ public class InferenceWorker : BackgroundService
 
                     if (result.Success)
                     {
-                        // Línea eliminada para evitar errores de compilación con IJobStore
-                        // Ejecutar SQL para obtener data si pasó validación
                         object? queryData = null;
+
                         if (result.PassedDryRun)
                         {
                             using var conn = new Microsoft.Data.SqlClient.SqlConnection(sqlConn);
                             queryData = await Dapper.SqlMapper.QueryAsync(conn, result.Sql);
                         }
 
-                        var jsonPayload = JsonSerializer.Serialize(new { type = "data", sql = result.Sql, data = queryData });
-                        await jobStore.SetResultAsync(workItem.JobId, jsonPayload);
+                        var jsonPayload = JsonSerializer.Serialize(new
+                        {
+                            type = "data",
+                            sql = result.Sql,
+                            data = queryData
+                        });
+
+                        await jobStore.UpdateJobAsync(
+                            workItem.JobId,
+                            "Completed",
+                            result.Sql,
+                            jsonPayload,
+                            null,
+                            stoppingToken
+                        );
 
                         if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
                         {
                             await _hubContext.Clients.Client(workItem.ConnectionId)
-                                .SendAsync("JobCompleted", new { workItem.JobId, Mode = "Data", Sql = result.Sql, Data = queryData }, stoppingToken);
+                                .SendAsync("JobCompleted", new
+                                {
+                                    workItem.JobId,
+                                    Mode = "Data",
+                                    Sql = result.Sql,
+                                    Data = queryData
+                                }, stoppingToken);
                         }
                     }
                     else

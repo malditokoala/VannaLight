@@ -1,0 +1,505 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="vanna_runtime.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="1"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="2110"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="QuestionJobs" custom_title="0" dock_id="3" table="4,12:mainQuestionJobs"/><dock_state state="000000ff00000000fd00000001000000020000043b000002b6fc0100000002fc000000000000043b0000000000fffffffa000000000100000002fb000000160064006f0063006b00420072006f00770073006500310100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500320100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f007700730065003301000000000000043b0000011900ffffff000002590000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="QuestionJobs" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="288"/><column index="2" value="117"/><column index="3" value="39"/><column index="4" value="300"/><column index="5" value="78"/><column index="6" value="226"/><column index="7" value="226"/><column index="8" value="50"/><column index="9" value="300"/><column index="10" value="300"/><column index="11" value="54"/><column index="12" value="135"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">BEGIN TRANSACTION;
+
+-- 1) BORRAR EJEMPLOS VIEJOS
+DELETE FROM TrainingExamples;
+
+-- 2) RESETEAR AUTOINCREMENT
+DELETE FROM sqlite_sequence WHERE name = 'TrainingExamples';
+
+-- 3) INSERTAR EJEMPLOS NUEVOS DEL PILOTO ERP
+INSERT INTO TrainingExamples (Question, Sql, CreatedUtc, LastUsedUtc, UseCount) VALUES
+(
+'¿Qué prensa produjo más hoy?',
+'DECLARE @Today date = CAST(GETDATE() AS date);
+SELECT TOP (1)
+    p.PressId,
+    p.PressName,
+    SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty
+FROM dbo.vw_KpiProduction_v1 p
+WHERE p.OperationDate = @Today
+GROUP BY p.PressId, p.PressName
+ORDER BY TotalProducedQty DESC, p.PressName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'Muéstrame la producción de hoy por prensa.',
+'DECLARE @Today date = CAST(GETDATE() AS date);
+SELECT
+    p.PressId,
+    p.PressName,
+    SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty
+FROM dbo.vw_KpiProduction_v1 p
+WHERE p.OperationDate = @Today
+GROUP BY p.PressId, p.PressName
+ORDER BY TotalProducedQty DESC, p.PressName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué número de parte tuvo mayor producción hoy?',
+'DECLARE @Today date = CAST(GETDATE() AS date);
+SELECT TOP (1)
+    p.PartId,
+    p.PartNumber,
+    p.PartName,
+    SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty
+FROM dbo.vw_KpiProduction_v1 p
+WHERE p.OperationDate = @Today
+GROUP BY p.PartId, p.PartNumber, p.PartName
+ORDER BY TotalProducedQty DESC, p.PartNumber;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué cliente tuvo mayor producción este mes?',
+'DECLARE @CurrentYearMonth char(7) = CONVERT(char(7), GETDATE(), 120);
+SELECT TOP (1)
+    p.CustomerId,
+    p.CustomerName,
+    SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty
+FROM dbo.vw_KpiProduction_v1 p
+WHERE p.YearMonth = @CurrentYearMonth
+GROUP BY p.CustomerId, p.CustomerName
+ORDER BY TotalProducedQty DESC, p.CustomerName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué prensa tiene mejor eficiencia en la semana actual?',
+'SELECT TOP (1)
+    p.PressId,
+    p.PressName,
+    SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty,
+    SUM(ISNULL(p.TargetQty, 0)) AS TotalTargetQty,
+    CAST(
+        100.0 * SUM(ISNULL(p.ProducedQty, 0))
+        / NULLIF(SUM(ISNULL(p.TargetQty, 0)), 0)
+        AS DECIMAL(18,2)
+    ) AS EfficiencyPct
+FROM dbo.vw_KpiProduction_v1 p
+WHERE p.YearNumber = YEAR(GETDATE())
+  AND p.WeekOfYear = DATEPART(ISO_WEEK, GETDATE())
+GROUP BY p.PressId, p.PressName
+HAVING SUM(ISNULL(p.TargetQty, 0)) &gt; 0
+ORDER BY EfficiencyPct DESC, p.PressName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'Muéstrame el ranking de eficiencia por prensa este mes.',
+'DECLARE @CurrentYearMonth char(7) = CONVERT(char(7), GETDATE(), 120);
+SELECT
+    p.PressId,
+    p.PressName,
+    SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty,
+    SUM(ISNULL(p.TargetQty, 0)) AS TotalTargetQty,
+    CAST(
+        100.0 * SUM(ISNULL(p.ProducedQty, 0))
+        / NULLIF(SUM(ISNULL(p.TargetQty, 0)), 0)
+        AS DECIMAL(18,2)
+    ) AS EfficiencyPct
+FROM dbo.vw_KpiProduction_v1 p
+WHERE p.YearMonth = @CurrentYearMonth
+GROUP BY p.PressId, p.PressName
+HAVING SUM(ISNULL(p.TargetQty, 0)) &gt; 0
+ORDER BY EfficiencyPct DESC, p.PressName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué prensas quedaron por debajo de su meta hoy?',
+'DECLARE @Today date = CAST(GETDATE() AS date);
+SELECT
+    p.PressId,
+    p.PressName,
+    SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty,
+    SUM(ISNULL(p.TargetQty, 0)) AS TotalTargetQty
+FROM dbo.vw_KpiProduction_v1 p
+WHERE p.OperationDate = @Today
+GROUP BY p.PressId, p.PressName
+HAVING SUM(ISNULL(p.ProducedQty, 0)) &lt; SUM(ISNULL(p.TargetQty, 0))
+ORDER BY TotalProducedQty ASC, p.PressName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Cuál fue el valor económico producido por cliente en el mes actual?',
+'DECLARE @CurrentYearMonth char(7) = CONVERT(char(7), GETDATE(), 120);
+SELECT
+    p.CustomerId,
+    p.CustomerName,
+    SUM(ISNULL(p.ProductionValue, 0)) AS TotalProductionValue
+FROM dbo.vw_KpiProduction_v1 p
+WHERE p.YearMonth = @CurrentYearMonth
+GROUP BY p.CustomerId, p.CustomerName
+ORDER BY TotalProductionValue DESC, p.CustomerName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué prensa generó más scrap hoy?',
+'DECLARE @Today date = CAST(GETDATE() AS date);
+SELECT TOP (1)
+    s.PressId,
+    s.PressName,
+    SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty,
+    COUNT(*) AS ScrapEvents
+FROM dbo.vw_KpiScrap_v1 s
+WHERE s.OperationDate = @Today
+GROUP BY s.PressId, s.PressName
+ORDER BY TotalScrapQty DESC, ScrapEvents DESC, s.PressName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'Muéstrame el scrap de hoy por número de parte.',
+'DECLARE @Today date = CAST(GETDATE() AS date);
+SELECT
+    s.PartId,
+    s.PartNumber,
+    s.PartName,
+    SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty,
+    SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost
+FROM dbo.vw_KpiScrap_v1 s
+WHERE s.OperationDate = @Today
+GROUP BY s.PartId, s.PartNumber, s.PartName
+ORDER BY TotalScrapQty DESC, s.PartNumber;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué motivo de scrap fue el más frecuente esta semana?',
+'SELECT TOP (1)
+    s.ScrapReasonId,
+    s.ScrapReason,
+    COUNT(*) AS ScrapEvents,
+    SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty
+FROM dbo.vw_KpiScrap_v1 s
+WHERE s.YearNumber = YEAR(GETDATE())
+  AND s.WeekOfYear = DATEPART(ISO_WEEK, GETDATE())
+GROUP BY s.ScrapReasonId, s.ScrapReason
+ORDER BY ScrapEvents DESC, TotalScrapQty DESC, s.ScrapReason;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué cliente tuvo mayor costo de scrap este mes?',
+'DECLARE @CurrentYearMonth char(7) = CONVERT(char(7), GETDATE(), 120);
+SELECT TOP (1)
+    s.CustomerId,
+    s.CustomerName,
+    SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost
+FROM dbo.vw_KpiScrap_v1 s
+WHERE s.YearMonth = @CurrentYearMonth
+GROUP BY s.CustomerId, s.CustomerName
+ORDER BY TotalScrapCost DESC, s.CustomerName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'Muéstrame el top 10 de motivos de scrap por costo.',
+'SELECT TOP (10)
+    s.ScrapReasonId,
+    s.ScrapReason,
+    SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost,
+    SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty
+FROM dbo.vw_KpiScrap_v1 s
+GROUP BY s.ScrapReasonId, s.ScrapReason
+ORDER BY TotalScrapCost DESC, TotalScrapQty DESC, s.ScrapReason;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Cómo va el scrap por turno hoy?',
+'DECLARE @Today date = CAST(GETDATE() AS date);
+SELECT
+    s.Shift,
+    s.ShiftId,
+    SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty,
+    SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost
+FROM dbo.vw_KpiScrap_v1 s
+WHERE s.OperationDate = @Today
+GROUP BY s.Shift, s.ShiftId
+ORDER BY s.Shift;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué prensa acumuló más tiempo caído hoy?',
+'DECLARE @Today date = CAST(GETDATE() AS date);
+SELECT TOP (1)
+    d.PressId,
+    d.PressName,
+    SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
+    SUM(ISNULL(d.DownTimeHours, 0)) AS TotalDownTimeHours
+FROM dbo.vw_KpiDownTime_v1 d
+WHERE d.OperationDate = @Today
+  AND d.IsOpen = 0
+GROUP BY d.PressId, d.PressName
+ORDER BY TotalDownTimeMinutes DESC, d.PressName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'Muéstrame el tiempo caído de hoy por prensa.',
+'DECLARE @Today date = CAST(GETDATE() AS date);
+SELECT
+    d.PressId,
+    d.PressName,
+    SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
+    SUM(ISNULL(d.DownTimeHours, 0)) AS TotalDownTimeHours
+FROM dbo.vw_KpiDownTime_v1 d
+WHERE d.OperationDate = @Today
+  AND d.IsOpen = 0
+GROUP BY d.PressId, d.PressName
+ORDER BY TotalDownTimeMinutes DESC, d.PressName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué falla generó más tiempo caído esta semana?',
+'SELECT TOP (1)
+    d.FailureId,
+    d.FailureName,
+    SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
+    SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
+FROM dbo.vw_KpiDownTime_v1 d
+WHERE d.YearNumber = YEAR(GETDATE())
+  AND d.WeekOfYear = DATEPART(ISO_WEEK, GETDATE())
+  AND d.IsOpen = 0
+GROUP BY d.FailureId, d.FailureName
+ORDER BY TotalDownTimeMinutes DESC, TotalDownTimeCost DESC, d.FailureName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué departamento concentra más downtime este mes?',
+'DECLARE @CurrentYearMonth char(7) = CONVERT(char(7), GETDATE(), 120);
+SELECT TOP (1)
+    d.DepartmentId,
+    d.DepartmentName,
+    SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
+    SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
+FROM dbo.vw_KpiDownTime_v1 d
+WHERE d.YearMonth = @CurrentYearMonth
+  AND d.IsOpen = 0
+GROUP BY d.DepartmentId, d.DepartmentName
+ORDER BY TotalDownTimeMinutes DESC, TotalDownTimeCost DESC, d.DepartmentName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'Muéstrame los eventos abiertos de downtime.',
+'SELECT
+    d.DownTimeId,
+    d.PressId,
+    d.PressName,
+    d.PartId,
+    d.PartNumber,
+    d.PartName,
+    d.FailureId,
+    d.FailureName,
+    d.DepartmentId,
+    d.DepartmentName,
+    d.StartDownTime
+FROM dbo.vw_KpiDownTime_v1 d
+WHERE d.IsOpen = 1
+ORDER BY d.StartDownTime DESC, d.DownTimeId DESC;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Cuál fue el top 10 de fallas por costo de downtime?',
+'SELECT TOP (10)
+    d.FailureId,
+    d.FailureName,
+    SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost,
+    SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes
+FROM dbo.vw_KpiDownTime_v1 d
+WHERE d.IsOpen = 0
+GROUP BY d.FailureId, d.FailureName
+ORDER BY TotalDownTimeCost DESC, TotalDownTimeMinutes DESC, d.FailureName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué prensas con producción hoy acumulan más tiempo caído hoy?',
+'DECLARE @Today date = CAST(GETDATE() AS date);
+
+WITH RunningPressesToday AS
+(
+    SELECT DISTINCT
+        p.PressId,
+        p.PressName,
+        p.OperationDate
+    FROM dbo.vw_KpiProduction_v1 p
+    WHERE p.OperationDate = @Today
+),
+DownTimeToday AS
+(
+    SELECT
+        d.PressId,
+        d.OperationDate,
+        SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
+        COUNT(*) AS DownTimeEvents
+    FROM dbo.vw_KpiDownTime_v1 d
+    WHERE d.OperationDate = @Today
+      AND d.IsOpen = 0
+    GROUP BY d.PressId, d.OperationDate
+)
+SELECT TOP (10)
+    rp.PressId,
+    rp.PressName,
+    ISNULL(dt.TotalDownTimeMinutes, 0) AS TotalDownTimeMinutes,
+    ISNULL(dt.DownTimeEvents, 0) AS DownTimeEvents
+FROM RunningPressesToday rp
+LEFT JOIN DownTimeToday dt
+    ON dt.PressId = rp.PressId
+   AND dt.OperationDate = rp.OperationDate
+ORDER BY TotalDownTimeMinutes DESC, rp.PressName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué prensas produjeron más hoy y también tuvieron más scrap hoy?',
+'DECLARE @Today date = CAST(GETDATE() AS date);
+
+WITH ProductionToday AS
+(
+    SELECT
+        p.PressId,
+        MAX(p.PressName) AS PressName,
+        SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty
+    FROM dbo.vw_KpiProduction_v1 p
+    WHERE p.OperationDate = @Today
+    GROUP BY p.PressId
+),
+ScrapToday AS
+(
+    SELECT
+        s.PressId,
+        SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty,
+        SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost
+    FROM dbo.vw_KpiScrap_v1 s
+    WHERE s.OperationDate = @Today
+    GROUP BY s.PressId
+)
+SELECT TOP (10)
+    p.PressId,
+    p.PressName,
+    p.TotalProducedQty,
+    ISNULL(s.TotalScrapQty, 0) AS TotalScrapQty,
+    ISNULL(s.TotalScrapCost, 0) AS TotalScrapCost
+FROM ProductionToday p
+LEFT JOIN ScrapToday s
+    ON s.PressId = p.PressId
+ORDER BY p.TotalProducedQty DESC, TotalScrapQty DESC, p.PressName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Dónde estamos perdiendo más dinero este mes?',
+'DECLARE @CurrentYearMonth char(7) = CONVERT(char(7), GETDATE(), 120);
+
+WITH ScrapByPress AS
+(
+    SELECT
+        s.PressId,
+        MAX(s.PressName) AS PressName,
+        SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost
+    FROM dbo.vw_KpiScrap_v1 s
+    WHERE s.YearMonth = @CurrentYearMonth
+    GROUP BY s.PressId
+),
+DownTimeByPress AS
+(
+    SELECT
+        d.PressId,
+        MAX(d.PressName) AS PressName,
+        SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
+    FROM dbo.vw_KpiDownTime_v1 d
+    WHERE d.YearMonth = @CurrentYearMonth
+      AND d.IsOpen = 0
+    GROUP BY d.PressId
+)
+SELECT TOP (10)
+    COALESCE(s.PressId, d.PressId) AS PressId,
+    COALESCE(s.PressName, d.PressName) AS PressName,
+    ISNULL(s.TotalScrapCost, 0) AS TotalScrapCost,
+    ISNULL(d.TotalDownTimeCost, 0) AS TotalDownTimeCost,
+    ISNULL(s.TotalScrapCost, 0) + ISNULL(d.TotalDownTimeCost, 0) AS TotalLossCost
+FROM ScrapByPress s
+FULL OUTER JOIN DownTimeByPress d
+    ON d.PressId = s.PressId
+ORDER BY TotalLossCost DESC, PressName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué cliente tuvo mayor producción pero también mayor costo de scrap este mes?',
+'DECLARE @CurrentYearMonth char(7) = CONVERT(char(7), GETDATE(), 120);
+
+WITH ProductionByCustomer AS
+(
+    SELECT
+        p.CustomerId,
+        MAX(p.CustomerName) AS CustomerName,
+        SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty
+    FROM dbo.vw_KpiProduction_v1 p
+    WHERE p.YearMonth = @CurrentYearMonth
+    GROUP BY p.CustomerId
+),
+ScrapByCustomer AS
+(
+    SELECT
+        s.CustomerId,
+        SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost
+    FROM dbo.vw_KpiScrap_v1 s
+    WHERE s.YearMonth = @CurrentYearMonth
+    GROUP BY s.CustomerId
+)
+SELECT TOP (10)
+    p.CustomerId,
+    p.CustomerName,
+    p.TotalProducedQty,
+    ISNULL(s.TotalScrapCost, 0) AS TotalScrapCost
+FROM ProductionByCustomer p
+LEFT JOIN ScrapByCustomer s
+    ON s.CustomerId = p.CustomerId
+ORDER BY p.TotalProducedQty DESC, TotalScrapCost DESC, p.CustomerName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué molde tuvo más downtime y más scrap en el mes actual?',
+'DECLARE @CurrentYearMonth char(7) = CONVERT(char(7), GETDATE(), 120);
+
+WITH ScrapByMold AS
+(
+    SELECT
+        s.MoldId,
+        MAX(s.MoldName) AS MoldName,
+        SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty,
+        SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost
+    FROM dbo.vw_KpiScrap_v1 s
+    WHERE s.YearMonth = @CurrentYearMonth
+    GROUP BY s.MoldId
+),
+DownTimeByMold AS
+(
+    SELECT
+        d.MoldId,
+        MAX(d.MoldName) AS MoldName,
+        SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
+        SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
+    FROM dbo.vw_KpiDownTime_v1 d
+    WHERE d.YearMonth = @CurrentYearMonth
+      AND d.IsOpen = 0
+    GROUP BY d.MoldId
+)
+SELECT TOP (10)
+    COALESCE(s.MoldId, d.MoldId) AS MoldId,
+    COALESCE(s.MoldName, d.MoldName) AS MoldName,
+    ISNULL(s.TotalScrapQty, 0) AS TotalScrapQty,
+    ISNULL(s.TotalScrapCost, 0) AS TotalScrapCost,
+    ISNULL(d.TotalDownTimeMinutes, 0) AS TotalDownTimeMinutes,
+    ISNULL(d.TotalDownTimeCost, 0) AS TotalDownTimeCost
+FROM ScrapByMold s
+FULL OUTER JOIN DownTimeByMold d
+    ON d.MoldId = s.MoldId
+ORDER BY TotalDownTimeMinutes DESC, TotalScrapQty DESC, MoldName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+),
+(
+'¿Qué cliente tuvo mayor costo de downtime este mes?',
+'DECLARE @CurrentYearMonth char(7) = CONVERT(char(7), GETDATE(), 120);
+SELECT TOP (1)
+    d.CustomerId,
+    d.CustomerName,
+    SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
+FROM dbo.vw_KpiDownTime_v1 d
+WHERE d.YearMonth = @CurrentYearMonth
+  AND d.IsOpen = 0
+GROUP BY d.CustomerId, d.CustomerName
+ORDER BY TotalDownTimeCost DESC, d.CustomerName;',
+CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+);
+
+COMMIT;</sql><current_tab id="0"/></tab_sql></sqlb_project>
