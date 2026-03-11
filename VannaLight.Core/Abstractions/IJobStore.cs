@@ -20,4 +20,6 @@ public interface IJobStore
 
     // Método de Lectura (Queries) necesario para el Controlador
     Task<QuestionJob?> GetJobAsync(Guid jobId, CancellationToken ct = default);
+
+    Task<IEnumerable<QuestionJob>> GetRecentJobsAsync(int limit = 20, CancellationToken ct = default);
 }

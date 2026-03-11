@@ -2,7 +2,7 @@
 <html lang="es" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <title>LIA - Panel de Entrenamiento</title>
+    <title>VannaLight - Panel de Administración</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -11,15 +11,20 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
-        .history-item {
+        .history-item, .profile-item {
             cursor: pointer;
             transition: 0.2s;
             border-left: 4px solid transparent;
         }
 
-            .history-item:hover {
+            .history-item:hover, .profile-item:hover {
                 background-color: #2a2a2a;
                 border-left-color: #00ffcc;
+            }
+
+            .profile-item.active-profile {
+                border-left-color: #198754; /* Success green */
+                background-color: #1a1e21;
             }
 
         .editor-textarea {
@@ -36,113 +41,202 @@
                 border-color: #00ffcc;
                 box-shadow: none;
             }
+
+        .nav-tabs .nav-link {
+            color: #aaa;
+        }
+
+            .nav-tabs .nav-link.active {
+                color: #00ffcc;
+                background-color: #121212;
+                border-bottom-color: #121212;
+            }
     </style>
 </head>
 <body>
     <nav class="navbar navbar-dark bg-dark border-bottom border-secondary mb-4 shadow-sm">
         <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1"><i class="fa-solid fa-graduation-cap text-warning"></i> Centro de Entrenamiento (RAG)</span>
+            <span class="navbar-brand mb-0 h1"><i class="fa-solid fa-server text-info"></i> Panel de Administración VannaLight</span>
             <a href="/index.html" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-arrow-left"></i> Volver al Chat</a>
         </div>
     </nav>
 
     <div class="container-fluid px-4">
-        <div class="row">
-            <div class="col-md-5">
-                <h5 class="mb-3"><i class="fa-solid fa-clock-rotate-left"></i> Historial Reciente</h5>
-                <div class="list-group shadow-sm" id="historyList" style="max-height: 75vh; overflow-y: auto;">
-                    <div class="text-center text-muted mt-5"><span class="spinner-border spinner-border-sm"></span> Cargando historial...</div>
+        <!-- TABS NAV -->
+        <ul class="nav nav-tabs mb-4 border-secondary" id="adminTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="rag-tab" data-bs-toggle="tab" data-bs-target="#rag-pane" type="button" role="tab"><i class="fa-solid fa-graduation-cap"></i> Entrenamiento RAG (SQL)</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="llm-tab" data-bs-toggle="tab" data-bs-target="#llm-pane" type="button" role="tab"><i class="fa-solid fa-microchip"></i> Configuración Hardware (LLM)</button>
+            </li>
+        </ul>
+
+        <!-- TABS CONTENT -->
+        <div class="tab-content" id="adminTabsContent">
+
+            <!-- ========================================== -->
+            <!-- TAB 1: ENTRENAMIENTO RAG (Tu código original) -->
+            <!-- ========================================== -->
+            <div class="tab-pane fade show active" id="rag-pane" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-5">
+                        <h5 class="mb-3"><i class="fa-solid fa-clock-rotate-left"></i> Historial Reciente</h5>
+                        <div class="list-group shadow-sm" id="historyList" style="max-height: 70vh; overflow-y: auto;">
+                            <div class="text-center text-muted mt-5"><span class="spinner-border spinner-border-sm"></span> Cargando historial...</div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-7">
+                        <div class="card shadow-lg border-secondary">
+                            <div class="card-header bg-dark border-secondary">
+                                <h5 class="mb-0"><i class="fa-solid fa-pen-to-square text-info"></i> Editor de T-SQL</h5>
+                            </div>
+                            <div class="card-body bg-dark">
+                                <div class="mb-3">
+                                    <label class="form-label text-muted">Pregunta Original del Usuario</label>
+                                    <input type="text" id="txtQuestion" class="form-control bg-dark text-light border-secondary" placeholder="Selecciona una consulta del historial..." readonly>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label text-muted d-flex justify-content-between">
+                                        <span>Código SQL (Modifica lo que esté mal)</span>
+                                        <span class="badge bg-secondary" id="statusBadge"></span>
+                                    </label>
+                                    <textarea id="txtSql" class="form-control editor-textarea" rows="12" placeholder="El SQL generado aparecerá aquí..."></textarea>
+                                </div>
+
+                                <div id="errorContainer" class="alert alert-danger" style="display:none; font-size: 0.85rem;"></div>
+
+                                <div class="text-end mt-4">
+                                    <button class="btn btn-warning" id="btnSave" onclick="saveCorrection()" disabled>
+                                        <i class="fa-solid fa-brain"></i> Guardar en Memoria RAG
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="col-md-7">
-                <div class="card shadow-lg border-secondary">
-                    <div class="card-header bg-dark border-secondary">
-                        <h5 class="mb-0"><i class="fa-solid fa-pen-to-square text-info"></i> Editor de T-SQL</h5>
+            <!-- ========================================== -->
+            <!-- TAB 2: CONFIGURACIÓN LLM (NUEVO)           -->
+            <!-- ========================================== -->
+            <div class="tab-pane fade" id="llm-pane" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-4">
+                        <h5 class="mb-3"><i class="fa-solid fa-list"></i> Perfiles Disponibles</h5>
+                        <div class="list-group shadow-sm" id="profileList">
+                            <div class="text-center text-muted mt-5"><span class="spinner-border spinner-border-sm"></span> Cargando perfiles...</div>
+                        </div>
                     </div>
-                    <div class="card-body bg-dark">
-                        <div class="mb-3">
-                            <label class="form-label text-muted">Pregunta Original del Usuario</label>
-                            <input type="text" id="txtQuestion" class="form-control bg-dark text-light border-secondary" placeholder="Selecciona una consulta del historial..." readonly>
-                        </div>
 
-                        <div class="mb-3">
-                            <label class="form-label text-muted d-flex justify-content-between">
-                                <span>Código SQL (Modifica lo que esté mal)</span>
-                                <span class="badge bg-secondary" id="statusBadge"></span>
-                            </label>
-                            <textarea id="txtSql" class="form-control editor-textarea" rows="12" placeholder="El SQL generado aparecerá aquí..."></textarea>
-                        </div>
+                    <div class="col-md-8">
+                        <div class="card shadow-lg border-secondary">
+                            <div class="card-header bg-dark border-secondary d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><i class="fa-solid fa-sliders text-warning"></i> Ajustes del Perfil Seleccionado</h5>
+                                <button class="btn btn-outline-success btn-sm" id="btnActivateProfile" onclick="activateSelectedProfile()" disabled>
+                                    <i class="fa-solid fa-power-off"></i> Activar este Perfil
+                                </button>
+                            </div>
+                            <div class="card-body bg-dark">
+                                <input type="hidden" id="txtProfileId">
 
-                        <div id="errorContainer" class="alert alert-danger" style="display:none; font-size: 0.85rem;"></div>
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-12">
+                                        <label class="form-label text-muted">Nombre del Perfil</label>
+                                        <input type="text" id="txtProfileName" class="form-control bg-dark text-light border-secondary" readonly>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label text-info" title="Capas enviadas a la VRAM">GPU Layers (VRAM)</label>
+                                        <input type="number" id="txtGpuLayers" class="form-control bg-dark text-light border-secondary">
+                                        <small class="text-muted">Ej: 35 (RTX 4060) | 15 (Quadro T2000)</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label text-info">Context Size (Tokens)</label>
+                                        <input type="number" id="txtContextSize" class="form-control bg-dark text-light border-secondary">
+                                        <small class="text-muted">Ej: 4096 (Normal) | 2048 (Low VRAM)</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label text-muted">Batch Size</label>
+                                        <input type="number" id="txtBatchSize" class="form-control bg-dark text-light border-secondary">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label text-muted">U-Batch Size</label>
+                                        <input type="number" id="txtUBatchSize" class="form-control bg-dark text-light border-secondary">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label text-muted">CPU Threads</label>
+                                        <input type="number" id="txtThreads" class="form-control bg-dark text-light border-secondary" placeholder="Vacío = Auto">
+                                    </div>
+                                </div>
 
-                        <div class="text-end mt-4">
-                            <button class="btn btn-warning" id="btnSave" onclick="saveCorrection()" disabled>
-                                <i class="fa-solid fa-brain"></i> Guardar en Memoria RAG
-                            </button>
+                                <div id="llmAlertContainer" class="alert" style="display:none; font-size: 0.9rem;"></div>
+
+                                <div class="text-end">
+                                    <button class="btn btn-info" id="btnSaveProfile" onclick="saveProfileSettings()" disabled>
+                                        <i class="fa-solid fa-save"></i> Guardar Ajustes
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // 1. Variable global para guardar las consultas
+        // ==========================================
+        // LÓGICA TAB 1: ENTRENAMIENTO RAG
+        // ==========================================
         let globalJobs = [];
 
         async function loadHistory() {
             try {
                 const response = await fetch('/api/admin/history');
                 const jobs = await response.json();
-
-                globalJobs = jobs; // Guardamos todo en memoria
+                globalJobs = jobs;
 
                 const list = document.getElementById('historyList');
                 list.innerHTML = '';
 
                 jobs.forEach((job, index) => {
-                    // Normalizamos nombres (por si el backend manda minúsculas o mayúsculas)
                     const status = job.status || job.Status;
                     const question = job.question || job.Question;
                     const createdUtc = job.createdUtc || job.CreatedUtc;
-
                     const isSuccess = status === 'Completed';
                     const icon = isSuccess ? '<i class="fa-solid fa-check text-success"></i>' : '<i class="fa-solid fa-xmark text-danger"></i>';
 
-                    // 2. MAGIA: Solo pasamos el 'index' numérico. ¡Cero problemas con comillas!
                     list.innerHTML += `
-                        <div class="list-group-item list-group-item-action bg-dark text-light border-secondary history-item p-3"
-                             onclick="loadEditor(${index})">
-                            <div class="d-flex w-100 justify-content-between mb-1">
-                                <strong class="text-truncate" style="max-width: 80%;">${question}</strong>
-                                <small class="text-muted">${new Date(createdUtc).toLocaleTimeString()}</small>
+                            <div class="list-group-item list-group-item-action bg-dark text-light border-secondary history-item p-3"
+                                 onclick="loadEditor(${index})">
+                                <div class="d-flex w-100 justify-content-between mb-1">
+                                    <strong class="text-truncate" style="max-width: 80%;">${question}</strong>
+                                    <small class="text-muted">${new Date(createdUtc).toLocaleTimeString()}</small>
+                                </div>
+                                <small class="text-muted">${icon} ${status}</small>
                             </div>
-                            <small class="text-muted">${icon} ${status}</small>
-                        </div>
-                    `;
+                        `;
                 });
             } catch (err) {
                 console.error("Error cargando historial", err);
             }
         }
 
-        // 3. Cargamos los datos extrayéndolos del arreglo global
         function loadEditor(index) {
             const job = globalJobs[index];
+            document.getElementById('txtQuestion').value = job.question || job.Question;
+            document.getElementById('txtSql').value = job.sqlText || job.SqlText || '';
 
-            const question = job.question || job.Question;
-            const sql = job.sqlText || job.SqlText || '';
             const status = job.status || job.Status;
-            const error = job.errorText || job.ErrorText;
-
-            document.getElementById('txtQuestion').value = question;
-            document.getElementById('txtSql').value = sql;
-
             const badge = document.getElementById('statusBadge');
             badge.innerText = status;
             badge.className = status === 'Completed' ? 'badge bg-success' : 'badge bg-danger';
 
+            const error = job.errorText || job.ErrorText;
             const errContainer = document.getElementById('errorContainer');
             if (error && error !== 'null') {
                 errContainer.innerText = `Error reportado: ${error}`;
@@ -150,18 +244,13 @@
             } else {
                 errContainer.style.display = 'none';
             }
-
             document.getElementById('btnSave').disabled = false;
         }
 
         async function saveCorrection() {
             const question = document.getElementById('txtQuestion').value;
             const sql = document.getElementById('txtSql').value;
-
-            if (!question || !sql) {
-                alert("Debes tener una pregunta y un código SQL para entrenar el modelo.");
-                return;
-            }
+            if (!question || !sql) return alert("Falta pregunta o SQL.");
 
             const btn = document.getElementById('btnSave');
             const originalText = btn.innerHTML;
@@ -174,22 +263,150 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ Question: question, SqlText: sql })
                 });
+                if (response.ok) alert("¡Guardado en memoria RAG!");
+                else alert("Error al guardar.");
+            } catch (err) { alert("Error: " + err); }
+            finally { btn.innerHTML = originalText; btn.disabled = false; }
+        }
+
+        // ==========================================
+        // LÓGICA TAB 2: CONFIGURACIÓN LLM
+        // ==========================================
+        let globalProfiles = [];
+        let selectedProfileId = null;
+
+        async function loadProfiles() {
+            try {
+                const response = await fetch('/api/admin/llm-profiles');
+                globalProfiles = await response.json();
+
+                const list = document.getElementById('profileList');
+                list.innerHTML = '';
+
+                globalProfiles.forEach(p => {
+                    // Normalizar nombres de propiedades
+                    const id = p.id || p.Id;
+                    const name = p.name || p.Name;
+                    const isActive = p.isActive || p.IsActive;
+
+                    const activeClass = isActive ? 'active-profile' : '';
+                    const activeBadge = isActive ? '<span class="badge bg-success">ACTIVO</span>' : '';
+
+                    list.innerHTML += `
+                            <div class="list-group-item list-group-item-action bg-dark text-light border-secondary profile-item p-3 ${activeClass}"
+                                 onclick="selectProfile(${id})">
+                                <div class="d-flex w-100 justify-content-between align-items-center">
+                                    <strong>${name}</strong>
+                                    ${activeBadge}
+                                </div>
+                                <small class="text-muted d-block mt-1">
+                                    GPU Layers: ${p.gpuLayerCount || p.GpuLayerCount || 0} | Context: ${p.contextSize || p.ContextSize || 0}
+                                </small>
+                            </div>
+                        `;
+                });
+            } catch (err) {
+                console.error("Error cargando perfiles LLM", err);
+            }
+        }
+
+        function selectProfile(id) {
+            const profile = globalProfiles.find(p => (p.id || p.Id) === id);
+            if (!profile) return;
+
+            selectedProfileId = id;
+            const isActive = profile.isActive || profile.IsActive;
+
+            document.getElementById('txtProfileId').value = id;
+            document.getElementById('txtProfileName').value = profile.name || profile.Name;
+            document.getElementById('txtGpuLayers').value = profile.gpuLayerCount || profile.GpuLayerCount || '';
+            document.getElementById('txtContextSize').value = profile.contextSize || profile.ContextSize || '';
+            document.getElementById('txtBatchSize').value = profile.batchSize || profile.BatchSize || '';
+            document.getElementById('txtUBatchSize').value = profile.uBatchSize || profile.UBatchSize || '';
+            document.getElementById('txtThreads').value = profile.threads || profile.Threads || '';
+
+            document.getElementById('btnSaveProfile').disabled = false;
+            document.getElementById('btnActivateProfile').disabled = isActive; // Disable if already active
+
+            hideAlert();
+        }
+
+        async function saveProfileSettings() {
+            if (!selectedProfileId) return;
+
+            const reqBody = {
+                GpuLayerCount: parseInt(document.getElementById('txtGpuLayers').value) || null,
+                ContextSize: parseInt(document.getElementById('txtContextSize').value) || null,
+                BatchSize: parseInt(document.getElementById('txtBatchSize').value) || null,
+                UBatchSize: parseInt(document.getElementById('txtUBatchSize').value) || null,
+                Threads: parseInt(document.getElementById('txtThreads').value) || null
+            };
+
+            const btn = document.getElementById('btnSaveProfile');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`/api/admin/llm-profiles/${selectedProfileId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(reqBody)
+                });
 
                 if (response.ok) {
-                    alert("¡Excelente! Este par Pregunta-SQL ha sido guardado en la memoria vectorial. LIA lo usará como ejemplo la próxima vez.");
+                    showAlert("Ajustes guardados correctamente.", "success");
+                    await loadProfiles(); // Refresh list to show new summary
                 } else {
-                    alert("Hubo un error al guardar en SQLite.");
+                    showAlert("Error al guardar ajustes.", "danger");
+                }
+            } catch (err) { showAlert("Error de red.", "danger"); }
+            finally { btn.innerHTML = originalText; btn.disabled = false; }
+        }
+
+        async function activateSelectedProfile() {
+            if (!selectedProfileId) return;
+
+            const btn = document.getElementById('btnActivateProfile');
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Activando...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`/api/admin/llm-profiles/${selectedProfileId}/activate`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showAlert(`${data.Message} <strong>${data.Warning}</strong>`, "warning");
+                    await loadProfiles();
+                    document.getElementById('btnActivateProfile').disabled = true; // It's active now
+                } else {
+                    showAlert("Error al activar perfil.", "danger");
+                    btn.disabled = false;
                 }
             } catch (err) {
-                alert("Error de red: " + err);
-            } finally {
-                btn.innerHTML = originalText;
+                showAlert("Error de red.", "danger");
                 btn.disabled = false;
             }
         }
 
-        // Iniciar
-        loadHistory();
+        function showAlert(msg, type) {
+            const container = document.getElementById('llmAlertContainer');
+            container.className = `alert alert-${type} mt-3 mb-0`;
+            container.innerHTML = msg;
+            container.style.display = 'block';
+        }
+        function hideAlert() {
+            document.getElementById('llmAlertContainer').style.display = 'none';
+        }
+
+        // Inicialización al cargar la página
+        document.addEventListener("DOMContentLoaded", () => {
+            loadHistory();
+            loadProfiles();
+        });
     </script>
 </body>
 </html>

@@ -1,69 +1,97 @@
-﻿using Dapper;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
-using VannaLight.Api.Services; // <- para WiDocIngestor
+﻿using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using VannaLight.Api.Services;
+using VannaLight.Core.Abstractions;
 using VannaLight.Core.UseCases;
 
 namespace VannaLight.Api.Controllers;
 
 public record TrainRequest(string Question, string SqlText);
 
+public record LlmProfileUpdateRequest(
+    int? GpuLayerCount,
+    uint? ContextSize,
+    int? BatchSize,
+    int? UBatchSize,
+    int? Threads
+);
+
 [ApiController]
 [Route("api/[controller]")]
-public class AdminController(IConfiguration config, WiDocIngestor wiIngestor, TrainExampleUseCase useCase) : ControllerBase
+public class AdminController(
+    IJobStore jobStore,            // <-- Capa de datos para historial inyectada
+    ILlmProfileStore profileStore, // <-- Capa de datos para perfiles de IA inyectada
+    WiDocIngestor wiIngestor,
+    TrainExampleUseCase useCase) : ControllerBase
 {
-    private readonly TrainExampleUseCase _useCase = useCase;
-
-
+    // ==========================================
+    // 1. RAG Y ENTRENAMIENTO
+    // ==========================================
 
     [HttpPost("train")]
     public async Task<IActionResult> Train([FromBody] TrainRequest request, CancellationToken ct)
     {
-        if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+        if (request is null) return BadRequest(new { Error = "Body inválido." });
 
         try
         {
-            await _useCase.TrainAsync(request.Question, request.SqlText, ct);
+            await useCase.TrainAsync(request.Question, request.SqlText, ct);
             return Ok(new { Message = "Entrenamiento guardado en la memoria RAG exitosamente." });
         }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { Error = ex.Message });
-        }
+        catch (ArgumentException ex) { return BadRequest(new { Error = ex.Message }); }
     }
 
-    // 1. Obtener el historial de la tabla operativa (SQL Server)
-    [HttpGet("history")]
-    public async Task<IActionResult> GetHistory()
+    [HttpPost("reindex-wi")]
+    public async Task<IActionResult> ReindexWi(CancellationToken ct)
     {
-        string sqlConn = config.GetConnectionString("OperationalDb") ?? throw new Exception("Falta SQL Conn");
-        using var connection = new SqlConnection(sqlConn);
+        var result = await wiIngestor.ReindexAsync(ct);
+        return Ok(new { Message = "Reindex de WI completado.", result.TotalFiles, result.Indexed, result.Skipped, result.Errors });
+    }
 
-        var jobs = await connection.QueryAsync(@"
-            SELECT TOP 20 JobId, Question, SqlText, Status, ErrorText, CreatedUtc 
-            FROM QuestionJobs 
-            ORDER BY CreatedUtc DESC");
+    // ==========================================
+    // 2. HISTORIAL DE TRABAJOS (SLIM)
+    // ==========================================
 
+    [HttpGet("history")]
+    public async Task<IActionResult> GetHistory(CancellationToken ct)
+    {
+        // Se delega la búsqueda a SQLite a través de la abstracción
+        var jobs = await jobStore.GetRecentJobsAsync(20, ct);
         return Ok(jobs);
     }
 
-  
+    // ==========================================
+    // 3. GESTIÓN DE PERFILES LLM (SLIM)
+    // ==========================================
 
-// 3. (FASE 3) Reindexar Work Instructions (PDFs) a SQLite
-[HttpPost("reindex-wi")]
-    public async Task<IActionResult> ReindexWi(CancellationToken ct)
+    [HttpGet("llm-profiles")]
+    public async Task<IActionResult> GetLlmProfiles(CancellationToken ct)
     {
-        // WiRootPath lo tomará del appsettings: Docs:WiRootPath
-        var result = await wiIngestor.ReindexAsync(ct);
+        var profiles = await profileStore.GetAllAsync(ct);
+        return Ok(profiles);
+    }
+
+    [HttpPost("llm-profiles/{id}/activate")]
+    public async Task<IActionResult> ActivateLlmProfile(int id, CancellationToken ct)
+    {
+        var success = await profileStore.ActivateAsync(id, ct);
+        if (!success) return NotFound(new { Error = "Perfil no encontrado." });
 
         return Ok(new
         {
-            Message = "Reindex de WI completado.",
-            result.TotalFiles,
-            result.Indexed,
-            result.Skipped,
-            result.Errors
+            Message = "Perfil activado correctamente.",
+            Warning = "Requiere reiniciar la API para aplicar los cambios de VRAM de llama.cpp."
         });
+    }
+
+    [HttpPut("llm-profiles/{id}")]
+    public async Task<IActionResult> UpdateLlmProfile(int id, [FromBody] LlmProfileUpdateRequest req, CancellationToken ct)
+    {
+        var success = await profileStore.UpdateAsync(id, req.GpuLayerCount, req.ContextSize, req.BatchSize, req.UBatchSize, req.Threads, ct);
+
+        if (!success) return NotFound(new { Error = "Perfil no encontrado." });
+        return Ok(new { Message = "Ajustes del perfil guardados exitosamente." });
     }
 }

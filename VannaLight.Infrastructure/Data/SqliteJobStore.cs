@@ -92,7 +92,6 @@ public class SqliteJobStore : IJobStore
         });
     }
 
-    // --- NUEVO: Implementación del método de lectura requerido por IJobStore ---
     public async Task<QuestionJob?> GetJobAsync(Guid jobId, CancellationToken ct = default)
     {
         using var conn = new SqliteConnection(_connString);
@@ -110,13 +109,29 @@ public class SqliteJobStore : IJobStore
             Role = raw.Role,
             Question = raw.Question,
             Status = raw.Status,
-            SqlText = raw.SqlText,
+            SqlText = raw.SqlText,  // Ahora esto vendrá lleno gracias al cambio en el Worker
             ErrorText = raw.ErrorText,
             ResultJson = raw.ResultJson,
-            Attempt = (int)(raw.Attempt ?? 0),
-            TrainingExampleSaved = Convert.ToInt32(raw.TrainingExampleSaved ?? 0) == 1,
+            // Ajuste de casteo para SQLite (int64 -> int32)
+            Attempt = raw.Attempt != null ? (int)(long)raw.Attempt : 0,
+            TrainingExampleSaved = raw.TrainingExampleSaved != null && (long)raw.TrainingExampleSaved == 1,
             CreatedUtc = DateTime.Parse(raw.CreatedUtc),
             UpdatedUtc = DateTime.Parse(raw.UpdatedUtc)
         };
     }
+
+    public async Task<IEnumerable<QuestionJob>> GetRecentJobsAsync(int limit = 20, CancellationToken ct = default)
+    {
+        using var conn = new SqliteConnection(_connString);
+        await conn.OpenAsync(ct);
+
+        const string sql = @"
+            SELECT JobId, Question, SqlText, Status, ErrorText, CreatedUtc 
+            FROM QuestionJobs 
+            ORDER BY CreatedUtc DESC 
+            LIMIT @Limit";
+
+        return await conn.QueryAsync<QuestionJob>(sql, new { Limit = limit });
+    }
+
 }
