@@ -1,78 +1,75 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.ML;
 using Microsoft.ML.Data;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 
-namespace VannaLight.Api.Services.Predictions;
+namespace VannaLight.Infrastructure.MachineLearning;
 
-// 1. Clases internas para que ML.NET entienda los datos (Entrada y Salida)
+// 1. Clases internas adaptadas a la Planta
 public class ModelInput
 {
-    public string ProductName { get; set; } = string.Empty;
+    public string PartNumber { get; set; } = string.Empty;
     public float Month { get; set; }
-    public float Sales { get; set; }
+    public float ScrapQty { get; set; }
 }
 
 public class ModelOutput
 {
     [ColumnName("Score")]
-    public float PredictedSales { get; set; }
+    public float PredictedScrap { get; set; }
 }
 
-// 2. El Entrenador (Se encarga de conectarse a SQL y crear el modelo predictivo)
 public static class MlModelTrainer
 {
-    public static readonly string ModelPath = Path.Combine(Environment.CurrentDirectory, "Data", "SalesForecastModel.zip");
+    // Cambiamos el nombre del archivo para no chocar con el viejo
+    public static readonly string ModelPath = Path.Combine(Environment.CurrentDirectory, "Data", "ScrapForecastModel.zip");
 
     public static void TrainAndSaveModel(string connectionString)
     {
         var mlContext = new MLContext(seed: 0);
-        Console.WriteLine("[ML.NET] Extrayendo datos históricos de SQL Server (Northwind)...");
+        Console.WriteLine("[ML.NET] Extrayendo datos históricos de Scrap desde vw_KpiScrap_v1...");
 
         IEnumerable<ModelInput> trainingData;
 
         using (var connection = new SqlConnection(connectionString))
         {
-            // CORRECCIÓN: Usamos OrderDetails sin espacios, respetando el esquema real de tu base de datos
+            // QUERY REAL: Agrupamos el scrap por Número de Parte y Mes usando tu vista
             const string sql = @"
                 SELECT 
-                    p.ProductName, 
-                    CAST(MONTH(o.OrderDate) AS REAL) AS [Month], 
-                    CAST(SUM(od.Quantity) AS REAL) AS Sales
-                FROM OrderDetails od
-                INNER JOIN Orders o ON od.OrderID = o.OrderID
-                INNER JOIN Products p ON od.ProductID = p.ProductID
-                WHERE o.OrderDate IS NOT NULL
-                GROUP BY p.ProductName, MONTH(o.OrderDate)";
+                    PartNumber, 
+                    CAST(MonthNumber AS REAL) AS [Month], 
+                    CAST(SUM(ScrapQty) AS REAL) AS ScrapQty
+                FROM dbo.vw_KpiScrap_v1
+                WHERE OperationDate IS NOT NULL AND PartNumber IS NOT NULL
+                GROUP BY PartNumber, MonthNumber";
 
-            // Dapper mapea el resultado directo a ModelInput
             trainingData = connection.Query<ModelInput>(sql).ToList();
         }
 
         if (!trainingData.Any())
         {
-            Console.WriteLine("[ML.NET ERROR] No hay datos suficientes para entrenar.");
+            Console.WriteLine("[ML.NET ERROR] No hay datos de Scrap suficientes para entrenar en la vista.");
             return;
         }
 
         var dataView = mlContext.Data.LoadFromEnumerable(trainingData);
 
-        // Pipeline de Aprendizaje: Codificamos el texto y usamos el algoritmo FastTree
-        var pipeline = mlContext.Transforms.Categorical.OneHotEncoding("ProductNameEncoded", "ProductName")
-            .Append(mlContext.Transforms.Concatenate("Features", "ProductNameEncoded", "Month"))
-            .Append(mlContext.Regression.Trainers.FastTree(labelColumnName: "Sales", featureColumnName: "Features"));
+        // 2. Pipeline de Aprendizaje: Codificamos el N/P y usamos FastTree para regresión
+        var pipeline = mlContext.Transforms.Categorical.OneHotEncoding("PartNumberEncoded", "PartNumber")
+            .Append(mlContext.Transforms.Concatenate("Features", "PartNumberEncoded", "Month"))
+            .Append(mlContext.Regression.Trainers.FastTree(labelColumnName: "ScrapQty", featureColumnName: "Features"));
 
-        Console.WriteLine($"[ML.NET] Entrenando modelo con {trainingData.Count()} registros...");
+        Console.WriteLine($"[ML.NET] Entrenando modelo predictivo con {trainingData.Count()} meses/partes históricos...");
 
-        // Entrenar el modelo y guardarlo físicamente en el disco
+        // 3. Entrenar y Guardar
         var model = pipeline.Fit(dataView);
         Directory.CreateDirectory(Path.GetDirectoryName(ModelPath)!);
         mlContext.Model.Save(model, dataView.Schema, ModelPath);
 
-        Console.WriteLine($"[ML.NET] ¡Modelo guardado con éxito en: {ModelPath}");
+        Console.WriteLine($"[ML.NET] ¡Modelo de Planta guardado con éxito en: {ModelPath}");
     }
 }

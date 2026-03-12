@@ -57,7 +57,7 @@ public class AdminController(
     [HttpGet("history")]
     public async Task<IActionResult> GetHistory(CancellationToken ct)
     {
-        // Se delega la búsqueda a SQLite a través de la abstracción
+        // Se delega la búsqueda a SQLite a través de la abstracción (IJobStore)
         var jobs = await jobStore.GetRecentJobsAsync(20, ct);
         return Ok(jobs);
     }
@@ -89,7 +89,14 @@ public class AdminController(
     [HttpPut("llm-profiles/{id}")]
     public async Task<IActionResult> UpdateLlmProfile(int id, [FromBody] LlmProfileUpdateRequest req, CancellationToken ct)
     {
-        var success = await profileStore.UpdateAsync(id, req.GpuLayerCount, req.ContextSize, req.BatchSize, req.UBatchSize, req.Threads, ct);
+        var success = await profileStore.UpdateAsync(
+            id,
+            req.GpuLayerCount,
+            req.ContextSize,
+            req.BatchSize,
+            req.UBatchSize,
+            req.Threads,
+            ct);
 
         if (!success) return NotFound(new { Error = "Perfil no encontrado." });
         return Ok(new { Message = "Ajustes del perfil guardados exitosamente." });

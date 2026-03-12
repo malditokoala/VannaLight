@@ -711,8 +711,8 @@
             }
 
         /* ═══════════════════════════════════════════
-           DOCS RESULT — REDISEÑO COMPLETO
-           ═══════════════════════════════════════════ */
+            DOCS RESULT — REDISEÑO COMPLETO
+            ═══════════════════════════════════════════ */
 
         /* Outer layout: contenido centrado, máx 680px */
         .docs-result-wrap {
@@ -1585,7 +1585,7 @@
             pred: {
                 key: 'pred', modeVal: 2, label: 'ML', sub: 'predicción', title: 'MODO PREDICCIÓN — ML.NET', desc: 'Pronósticos de scrap, producción y riesgo de paro · Machine Learning', badge: 'PREDICCIÓN · ML', ph: '¿Cuál es el pronóstico de scrap para el siguiente turno?',
                 icon: `<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>`
-            },
+            }
         };
 
         let currentMode = 'sql', myConnectionId = '', currentChart = null;
@@ -1623,7 +1623,7 @@
         });
 
         // ═══════════════════════════════════════════════════════════
-        // SIGNALR
+        // SIGNALR & DYNAMIC PROFILE
         // ═══════════════════════════════════════════════════════════
         const connection = new signalR.HubConnectionBuilder().withUrl('/hub/assistant').withAutomaticReconnect().build();
         connection.on('JobStatusUpdated', d => logLine(`⏳ ${d.status}`, 'sys'));
@@ -1641,10 +1641,24 @@
 
         async function startConnection() {
             try {
+                // 1. Obtenemos el perfil activo mediante la API del Admin (Sin tocar el Backend de Inferencia)
+                let profileName = 'LLM';
+                try {
+                    const res = await fetch('/api/admin/llm-profiles');
+                    if (res.ok) {
+                        const profiles = await res.json();
+                        const active = profiles.find(p => p.isActive || p.IsActive);
+                        if (active) profileName = active.name || active.Name;
+                    }
+                } catch (e) {
+                    console.warn("No se pudo cargar el perfil activo", e);
+                }
+
+                // 2. Iniciamos la conexión WebSocket
                 await connection.start();
                 myConnectionId = connection.connectionId;
                 document.getElementById('statusDot').style.cssText = 'background:#4ade80;box-shadow:0 0 7px #4ade80';
-                document.getElementById('statusText').textContent = 'RTX 4060 · LLM listo';
+                document.getElementById('statusText').textContent = `${profileName} · LLM listo`;
                 logLine('Sistema en línea. Motor neural activo.', 'ok');
             } catch {
                 document.getElementById('statusDot').style.cssText = 'background:#f87171;box-shadow:0 0 7px #f87171';
@@ -1717,8 +1731,6 @@
             // ── Parse estructurado ─────────────────────────────────
             const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
 
-            // Extrae el "título" de la ficha: la primera línea que termina en ':' sin valor
-            // o que contiene "Ficha", "Información", etc.
             let titleLine = '';
             let contentLines = [...lines];
 
@@ -1754,22 +1766,17 @@
                 }
             }
 
-            // Separa KPI candidates (numéricos prominentes) de campos normales
-            // Un KPI es un valor numérico con una unidad, o un número "grande" destacable
             const kpiFields = kvPairs.filter(f => f.isNumeric && f.numericVal > 0);
             const plainFields = kvPairs.filter(f => !f.isNumeric);
 
-            // Si hay demasiados numéricos, solo los primeros 3 como KPI
             const kpiDisplay = kpiFields.slice(0, 3);
-            const kpiOverflow = kpiFields.slice(3); // el resto van como campos normales
+            const kpiOverflow = kpiFields.slice(3);
 
             const allPlainFields = [...plainFields, ...kpiOverflow];
 
-            // Confianza
             const conf = payload.confidence;
 
             // ── Detectar número de parte de la query ───────────────
-            // Intentar extraer del texto o del query
             const partMatch = raw.match(/\b(\d{6}-\d{4}|\d{5,}[-\/]\d{2,})\b/);
             const partNumber = partMatch ? partMatch[0] : null;
 
@@ -1779,33 +1786,33 @@
             // Header
             const docTitle = titleLine || (partNumber ? `N/P ${partNumber}` : 'Ficha Técnica');
             html += `
-            <div class="docs-card-header">
-                <div class="docs-hdr-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                    </svg>
-                </div>
-                <div class="docs-hdr-meta">
-                    <div class="docs-hdr-title">${escHtml(docTitle)}</div>
-                    <div class="docs-hdr-sub">WORK INSTRUCTION · PLANTA</div>
-                </div>
-                ${partNumber ? `<div class="docs-hdr-badge">${escHtml(partNumber)}</div>` : ''}
-            </div>`;
+                <div class="docs-card-header">
+                    <div class="docs-hdr-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                        </svg>
+                    </div>
+                    <div class="docs-hdr-meta">
+                        <div class="docs-hdr-title">${escHtml(docTitle)}</div>
+                        <div class="docs-hdr-sub">WORK INSTRUCTION · PLANTA</div>
+                    </div>
+                    ${partNumber ? `<div class="docs-hdr-badge">${escHtml(partNumber)}</div>` : ''}
+                </div>`;
 
-            // KPI row — valores numéricos destacados
+            // KPI row
             if (kpiDisplay.length > 0) {
                 html += `<div class="docs-kpi-row">`;
                 for (const f of kpiDisplay) {
                     const valFormatted = f.numericVal.toLocaleString('es-MX');
                     html += `
-                    <div class="docs-kpi-cell">
-                        <div class="docs-kpi-label">${escHtml(f.key)}</div>
-                        <div class="docs-kpi-value">${valFormatted}</div>
-                        ${f.unit ? `<div class="docs-kpi-unit">${escHtml(f.unit)}</div>` : ''}
-                    </div>`;
+                        <div class="docs-kpi-cell">
+                            <div class="docs-kpi-label">${escHtml(f.key)}</div>
+                            <div class="docs-kpi-value">${valFormatted}</div>
+                            ${f.unit ? `<div class="docs-kpi-unit">${escHtml(f.unit)}</div>` : ''}
+                        </div>`;
                 }
                 html += `</div>`;
             }
@@ -1819,35 +1826,35 @@
                     const isOdd = allPlainFields.length % 2 !== 0;
                     const fullWidth = isLast && isOdd ? ' full-width' : '';
                     html += `
-                    <div class="docs-field-v2${fullWidth}">
-                        <div class="docs-field-key-v2">${escHtml(f.key)}</div>
-                        <div class="docs-field-val-v2">${escHtml(f.value)}</div>
-                    </div>`;
+                        <div class="docs-field-v2${fullWidth}">
+                            <div class="docs-field-key-v2">${escHtml(f.key)}</div>
+                            <div class="docs-field-val-v2">${escHtml(f.value)}</div>
+                        </div>`;
                 }
                 html += `</div>`;
             }
 
-            // Texto libre / párrafos
+            // Texto libre
             if (proseLines.length > 0) {
                 html += `
-                <div class="docs-prose">
-                    <div class="docs-prose-label">Observaciones</div>
-                    <div class="docs-prose-text">${proseLines.map(escHtml).join('<br>')}</div>
-                </div>`;
+                    <div class="docs-prose">
+                        <div class="docs-prose-label">Observaciones</div>
+                        <div class="docs-prose-text">${proseLines.map(escHtml).join('<br>')}</div>
+                    </div>`;
             }
 
-            // Footer con fuente + confianza inline
+            // Footer con confianza
             const confPct = conf != null ? Math.round(conf * 100) : null;
             html += `
-            <div class="docs-card-footer">
-                <div class="docs-footer-src">PDF · Motor LLM + BM25</div>
-                ${confPct != null ? `
-                <div class="docs-conf-inline">
-                    <span class="docs-conf-label-sm">CONFIANZA</span>
-                    <div class="docs-conf-bg"><div class="docs-conf-fill" id="docsConfFill" style="width:0%"></div></div>
-                    <span class="docs-conf-pct" id="docsConfPct">—</span>
-                </div>` : ''}
-            </div>`;
+                <div class="docs-card-footer">
+                    <div class="docs-footer-src">PDF · Motor LLM + BM25</div>
+                    ${confPct != null ? `
+                    <div class="docs-conf-inline">
+                        <span class="docs-conf-label-sm">CONFIANZA</span>
+                        <div class="docs-conf-bg"><div class="docs-conf-fill" id="docsConfFill" style="width:0%"></div></div>
+                        <span class="docs-conf-pct" id="docsConfPct">—</span>
+                    </div>` : ''}
+                </div>`;
 
             html += `</div></div>`;
 
@@ -1855,7 +1862,6 @@
             wrap.style.display = 'block';
             wrap.innerHTML = html;
 
-            // Animar barra de confianza
             if (confPct != null) {
                 setTimeout(() => {
                     const fill = document.getElementById('docsConfFill');

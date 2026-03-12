@@ -1,412 +1,1542 @@
 ﻿<!DOCTYPE html>
-<html lang="es" data-bs-theme="dark">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>VannaLight - Panel de Administración</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VannaLight — Administración</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
     <style>
+        /* ═══════════════════════════════════════════════
+        TOKENS — idénticos a index.html
+        ═══════════════════════════════════════════════ */
+        :root {
+            --bg: #09090c;
+            --surface: #0f1117;
+            --panel: #161b25;
+            --border: #1e2535;
+            --border2: #28304a;
+            --text: #dde4f0;
+            --muted: #4a5568;
+            --dim: #7a8a9e;
+            --sql-c: #22d3ee;
+            --rag-c: #22d3ee; /* Tab RAG = cyan  */
+            --llm-c: #f59e0b; /* Tab LLM = amber */
+            --ok-c: #4ade80;
+            --err-c: #f87171;
+            --warn-c: #fbbf24;
+            --radius: 6px;
+            --mono: 'IBM Plex Mono', monospace;
+            --sans: 'IBM Plex Sans', sans-serif;
+            --cond: 'IBM Plex Sans Condensed', sans-serif;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            font-size: 15px;
+        }
+
         body {
-            background-color: #121212;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--sans);
+            min-height: 100vh;
+            overflow-x: hidden;
         }
 
-        .history-item, .profile-item {
+            body::before {
+                content: '';
+                position: fixed;
+                inset: 0;
+                background-image: radial-gradient(circle, rgba(255,255,255,.04) 1px, transparent 1px);
+                background-size: 28px 28px;
+                pointer-events: none;
+                z-index: 0;
+            }
+
+        /* ═══════════════════════════════════════════════
+        APP SHELL
+        ═══════════════════════════════════════════════ */
+        .app {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-rows: 56px 1fr;
+            min-height: 100vh;
+        }
+
+        /* ── TOPBAR ──────────────────────────────────── */
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .tb-left {
+            display: flex;
+            align-items: center;
+            gap: 0;
+        }
+
+        .tb-logo {
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-right: 1px solid var(--border);
+            flex-shrink: 0;
+            margin-right: 16px;
+        }
+
+        .logo-mark {
+            width: 28px;
+            height: 28px;
+        }
+
+            .logo-mark svg {
+                width: 100%;
+                height: 100%;
+            }
+
+        .logo-ring {
+            fill: none;
+            stroke: var(--sql-c);
+            stroke-width: 2;
+            stroke-dasharray: 88;
+            animation: spin-ring 6s linear infinite;
+        }
+
+        @keyframes spin-ring {
+            to {
+                stroke-dashoffset: -88;
+            }
+        }
+
+        .logo-dot {
+            fill: var(--sql-c);
+        }
+
+        .tb-wordmark {
+            font-family: var(--cond);
+            font-size: 1.05rem;
+            font-weight: 800;
+            letter-spacing: .06em;
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+        }
+
+            .tb-wordmark em {
+                font-style: normal;
+                color: var(--sql-c);
+            }
+
+        .tb-admin-tag {
+            font-family: var(--mono);
+            font-size: .56rem;
+            color: var(--muted);
+            letter-spacing: .12em;
+            padding: 2px 8px;
+            border: 1px solid var(--border2);
+            border-radius: 3px;
+            margin-left: 4px;
+        }
+
+        .tb-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-back {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border: 1px solid var(--border2);
+            border-radius: var(--radius);
+            background: transparent;
+            color: var(--dim);
+            font-family: var(--mono);
+            font-size: .62rem;
+            letter-spacing: .06em;
             cursor: pointer;
-            transition: 0.2s;
-            border-left: 4px solid transparent;
+            text-decoration: none;
+            transition: border-color .2s, color .2s;
         }
 
-            .history-item:hover, .profile-item:hover {
-                background-color: #2a2a2a;
-                border-left-color: #00ffcc;
+            .btn-back:hover {
+                border-color: var(--sql-c);
+                color: var(--sql-c);
             }
 
-            .profile-item.active-profile {
-                border-left-color: #198754; /* Success green */
-                background-color: #1a1e21;
+            .btn-back svg {
+                width: 12px;
+                height: 12px;
             }
 
-        .editor-textarea {
-            font-family: 'Consolas', monospace;
-            font-size: 0.9rem;
-            color: #00ffcc;
-            background-color: #0a0a0a;
-            border: 1px solid #333;
+        /* ── TAB RAIL ────────────────────────────────── */
+        .tab-rail {
+            display: flex;
+            gap: 2px;
+            padding: 0 0 0 24px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
         }
 
-            .editor-textarea:focus {
-                background-color: #0a0a0a;
-                color: #00ffcc;
-                border-color: #00ffcc;
-                box-shadow: none;
-            }
-
-        .nav-tabs .nav-link {
-            color: #aaa;
+        .tab-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 20px;
+            height: 44px;
+            border: none;
+            border-bottom: 2px solid transparent;
+            background: transparent;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: .65rem;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: color .2s, border-color .2s;
+            position: relative;
         }
 
-            .nav-tabs .nav-link.active {
-                color: #00ffcc;
-                background-color: #121212;
-                border-bottom-color: #121212;
+            .tab-btn svg {
+                width: 14px;
+                height: 14px;
             }
+
+            .tab-btn.active-rag {
+                color: var(--rag-c);
+                border-bottom-color: var(--rag-c);
+            }
+
+            .tab-btn.active-llm {
+                color: var(--llm-c);
+                border-bottom-color: var(--llm-c);
+            }
+
+            .tab-btn:hover:not(.active-rag):not(.active-llm) {
+                color: var(--dim);
+            }
+
+        /* ── MAIN AREA ───────────────────────────────── */
+        .main-area {
+            display: grid;
+            grid-template-rows: 44px 1fr;
+        }
+
+        .tab-content {
+            display: none;
+            height: 100%;
+        }
+
+            .tab-content.active {
+                display: flex;
+            }
+
+        /* ═══════════════════════════════════════════════
+        RAG TAB LAYOUT
+        ═══════════════════════════════════════════════ */
+        .rag-layout {
+            display: grid;
+            grid-template-columns: 340px 1fr;
+            height: calc(100vh - 100px);
+            overflow: hidden;
+        }
+
+        /* ── LEFT PANEL: History list ────────────────── */
+        .panel-left {
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--surface);
+        }
+
+        .panel-header {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            background: var(--panel);
+        }
+
+        .panel-title {
+            font-family: var(--mono);
+            font-size: .62rem;
+            letter-spacing: .12em;
+            color: var(--muted);
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .panel-title svg {
+                width: 13px;
+                height: 13px;
+            }
+
+        .panel-count {
+            font-family: var(--mono);
+            font-size: .58rem;
+            padding: 1px 6px;
+            border-radius: 3px;
+            background: var(--border2);
+            color: var(--dim);
+        }
+
+        .history-scroll {
+            flex: 1;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border2) transparent;
+        }
+
+            .history-scroll::-webkit-scrollbar {
+                width: 3px;
+            }
+
+            .history-scroll::-webkit-scrollbar-thumb {
+                background: var(--border2);
+                border-radius: 2px;
+            }
+
+        .history-item {
+            padding: 12px 18px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            border-left: 3px solid transparent;
+            transition: background .15s, border-color .15s;
+            display: block;
+        }
+
+            .history-item:hover {
+                background: var(--panel);
+                border-left-color: var(--muted);
+            }
+
+            .history-item.selected {
+                background: color-mix(in srgb, var(--rag-c) 6%, var(--panel));
+                border-left-color: var(--rag-c);
+            }
+
+        .hi-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 5px;
+        }
+
+        .hi-question {
+            font-family: var(--sans);
+            font-size: .82rem;
+            color: var(--text);
+            line-height: 1.35;
+            flex: 1;
+            /* clamp to 2 lines */
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .hi-time {
+            font-family: var(--mono);
+            font-size: .58rem;
+            color: var(--muted);
+            white-space: nowrap;
+            flex-shrink: 0;
+            padding-top: 1px;
+        }
+
+        .hi-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-family: var(--mono);
+            font-size: .58rem;
+            letter-spacing: .04em;
+        }
+
+            .hi-status .dot {
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+            }
+
+            .hi-status.ok .dot {
+                background: var(--ok-c);
+                box-shadow: 0 0 5px var(--ok-c);
+            }
+
+            .hi-status.err .dot {
+                background: var(--err-c);
+                box-shadow: 0 0 5px var(--err-c);
+            }
+
+            .hi-status.ok {
+                color: var(--ok-c);
+            }
+
+            .hi-status.err {
+                color: var(--err-c);
+            }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: .7rem;
+            gap: 12px;
+        }
+
+            .empty-state svg {
+                width: 32px;
+                height: 32px;
+                opacity: .3;
+            }
+
+        /* ── RIGHT PANEL: Editor ─────────────────────── */
+        .panel-right {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .editor-wrap {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .field-label {
+            font-family: var(--mono);
+            font-size: .6rem;
+            letter-spacing: .1em;
+            color: var(--muted);
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .field-input {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text);
+            font-family: var(--sans);
+            font-size: .88rem;
+            padding: 10px 14px;
+            outline: none;
+            transition: border-color .2s, box-shadow .2s;
+            width: 100%;
+        }
+
+            .field-input:focus {
+                border-color: var(--rag-c);
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--rag-c) 12%, transparent);
+            }
+
+            .field-input[readonly] {
+                color: var(--dim);
+                cursor: default;
+            }
+
+        /* SQL textarea — monospace + neon */
+        .sql-editor {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--rag-c);
+            font-family: var(--mono);
+            font-size: .8rem;
+            line-height: 1.7;
+            padding: 14px 16px;
+            outline: none;
+            resize: vertical;
+            min-height: 220px;
+            transition: border-color .2s, box-shadow .2s;
+            width: 100%;
+        }
+
+            .sql-editor:focus {
+                border-color: var(--rag-c);
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--rag-c) 10%, transparent), inset 0 0 20px color-mix(in srgb, var(--rag-c) 3%, transparent);
+            }
+
+        /* error banner */
+        .error-banner {
+            display: none;
+            padding: 10px 14px;
+            border-radius: var(--radius);
+            border: 1px solid color-mix(in srgb, var(--err-c) 40%, transparent);
+            background: color-mix(in srgb, var(--err-c) 8%, transparent);
+            font-family: var(--mono);
+            font-size: .72rem;
+            color: var(--err-c);
+            line-height: 1.6;
+        }
+
+        /* action bar at bottom of editor */
+        .editor-actions {
+            padding: 14px 28px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--surface);
+            flex-shrink: 0;
+        }
+
+        .action-meta {
+            font-family: var(--mono);
+            font-size: .6rem;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* status badge */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-family: var(--mono);
+            font-size: .58rem;
+            letter-spacing: .06em;
+            padding: 2px 8px;
+            border-radius: 3px;
+        }
+
+            .status-badge.ok {
+                background: color-mix(in srgb,var(--ok-c) 12%,transparent);
+                color: var(--ok-c);
+                border: 1px solid color-mix(in srgb,var(--ok-c) 30%,transparent);
+            }
+
+            .status-badge.err {
+                background: color-mix(in srgb,var(--err-c) 12%,transparent);
+                color: var(--err-c);
+                border: 1px solid color-mix(in srgb,var(--err-c) 30%,transparent);
+            }
+
+        /* ═══════════════════════════════════════════════
+        LLM TAB LAYOUT
+        ═══════════════════════════════════════════════ */
+        .llm-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            height: calc(100vh - 100px);
+            overflow: hidden;
+        }
+
+        /* Profile list — similar to history */
+        .profile-item {
+            padding: 13px 18px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            border-left: 3px solid transparent;
+            transition: background .15s, border-color .15s;
+        }
+
+            .profile-item:hover {
+                background: var(--panel);
+                border-left-color: var(--muted);
+            }
+            /* is-active: borde verde solo cuando NO está seleccionado */
+            .profile-item.is-active {
+                border-left-color: var(--ok-c);
+            }
+            /* selected siempre gana — mayor especificidad */
+            .profile-item.selected,
+            .profile-item.selected.is-active {
+                background: color-mix(in srgb, var(--llm-c) 8%, var(--panel));
+                border-left-color: var(--llm-c);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--llm-c) 20%, transparent);
+            }
+
+        .pi-name {
+            font-family: var(--sans);
+            font-size: .85rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pi-active-pill {
+            font-family: var(--mono);
+            font-size: .52rem;
+            padding: 1px 6px;
+            border-radius: 3px;
+            background: color-mix(in srgb, var(--ok-c) 15%, transparent);
+            border: 1px solid color-mix(in srgb, var(--ok-c) 30%, transparent);
+            color: var(--ok-c);
+            letter-spacing: .06em;
+        }
+
+        .pi-summary {
+            font-family: var(--mono);
+            font-size: .6rem;
+            color: var(--muted);
+        }
+
+        /* Profile editor */
+        .profile-editor {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Field grid for profile params */
+        .params-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+            .params-grid .full {
+                grid-column: 1 / -1;
+            }
+
+        .field-hint {
+            font-family: var(--mono);
+            font-size: .56rem;
+            color: var(--muted);
+            margin-top: 4px;
+            letter-spacing: .04em;
+        }
+
+        /* Number input */
+        .field-num {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: .88rem;
+            padding: 9px 14px;
+            outline: none;
+            width: 100%;
+            transition: border-color .2s, box-shadow .2s;
+        }
+
+            .field-num:focus {
+                border-color: var(--llm-c);
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--llm-c) 12%, transparent);
+            }
+
+            .field-num[readonly] {
+                color: var(--dim);
+            }
+
+            /* Highlight: GPU layers — amber accent */
+            .field-num.key-param {
+                color: var(--llm-c);
+            }
+
+                .field-num.key-param:focus {
+                    border-color: var(--llm-c);
+                }
+
+        /* Alert banner reusable */
+        .alert-banner {
+            display: none;
+            padding: 10px 16px;
+            border-radius: var(--radius);
+            font-family: var(--mono);
+            font-size: .72rem;
+            line-height: 1.6;
+            animation: fadeUp .2s ease-out;
+        }
+
+            .alert-banner.ok {
+                border: 1px solid color-mix(in srgb,var(--ok-c) 40%,transparent);
+                background: color-mix(in srgb,var(--ok-c) 8%,transparent);
+                color: var(--ok-c);
+            }
+
+            .alert-banner.warn {
+                border: 1px solid color-mix(in srgb,var(--warn-c) 40%,transparent);
+                background: color-mix(in srgb,var(--warn-c) 8%,transparent);
+                color: var(--warn-c);
+            }
+
+            .alert-banner.err {
+                border: 1px solid color-mix(in srgb,var(--err-c) 40%,transparent);
+                background: color-mix(in srgb,var(--err-c) 8%,transparent);
+                color: var(--err-c);
+            }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ═══════════════════════════════════════════════
+        BUTTONS
+        ═══════════════════════════════════════════════ */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 8px 18px;
+            border-radius: var(--radius);
+            border: none;
+            font-family: var(--mono);
+            font-size: .68rem;
+            font-weight: 600;
+            letter-spacing: .08em;
+            cursor: pointer;
+            transition: filter .2s, opacity .2s, box-shadow .2s;
+            white-space: nowrap;
+        }
+
+            .btn:disabled {
+                opacity: .4;
+                cursor: not-allowed;
+            }
+
+            .btn:not(:disabled):hover {
+                filter: brightness(1.15);
+            }
+
+            .btn svg {
+                width: 13px;
+                height: 13px;
+                flex-shrink: 0;
+            }
+
+        .btn-primary {
+            background: var(--rag-c);
+            color: #000;
+        }
+
+        .btn-amber {
+            background: var(--llm-c);
+            color: #000;
+        }
+
+        .btn-ghost {
+            background: var(--panel);
+            border: 1px solid var(--border2);
+            color: var(--dim);
+        }
+
+            .btn-ghost:not(:disabled):hover {
+                border-color: var(--ok-c);
+                color: var(--ok-c);
+            }
+
+        .btn-danger {
+            background: transparent;
+            border: 1px solid color-mix(in srgb,var(--err-c) 40%,transparent);
+            color: var(--err-c);
+        }
+
+        /* spinner inside button */
+        .btn-spinner {
+            width: 11px;
+            height: 11px;
+            border: 2px solid rgba(0,0,0,.25);
+            border-top-color: #000;
+            border-radius: 50%;
+            animation: spin .6s linear infinite;
+            display: none;
+            flex-shrink: 0;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ═══════════════════════════════════════════════
+        VRAM METER (decorative)
+        ═══════════════════════════════════════════════ */
+        .vram-meter {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px 18px;
+        }
+
+        .vram-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .vram-label {
+            font-family: var(--mono);
+            font-size: .6rem;
+            letter-spacing: .1em;
+            color: var(--muted);
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .vram-val {
+            font-family: var(--cond);
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--llm-c);
+        }
+
+        .vram-bg {
+            height: 6px;
+            background: var(--border2);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .vram-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--llm-c), color-mix(in srgb, var(--llm-c) 60%, var(--err-c)));
+            border-radius: 3px;
+            transition: width .6s cubic-bezier(.16,1,.3,1);
+        }
+
+        .vram-scale {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            font-family: var(--mono);
+            font-size: .54rem;
+            color: var(--muted);
+        }
+
+        /* ═══════════════════════════════════════════════
+        SECTION HEADER inside editor
+        ═══════════════════════════════════════════════ */
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .section-header-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+            .section-header-icon svg {
+                width: 14px;
+                height: 14px;
+            }
+
+        .si-rag {
+            background: color-mix(in srgb, var(--rag-c) 15%, transparent);
+        }
+
+            .si-rag svg {
+                stroke: var(--rag-c);
+            }
+
+        .si-llm {
+            background: color-mix(in srgb, var(--llm-c) 15%, transparent);
+        }
+
+            .si-llm svg {
+                stroke: var(--llm-c);
+            }
+
+        .section-header-text {
+            flex: 1;
+        }
+
+        .sh-title {
+            font-family: var(--cond);
+            font-size: .95rem;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: .02em;
+        }
+
+        .sh-sub {
+            font-family: var(--mono);
+            font-size: .58rem;
+            color: var(--muted);
+            margin-top: 1px;
+        }
+
+        /* ═══════════════════════════════════════════════
+        PROFILE EDITOR ACTIONS
+        ═══════════════════════════════════════════════ */
+        .profile-actions {
+            padding: 14px 28px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: flex-end;
+            background: var(--surface);
+            flex-shrink: 0;
+        }
+
+        /* ═══════════════════════════════════════════════
+        RESPONSIVE
+        ═══════════════════════════════════════════════ */
+        @media (max-width: 800px) {
+            .rag-layout, .llm-layout {
+                grid-template-columns: 1fr;
+                grid-template-rows: 280px 1fr;
+            }
+
+            .panel-left, .panel-right {
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .params-grid {
+                grid-template-columns: 1fr;
+            }
+
+                .params-grid .full {
+                    grid-column: 1;
+                }
+        }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-dark bg-dark border-bottom border-secondary mb-4 shadow-sm">
-        <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1"><i class="fa-solid fa-server text-info"></i> Panel de Administración VannaLight</span>
-            <a href="/index.html" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-arrow-left"></i> Volver al Chat</a>
-        </div>
-    </nav>
+    <div class="app">
 
-    <div class="container-fluid px-4">
-        <!-- TABS NAV -->
-        <ul class="nav nav-tabs mb-4 border-secondary" id="adminTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="rag-tab" data-bs-toggle="tab" data-bs-target="#rag-pane" type="button" role="tab"><i class="fa-solid fa-graduation-cap"></i> Entrenamiento RAG (SQL)</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="llm-tab" data-bs-toggle="tab" data-bs-target="#llm-pane" type="button" role="tab"><i class="fa-solid fa-microchip"></i> Configuración Hardware (LLM)</button>
-            </li>
-        </ul>
+        <!-- ── TOPBAR ──────────────────────────────────── -->
+        <header class="topbar">
+            <div class="tb-left">
+                <div class="tb-logo">
+                    <div class="logo-mark">
+                        <svg viewBox="0 0 36 36">
+                            <circle cx="18" cy="18" r="14" class="logo-ring" />
+                            <circle cx="18" cy="18" r="4" class="logo-dot" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="tb-wordmark">VANNA<em>LIGHT</em></div>
+                <div class="tb-admin-tag">ADMIN</div>
+            </div>
+            <div class="tb-right">
+                <a href="/index.html" class="btn-back">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                    VOLVER AL CHAT
+                </a>
+            </div>
+        </header>
 
-        <!-- TABS CONTENT -->
-        <div class="tab-content" id="adminTabsContent">
+        <!-- ── MAIN ───────────────────────────────────── -->
+        <div class="main-area">
 
-            <!-- ========================================== -->
-            <!-- TAB 1: ENTRENAMIENTO RAG (Tu código original) -->
-            <!-- ========================================== -->
-            <div class="tab-pane fade show active" id="rag-pane" role="tabpanel">
-                <div class="row">
-                    <div class="col-md-5">
-                        <h5 class="mb-3"><i class="fa-solid fa-clock-rotate-left"></i> Historial Reciente</h5>
-                        <div class="list-group shadow-sm" id="historyList" style="max-height: 70vh; overflow-y: auto;">
-                            <div class="text-center text-muted mt-5"><span class="spinner-border spinner-border-sm"></span> Cargando historial...</div>
+            <!-- Tab rail -->
+            <div class="tab-rail">
+                <button class="tab-btn active-rag" id="tab-rag" onclick="switchTab('rag')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a8 8 0 0 0-8 8v1a8 8 0 0 0 16 0v-1a8 8 0 0 0-8-8z" />
+                        <path d="M12 6v4l3 3" />
+                        <circle cx="12" cy="19" r="2" />
+                        <path d="M12 17v-2" />
+                    </svg>
+                    Entrenamiento RAG
+                </button>
+                <button class="tab-btn" id="tab-llm" onclick="switchTab('llm')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="4" y="4" width="16" height="16" rx="2" />
+                        <rect x="9" y="9" width="6" height="6" />
+                        <line x1="9" y1="2" x2="9" y2="4" />
+                        <line x1="15" y1="2" x2="15" y2="4" />
+                        <line x1="9" y1="20" x2="9" y2="22" />
+                        <line x1="15" y1="20" x2="15" y2="22" />
+                        <line x1="2" y1="9" x2="4" y2="9" />
+                        <line x1="2" y1="15" x2="4" y2="15" />
+                        <line x1="20" y1="9" x2="22" y2="9" />
+                        <line x1="20" y1="15" x2="22" y2="15" />
+                    </svg>
+                    Hardware LLM
+                </button>
+            </div>
+
+            <!-- ══ TAB: RAG ══════════════════════════════ -->
+            <div class="tab-content active" id="pane-rag">
+                <div class="rag-layout" style="width:100%">
+
+                    <!-- LEFT: History -->
+                    <div class="panel-left">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                </svg>
+                                Historial reciente
+                            </div>
+                            <span class="panel-count" id="ragCount">—</span>
+                        </div>
+                        <div class="history-scroll" id="historyList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="12" y1="8" x2="12" y2="12" />
+                                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                                </svg>
+                                Cargando historial...
+                            </div>
                         </div>
                     </div>
 
-                    <div class="col-md-7">
-                        <div class="card shadow-lg border-secondary">
-                            <div class="card-header bg-dark border-secondary">
-                                <h5 class="mb-0"><i class="fa-solid fa-pen-to-square text-info"></i> Editor de T-SQL</h5>
-                            </div>
-                            <div class="card-body bg-dark">
-                                <div class="mb-3">
-                                    <label class="form-label text-muted">Pregunta Original del Usuario</label>
-                                    <input type="text" id="txtQuestion" class="form-control bg-dark text-light border-secondary" placeholder="Selecciona una consulta del historial..." readonly>
+                    <!-- RIGHT: Editor -->
+                    <div class="panel-right">
+                        <div class="editor-wrap">
+                            <div class="section-header">
+                                <div class="section-header-icon si-rag">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 20h9" />
+                                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                    </svg>
                                 </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Editor de Corrección T-SQL</div>
+                                    <div class="sh-sub">Selecciona una consulta del historial · Corrige el SQL · Guarda en RAG</div>
+                                </div>
+                            </div>
 
-                                <div class="mb-3">
-                                    <label class="form-label text-muted d-flex justify-content-between">
-                                        <span>Código SQL (Modifica lo que esté mal)</span>
-                                        <span class="badge bg-secondary" id="statusBadge"></span>
+                            <!-- Question field -->
+                            <div class="field-group">
+                                <label class="field-label">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+                                    Pregunta original del usuario
+                                    <span class="status-badge ok" id="ragStatusBadge" style="display:none;margin-left:auto"></span>
+                                </label>
+                                <input type="text" id="txtQuestion" class="field-input" placeholder="Selecciona una consulta del historial para editar..." readonly />
+                            </div>
+
+                            <!-- SQL editor -->
+                            <div class="field-group" style="flex:1">
+                                <label class="field-label">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
+                                    Código T-SQL — edita lo que esté incorrecto
+                                </label>
+                                <textarea id="txtSql" class="sql-editor" rows="12" placeholder="-- El SQL generado aparecerá aquí
+-- Corrige lo necesario antes de guardar en memoria RAG
+SELECT ..."></textarea>
+                            </div>
+
+                            <!-- Error banner -->
+                            <div class="error-banner" id="ragError"></div>
+                        </div>
+
+                        <!-- Actions bar -->
+                        <div class="editor-actions">
+                            <div class="action-meta" id="ragMeta">Ninguna consulta seleccionada</div>
+                            <button class="btn btn-primary" id="btnSave" onclick="saveCorrection()" disabled>
+                                <div class="btn-spinner" id="ragSpinner"></div>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                                </svg>
+                                Guardar en Memoria RAG
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ══ TAB: LLM ══════════════════════════════ -->
+            <div class="tab-content" id="pane-llm">
+                <div class="llm-layout" style="width:100%">
+
+                    <!-- LEFT: Profile list -->
+                    <div class="panel-left">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                                    <polyline points="22,6 12,13 2,6" />
+                                </svg>
+                                Perfiles de hardware
+                            </div>
+                        </div>
+                        <div class="history-scroll" id="profileList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                                    <rect x="9" y="9" width="6" height="6" />
+                                </svg>
+                                Cargando perfiles...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT: Profile editor -->
+                    <div class="panel-right">
+                        <div class="profile-editor">
+
+                            <div class="section-header">
+                                <div class="section-header-icon si-llm">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="4" y="4" width="16" height="16" rx="2" />
+                                        <rect x="9" y="9" width="6" height="6" />
+                                        <line x1="9" y1="2" x2="9" y2="4" />
+                                        <line x1="15" y1="2" x2="15" y2="4" />
+                                        <line x1="9" y1="20" x2="9" y2="22" />
+                                        <line x1="15" y1="20" x2="15" y2="22" />
+                                        <line x1="2" y1="9" x2="4" y2="9" />
+                                        <line x1="2" y1="15" x2="4" y2="15" />
+                                        <line x1="20" y1="9" x2="22" y2="9" />
+                                        <line x1="20" y1="15" x2="22" y2="15" />
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Configuración de Hardware</div>
+                                    <div class="sh-sub">Ajusta los parámetros de inferencia LLM por perfil de GPU</div>
+                                </div>
+                            </div>
+
+                            <input type="hidden" id="txtProfileId">
+
+                            <!-- Profile name -->
+                            <div class="field-group">
+                                <label class="field-label">Nombre del perfil</label>
+                                <input type="text" id="txtProfileName" class="field-input" readonly placeholder="Selecciona un perfil..." />
+                            </div>
+
+                            <!-- VRAM meter -->
+                            <div class="vram-meter" id="vramMeter" style="display:none">
+                                <div class="vram-header">
+                                    <div class="vram-label">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="4" y="4" width="16" height="16" rx="2" />
+                                            <rect x="9" y="9" width="6" height="6" />
+                                        </svg>
+                                        VRAM estimada
+                                    </div>
+                                    <div class="vram-val" id="vramVal">— GB</div>
+                                </div>
+                                <div class="vram-bg"><div class="vram-fill" id="vramFill" style="width:0%"></div></div>
+                                <div class="vram-scale"><span>0</span><span>2 GB</span><span>4 GB</span><span>6 GB</span><span>8 GB</span></div>
+                            </div>
+
+                            <!-- Params grid -->
+                            <div class="params-grid">
+                                <div class="field-group">
+                                    <label class="field-label" style="color:var(--llm-c)">
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+                                        GPU Layers (VRAM)
                                     </label>
-                                    <textarea id="txtSql" class="form-control editor-textarea" rows="12" placeholder="El SQL generado aparecerá aquí..."></textarea>
+                                    <input type="number" id="txtGpuLayers" class="field-num key-param" placeholder="—" oninput="updateVram()" />
+                                    <div class="field-hint">RTX 4060 → 33–35 · Quadro T2000 → 12–15</div>
                                 </div>
-
-                                <div id="errorContainer" class="alert alert-danger" style="display:none; font-size: 0.85rem;"></div>
-
-                                <div class="text-end mt-4">
-                                    <button class="btn btn-warning" id="btnSave" onclick="saveCorrection()" disabled>
-                                        <i class="fa-solid fa-brain"></i> Guardar en Memoria RAG
-                                    </button>
+                                <div class="field-group">
+                                    <label class="field-label" style="color:var(--llm-c)">
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /></svg>
+                                        Context Size (Tokens)
+                                    </label>
+                                    <input type="number" id="txtContextSize" class="field-num key-param" placeholder="—" />
+                                    <div class="field-hint">4096 (normal) · 2048 (low VRAM)</div>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Batch Size</label>
+                                    <input type="number" id="txtBatchSize" class="field-num" placeholder="—" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">U-Batch Size</label>
+                                    <input type="number" id="txtUBatchSize" class="field-num" placeholder="—" />
+                                </div>
+                                <div class="field-group full">
+                                    <label class="field-label">CPU Threads <span style="margin-left:4px;font-size:.54rem;color:var(--muted)">(vacío = auto)</span></label>
+                                    <input type="number" id="txtThreads" class="field-num" placeholder="Auto" />
                                 </div>
                             </div>
+
+                            <!-- Alert -->
+                            <div class="alert-banner" id="llmAlert"></div>
+
+                        </div>
+
+                        <!-- Actions bar -->
+                        <div class="profile-actions">
+                            <button class="btn btn-ghost" id="btnActivate" onclick="activateSelectedProfile()" disabled>
+                                <div class="btn-spinner" id="activateSpinner" style="border-top-color:var(--ok-c)"></div>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="10 15 15 12 10 9 10 15" />
+                                </svg>
+                                Activar perfil
+                            </button>
+                            <button class="btn btn-amber" id="btnSaveProfile" onclick="saveProfileSettings()" disabled>
+                                <div class="btn-spinner" id="profileSpinner"></div>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                                    <polyline points="17 21 17 13 7 13 7 21" />
+                                    <polyline points="7 3 7 8 15 8" />
+                                </svg>
+                                Guardar ajustes
+                            </button>
                         </div>
                     </div>
+
                 </div>
             </div>
 
-            <!-- ========================================== -->
-            <!-- TAB 2: CONFIGURACIÓN LLM (NUEVO)           -->
-            <!-- ========================================== -->
-            <div class="tab-pane fade" id="llm-pane" role="tabpanel">
-                <div class="row">
-                    <div class="col-md-4">
-                        <h5 class="mb-3"><i class="fa-solid fa-list"></i> Perfiles Disponibles</h5>
-                        <div class="list-group shadow-sm" id="profileList">
-                            <div class="text-center text-muted mt-5"><span class="spinner-border spinner-border-sm"></span> Cargando perfiles...</div>
-                        </div>
-                    </div>
-
-                    <div class="col-md-8">
-                        <div class="card shadow-lg border-secondary">
-                            <div class="card-header bg-dark border-secondary d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0"><i class="fa-solid fa-sliders text-warning"></i> Ajustes del Perfil Seleccionado</h5>
-                                <button class="btn btn-outline-success btn-sm" id="btnActivateProfile" onclick="activateSelectedProfile()" disabled>
-                                    <i class="fa-solid fa-power-off"></i> Activar este Perfil
-                                </button>
-                            </div>
-                            <div class="card-body bg-dark">
-                                <input type="hidden" id="txtProfileId">
-
-                                <div class="row g-3 mb-4">
-                                    <div class="col-md-12">
-                                        <label class="form-label text-muted">Nombre del Perfil</label>
-                                        <input type="text" id="txtProfileName" class="form-control bg-dark text-light border-secondary" readonly>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label text-info" title="Capas enviadas a la VRAM">GPU Layers (VRAM)</label>
-                                        <input type="number" id="txtGpuLayers" class="form-control bg-dark text-light border-secondary">
-                                        <small class="text-muted">Ej: 35 (RTX 4060) | 15 (Quadro T2000)</small>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label text-info">Context Size (Tokens)</label>
-                                        <input type="number" id="txtContextSize" class="form-control bg-dark text-light border-secondary">
-                                        <small class="text-muted">Ej: 4096 (Normal) | 2048 (Low VRAM)</small>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label text-muted">Batch Size</label>
-                                        <input type="number" id="txtBatchSize" class="form-control bg-dark text-light border-secondary">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label text-muted">U-Batch Size</label>
-                                        <input type="number" id="txtUBatchSize" class="form-control bg-dark text-light border-secondary">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label text-muted">CPU Threads</label>
-                                        <input type="number" id="txtThreads" class="form-control bg-dark text-light border-secondary" placeholder="Vacío = Auto">
-                                    </div>
-                                </div>
-
-                                <div id="llmAlertContainer" class="alert" style="display:none; font-size: 0.9rem;"></div>
-
-                                <div class="text-end">
-                                    <button class="btn btn-info" id="btnSaveProfile" onclick="saveProfileSettings()" disabled>
-                                        <i class="fa-solid fa-save"></i> Guardar Ajustes
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        </div><!-- /main-area -->
+    </div><!-- /app -->
+    <!-- Sustituye todo el bloque <script> al final de tu admin.html con este -->
     <script>
-        // ==========================================
-        // LÓGICA TAB 1: ENTRENAMIENTO RAG
-        // ==========================================
+        // ═══════════════════════════════════════════════════════════
+        // TAB SWITCHING
+        // ═══════════════════════════════════════════════════════════
+        function switchTab(t) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.className = 'tab-btn');
+            document.querySelectorAll('.tab-content').forEach(p => p.classList.remove('active'));
+            document.getElementById('tab-' + t).className = 'tab-btn active-' + t;
+            document.getElementById('pane-' + t).classList.add('active');
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // RAG TAB
+        // ═══════════════════════════════════════════════════════════
         let globalJobs = [];
 
         async function loadHistory() {
             try {
-                const response = await fetch('/api/admin/history');
-                const jobs = await response.json();
+                const res = await fetch('/api/admin/history');
+                const jobs = await res.json();
                 globalJobs = jobs;
 
                 const list = document.getElementById('historyList');
-                list.innerHTML = '';
+                document.getElementById('ragCount').textContent = jobs.length;
 
-                jobs.forEach((job, index) => {
+                if (!jobs.length) {
+                    list.innerHTML = `<div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Sin historial disponible</div>`;
+                    return;
+                }
+
+                list.innerHTML = jobs.map((job, i) => {
                     const status = job.status || job.Status;
                     const question = job.question || job.Question;
-                    const createdUtc = job.createdUtc || job.CreatedUtc;
-                    const isSuccess = status === 'Completed';
-                    const icon = isSuccess ? '<i class="fa-solid fa-check text-success"></i>' : '<i class="fa-solid fa-xmark text-danger"></i>';
-
-                    list.innerHTML += `
-                            <div class="list-group-item list-group-item-action bg-dark text-light border-secondary history-item p-3"
-                                 onclick="loadEditor(${index})">
-                                <div class="d-flex w-100 justify-content-between mb-1">
-                                    <strong class="text-truncate" style="max-width: 80%;">${question}</strong>
-                                    <small class="text-muted">${new Date(createdUtc).toLocaleTimeString()}</small>
-                                </div>
-                                <small class="text-muted">${icon} ${status}</small>
-                            </div>
-                        `;
-                });
-            } catch (err) {
-                console.error("Error cargando historial", err);
+                    const created = job.createdUtc || job.CreatedUtc;
+                    const ok = status === 'Completed';
+                    const time = new Date(created).toLocaleTimeString('es-MX', { hour12: false, hour: '2-digit', minute: '2-digit' });
+                    return `
+                <div class="history-item" id="hi-${i}" onclick="loadEditor(${i})">
+                  <div class="hi-top">
+                    <div class="hi-question">${escHtml(question)}</div>
+                    <div class="hi-time">${time}</div>
+                  </div>
+                  <div class="hi-status ${ok ? 'ok' : 'err'}">
+                    <span class="dot"></span>${status}
+                  </div>
+                </div>`;
+                }).join('');
+            } catch (e) {
+                document.getElementById('historyList').innerHTML =
+                    `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>Error al cargar historial</div>`;
             }
         }
 
-        function loadEditor(index) {
-            const job = globalJobs[index];
-            document.getElementById('txtQuestion').value = job.question || job.Question;
-            document.getElementById('txtSql').value = job.sqlText || job.SqlText || '';
+        function loadEditor(i) {
+            const job = globalJobs[i];
+            document.querySelectorAll('.history-item').forEach(el => el.classList.remove('selected'));
+            document.getElementById('hi-' + i).classList.add('selected');
 
             const status = job.status || job.Status;
-            const badge = document.getElementById('statusBadge');
-            badge.innerText = status;
-            badge.className = status === 'Completed' ? 'badge bg-success' : 'badge bg-danger';
-
+            const question = job.question || job.Question;
+            const sql = job.sqlText || job.SqlText || '';
             const error = job.errorText || job.ErrorText;
-            const errContainer = document.getElementById('errorContainer');
+
+            document.getElementById('txtQuestion').value = question;
+            document.getElementById('txtSql').value = sql;
+
+            const badge = document.getElementById('ragStatusBadge');
+            badge.style.display = 'inline-flex';
+            badge.className = 'status-badge ' + (status === 'Completed' ? 'ok' : 'err');
+            badge.textContent = status;
+
+            const errEl = document.getElementById('ragError');
             if (error && error !== 'null') {
-                errContainer.innerText = `Error reportado: ${error}`;
-                errContainer.style.display = 'block';
+                errEl.textContent = `Error reportado: ${error}`;
+                errEl.style.display = 'block';
             } else {
-                errContainer.style.display = 'none';
+                errEl.style.display = 'none';
             }
+
+            const time = new Date(job.createdUtc || job.CreatedUtc).toLocaleString('es-MX', { hour12: false });
+            document.getElementById('ragMeta').textContent = time;
             document.getElementById('btnSave').disabled = false;
         }
 
         async function saveCorrection() {
             const question = document.getElementById('txtQuestion').value;
             const sql = document.getElementById('txtSql').value;
-            if (!question || !sql) return alert("Falta pregunta o SQL.");
+            if (!question || !sql) return;
 
             const btn = document.getElementById('btnSave');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
+            const spin = document.getElementById('ragSpinner');
             btn.disabled = true;
+            spin.style.display = 'block';
 
             try {
-                const response = await fetch('/api/admin/train', {
+                const res = await fetch('/api/admin/train', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ Question: question, SqlText: sql })
                 });
-                if (response.ok) alert("¡Guardado en memoria RAG!");
-                else alert("Error al guardar.");
-            } catch (err) { alert("Error: " + err); }
-            finally { btn.innerHTML = originalText; btn.disabled = false; }
+                const errEl = document.getElementById('ragError');
+                if (res.ok) {
+                    errEl.style.cssText = 'display:block;border-color:color-mix(in srgb,var(--ok-c) 40%,transparent);background:color-mix(in srgb,var(--ok-c) 8%,transparent);color:var(--ok-c)';
+                    errEl.textContent = '✓ Guardado correctamente en memoria RAG';
+                } else {
+                    errEl.style.cssText = 'display:block';
+                    errEl.textContent = 'Error al guardar. Código: ' + res.status;
+                }
+            } catch (e) {
+                document.getElementById('ragError').style.cssText = 'display:block';
+                document.getElementById('ragError').textContent = 'Error de red: ' + e.message;
+            } finally {
+                btn.disabled = false;
+                spin.style.display = 'none';
+            }
         }
 
-        // ==========================================
-        // LÓGICA TAB 2: CONFIGURACIÓN LLM
-        // ==========================================
+        // ═══════════════════════════════════════════════════════════
+        // LLM TAB
+        // ═══════════════════════════════════════════════════════════
         let globalProfiles = [];
-        let selectedProfileId = null;
+        let selectedProfileIndex = -1;
 
         async function loadProfiles() {
             try {
-                const response = await fetch('/api/admin/llm-profiles');
-                globalProfiles = await response.json();
+                const res = await fetch('/api/admin/llm-profiles');
+                globalProfiles = await res.json();
 
                 const list = document.getElementById('profileList');
-                list.innerHTML = '';
 
-                globalProfiles.forEach(p => {
-                    // Normalizar nombres de propiedades
-                    const id = p.id || p.Id;
+                if (!globalProfiles.length) {
+                    list.innerHTML = `<div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
+                Sin perfiles disponibles</div>`;
+                    return;
+                }
+
+                list.innerHTML = globalProfiles.map((p, i) => {
                     const name = p.name || p.Name;
                     const isActive = p.isActive || p.IsActive;
+                    const gpu = p.gpuLayerCount || p.GpuLayerCount || 0;
+                    const ctx = p.contextSize || p.ContextSize || 0;
+                    return `
+                <div class="profile-item ${isActive ? 'is-active' : ''}" data-idx="${i}" onclick="selectProfile(${i})">
+                  <div class="pi-name">
+                    ${escHtml(name)}
+                    ${isActive ? '<span class="pi-active-pill">ACTIVO</span>' : ''}
+                  </div>
+                  <div class="pi-summary">GPU Layers: ${gpu} · Context: ${ctx.toLocaleString('es-MX')}</div>
+                </div>`;
+                }).join('');
 
-                    const activeClass = isActive ? 'active-profile' : '';
-                    const activeBadge = isActive ? '<span class="badge bg-success">ACTIVO</span>' : '';
+                if (selectedProfileIndex >= 0 && selectedProfileIndex < globalProfiles.length) {
+                    const target = document.querySelector(`.profile-item[data-idx="${selectedProfileIndex}"]`);
+                    if (target) target.classList.add('selected');
+                }
 
-                    list.innerHTML += `
-                            <div class="list-group-item list-group-item-action bg-dark text-light border-secondary profile-item p-3 ${activeClass}"
-                                 onclick="selectProfile(${id})">
-                                <div class="d-flex w-100 justify-content-between align-items-center">
-                                    <strong>${name}</strong>
-                                    ${activeBadge}
-                                </div>
-                                <small class="text-muted d-block mt-1">
-                                    GPU Layers: ${p.gpuLayerCount || p.GpuLayerCount || 0} | Context: ${p.contextSize || p.ContextSize || 0}
-                                </small>
-                            </div>
-                        `;
-                });
-            } catch (err) {
-                console.error("Error cargando perfiles LLM", err);
+            } catch (e) {
+                document.getElementById('profileList').innerHTML =
+                    `<div class="empty-state">Error al cargar perfiles</div>`;
             }
         }
 
-        function selectProfile(id) {
-            const profile = globalProfiles.find(p => (p.id || p.Id) === id);
-            if (!profile) return;
+        function selectProfile(idx) {
+            const p = globalProfiles[idx];
+            if (!p) return;
 
-            selectedProfileId = id;
-            const isActive = profile.isActive || profile.IsActive;
+            selectedProfileIndex = idx;
+            const id = p.id ?? p.Id;
+            const isActive = p.isActive || p.IsActive;
+
+            document.querySelectorAll('.profile-item').forEach(el => el.classList.remove('selected'));
+            const target = document.querySelector(`.profile-item[data-idx="${idx}"]`);
+            if (target) target.classList.add('selected');
 
             document.getElementById('txtProfileId').value = id;
-            document.getElementById('txtProfileName').value = profile.name || profile.Name;
-            document.getElementById('txtGpuLayers').value = profile.gpuLayerCount || profile.GpuLayerCount || '';
-            document.getElementById('txtContextSize').value = profile.contextSize || profile.ContextSize || '';
-            document.getElementById('txtBatchSize').value = profile.batchSize || profile.BatchSize || '';
-            document.getElementById('txtUBatchSize').value = profile.uBatchSize || profile.UBatchSize || '';
-            document.getElementById('txtThreads').value = profile.threads || profile.Threads || '';
+            document.getElementById('txtProfileName').value = p.name || p.Name;
+            document.getElementById('txtGpuLayers').value = p.gpuLayerCount ?? p.GpuLayerCount ?? '';
+            document.getElementById('txtContextSize').value = p.contextSize ?? p.ContextSize ?? '';
+            document.getElementById('txtBatchSize').value = p.batchSize ?? p.BatchSize ?? '';
+            document.getElementById('txtUBatchSize').value = p.uBatchSize ?? p.UBatchSize ?? '';
+            document.getElementById('txtThreads').value = p.threads ?? p.Threads ?? '';
 
             document.getElementById('btnSaveProfile').disabled = false;
-            document.getElementById('btnActivateProfile').disabled = isActive; // Disable if already active
+            document.getElementById('btnActivate').disabled = isActive;
+            document.getElementById('vramMeter').style.display = 'block';
 
             hideAlert();
+            updateVram();
+        }
+
+        function updateVram() {
+            const layers = parseInt(document.getElementById('txtGpuLayers').value) || 0;
+            const gb = (layers * 0.18 + 0.5).toFixed(1);
+            const pct = Math.min((parseFloat(gb) / 8) * 100, 100);
+            document.getElementById('vramVal').textContent = gb + ' GB';
+            document.getElementById('vramFill').style.width = pct + '%';
+        }
+
+        // Función segura para leer números enteros desde el input (evita que el 0 se vuelva nulo)
+        function getIntOrNull(elementId) {
+            const val = document.getElementById(elementId).value;
+            if (val === '') return null;
+            const parsed = parseInt(val, 10);
+            return isNaN(parsed) ? null : parsed;
         }
 
         async function saveProfileSettings() {
-            if (!selectedProfileId) return;
+            if (selectedProfileIndex < 0) return;
 
-            const reqBody = {
-                GpuLayerCount: parseInt(document.getElementById('txtGpuLayers').value) || null,
-                ContextSize: parseInt(document.getElementById('txtContextSize').value) || null,
-                BatchSize: parseInt(document.getElementById('txtBatchSize').value) || null,
-                UBatchSize: parseInt(document.getElementById('txtUBatchSize').value) || null,
-                Threads: parseInt(document.getElementById('txtThreads').value) || null
-            };
+            const profileId = globalProfiles[selectedProfileIndex].id ?? globalProfiles[selectedProfileIndex].Id;
 
             const btn = document.getElementById('btnSaveProfile');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>...';
-            btn.disabled = true;
+            const spin = document.getElementById('profileSpinner');
+            btn.disabled = true; spin.style.display = 'block';
+
+            const body = {
+                GpuLayerCount: getIntOrNull('txtGpuLayers'),
+                ContextSize: getIntOrNull('txtContextSize'),
+                BatchSize: getIntOrNull('txtBatchSize'),
+                UBatchSize: getIntOrNull('txtUBatchSize'),
+                Threads: getIntOrNull('txtThreads')
+            };
 
             try {
-                const response = await fetch(`/api/admin/llm-profiles/${selectedProfileId}`, {
+                const res = await fetch(`/api/admin/llm-profiles/${profileId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(reqBody)
+                    body: JSON.stringify(body)
                 });
-
-                if (response.ok) {
-                    showAlert("Ajustes guardados correctamente.", "success");
-                    await loadProfiles(); // Refresh list to show new summary
-                } else {
-                    showAlert("Error al guardar ajustes.", "danger");
-                }
-            } catch (err) { showAlert("Error de red.", "danger"); }
-            finally { btn.innerHTML = originalText; btn.disabled = false; }
-        }
-
-        async function activateSelectedProfile() {
-            if (!selectedProfileId) return;
-
-            const btn = document.getElementById('btnActivateProfile');
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Activando...';
-            btn.disabled = true;
-
-            try {
-                const response = await fetch(`/api/admin/llm-profiles/${selectedProfileId}/activate`, {
-                    method: 'POST'
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    showAlert(`${data.Message} <strong>${data.Warning}</strong>`, "warning");
+                if (res.ok) {
+                    showAlert('ok', '✓ Ajustes guardados correctamente.');
                     await loadProfiles();
-                    document.getElementById('btnActivateProfile').disabled = true; // It's active now
                 } else {
-                    showAlert("Error al activar perfil.", "danger");
-                    btn.disabled = false;
+                    showAlert('err', 'Error al guardar ajustes. Código: ' + res.status);
                 }
-            } catch (err) {
-                showAlert("Error de red.", "danger");
-                btn.disabled = false;
+            } catch (e) {
+                showAlert('err', 'Error de red: ' + e.message);
+            } finally {
+                btn.disabled = false; spin.style.display = 'none';
             }
         }
 
-        function showAlert(msg, type) {
-            const container = document.getElementById('llmAlertContainer');
-            container.className = `alert alert-${type} mt-3 mb-0`;
-            container.innerHTML = msg;
-            container.style.display = 'block';
-        }
-        function hideAlert() {
-            document.getElementById('llmAlertContainer').style.display = 'none';
+        async function activateSelectedProfile() {
+            if (selectedProfileIndex < 0) return;
+
+            const profileId = globalProfiles[selectedProfileIndex].id ?? globalProfiles[selectedProfileIndex].Id;
+
+            const btn = document.getElementById('btnActivate');
+            const spin = document.getElementById('activateSpinner');
+            btn.disabled = true; spin.style.display = 'block';
+
+            try {
+                const res = await fetch(`/api/admin/llm-profiles/${profileId}/activate`, { method: 'POST' });
+
+                if (res.ok) {
+                    // Forzamos el mensaje de advertencia visualmente en el HTML para evitar fallas de lectura del JSON
+                    showAlert('warn', `
+                        <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; color: #f8fafc;">✓ Perfil activado correctamente</div>
+                        <div style="font-size: 0.75rem; color: #fbbf24; opacity: 0.9;">⚠️ IMPORTANTE: Detén y vuelve a ejecutar la API para que LLamaSharp cargue los nuevos pesos en la VRAM.</div>
+                    `);
+                    await loadProfiles();
+                    document.getElementById('btnActivate').disabled = true;
+                } else {
+                    showAlert('err', 'Error al activar perfil.');
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                showAlert('err', 'Error de red: ' + e.message);
+                btn.disabled = false;
+            } finally {
+                spin.style.display = 'none';
+            }
         }
 
-        // Inicialización al cargar la página
-        document.addEventListener("DOMContentLoaded", () => {
+        function showAlert(type, msg) {
+            const el = document.getElementById('llmAlert');
+            el.className = 'alert-banner ' + type;
+            el.innerHTML = msg;
+            el.style.display = 'block';
+        }
+        function hideAlert() {
+            document.getElementById('llmAlert').style.display = 'none';
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // UTILS
+        // ═══════════════════════════════════════════════════════════
+        function escHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // INIT
+        document.addEventListener('DOMContentLoaded', () => {
             loadHistory();
             loadProfiles();
         });
     </script>
+
 </body>
 </html>

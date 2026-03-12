@@ -19,30 +19,37 @@ public class SqliteTrainingStore : ITrainingStore
         await using var conn = new SqliteConnection($"Data Source={_opt.DbPath}");
         await conn.OpenAsync(ct);
 
-        // Requiere UNIQUE(Question) o PK/UNIQUE similar
+        // 🚀 BYPASS DE SQLITE: Usamos UPDATE y luego INSERT condicionado.
+        // Esto evita el error de ON CONFLICT si la tabla se creó originalmente sin el UNIQUE.
         const string q = @"
-INSERT INTO TrainingExamples (Question, Sql, CreatedUtc, LastUsedUtc)
-VALUES (@Question, @Sql, @Now, @Now)
-ON CONFLICT(Question) DO UPDATE SET
-    Sql = excluded.Sql,
-    LastUsedUtc = excluded.LastUsedUtc;";
+            UPDATE TrainingExamples 
+            SET Sql = @Sql, LastUsedUtc = @Now 
+            WHERE Question = @Question;
+
+            INSERT INTO TrainingExamples (Question, Sql, CreatedUtc, LastUsedUtc)
+            SELECT @Question, @Sql, @Now, @Now
+            WHERE NOT EXISTS (SELECT 1 FROM TrainingExamples WHERE Question = @Question);";
 
         await conn.ExecuteAsync(q, new { Question = question, Sql = sql, Now = DateTime.UtcNow });
     }
+
     public async Task InitializeAsync(string sqlitePath, CancellationToken ct)
     {
         using var connection = new SqliteConnection($"Data Source={sqlitePath}");
         await connection.OpenAsync(ct);
 
+        // Mantenemos esto para futuras creaciones desde cero
         var createTableSql = @"
             CREATE TABLE IF NOT EXISTS TrainingExamples (
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                Question TEXT NOT NULL,
+                Question TEXT NOT NULL UNIQUE,
                 Sql TEXT NOT NULL,
                 CreatedUtc DATETIME NOT NULL,
                 LastUsedUtc DATETIME NOT NULL,
                 UseCount INTEGER DEFAULT 0
-            );";
+            );
+            
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_TrainingExamples_Question ON TrainingExamples(Question);";
 
         await connection.ExecuteAsync(createTableSql);
     }

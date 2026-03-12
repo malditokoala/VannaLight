@@ -131,7 +131,26 @@ public class SqliteJobStore : IJobStore
             ORDER BY CreatedUtc DESC 
             LIMIT @Limit";
 
-        return await conn.QueryAsync<QuestionJob>(sql, new { Limit = limit });
+        // 1. Obtenemos los datos de SQLite de forma dinámica (como texto)
+        var rawJobs = await conn.QueryAsync<dynamic>(sql, new { Limit = limit });
+
+        var result = new List<QuestionJob>();
+
+        // 2. Parseamos manualmente los strings a los tipos fuertemente tipados de C#
+        foreach (var raw in rawJobs)
+        {
+            result.Add(new QuestionJob
+            {
+                JobId = Guid.Parse((string)raw.JobId),
+                Question = (string)raw.Question,
+                SqlText = raw.SqlText != null ? (string)raw.SqlText : null,
+                Status = (string)raw.Status,
+                ErrorText = raw.ErrorText != null ? (string)raw.ErrorText : null,
+                CreatedUtc = DateTime.Parse((string)raw.CreatedUtc)
+            });
+        }
+
+        return result;
     }
 
 }

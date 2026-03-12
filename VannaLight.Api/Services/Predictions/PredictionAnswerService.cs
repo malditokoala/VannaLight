@@ -1,4 +1,6 @@
-﻿using System.Threading;
+﻿using System;
+using System.Globalization;
+using System.Threading;
 using System.Threading.Tasks;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.Models;
@@ -7,37 +9,28 @@ namespace VannaLight.Api.Services.Predictions;
 
 public class PredictionAnswerService : IPredictionAnswerService
 {
-    private readonly ILlmClient _llm;
-
-    public PredictionAnswerService(ILlmClient llm)
+    // Cambiamos a determinístico para evitar que el LLM alucine fechas y asegurar
+    // el tono exacto que solicitaste (claro, directo y advirtiendo el periodo).
+    public Task<string> HumanizeAsync(PredictionIntent intent, CancellationToken ct)
     {
-        _llm = llm;
-    }
+        if (!intent.IsPredictionRequest)
+            return Task.FromResult("No detecté una solicitud de pronóstico válida.");
 
-    public async Task<string> HumanizeAsync(PredictionIntent intent, CancellationToken ct)
-    {
+        // Si el router detectó que piden "hoy" o "esta semana", devolvemos la razón.
+        if (!intent.IsSupportedByCurrentModel)
+            return Task.FromResult($"No puedo procesar esta solicitud: {intent.UnsupportedReason ?? "Periodo no soportado por el modelo."}");
+
         if (!intent.IsSuccess || intent.PredictedValue == null)
-            return $"No pude generar un pronóstico confiable para '{intent.EntityName}'. Asegúrate de que el producto exista en el historial.";
+            return Task.FromResult($"No pude generar el pronóstico. {intent.UnsupportedReason}");
 
-        var prompt = $@"<|im_start|>system
-Eres un analista de datos. Redacta el pronóstico de ML.NET para el usuario.
-Datos:
-- Producto: {intent.EntityName}
-- Meses a futuro: {intent.Horizon}
-- Pronóstico: {intent.PredictedValue:N0} unidades
-- Confianza: {intent.ConfidenceScore:P1}
-- Perfil: {intent.UserTechnicalLevel}
+        var qty = Math.Round(intent.PredictedValue.Value, 0);
+        var period = intent.ForecastPeriodLabel ?? "el próximo mes";
 
-Si el perfil es 'Operativo', sé muy directo con el número. Si es 'Gerencial', usa tono ejecutivo. NUNCA inventes números. Máximo 2 oraciones.
-<|im_end|>
-<|im_start|>user
-Redacta el pronóstico.
-<|im_end|>
-<|im_start|>assistant
-";
+        // Tono estricto y explícito solicitado
+        var msg = $"Pronóstico de scrap para el N/P {intent.EntityName} en {period}: {qty.ToString("N0", new CultureInfo("es-MX"))} piezas estimadas. " +
+                  "Este valor corresponde al mes calendario futuro completo, no a hoy ni al acumulado actual.";
 
-        var response = await _llm.CompleteAsync(prompt, ct);
-        intent.HumanizedMessage = response.Trim();
-        return intent.HumanizedMessage;
+        intent.HumanizedMessage = msg;
+        return Task.FromResult(msg);
     }
 }

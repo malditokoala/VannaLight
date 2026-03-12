@@ -9,6 +9,8 @@ namespace VannaLight.Core.Models;
 /// </summary>
 public sealed class LlmRuntimeProfile
 {
+    public int Id { get; set; }              
+    public bool IsActive { get; set; }
     public string Name { get; set; } = "Default";
     public int? GpuLayerCount { get; set; }
     public uint? ContextSize { get; set; }
