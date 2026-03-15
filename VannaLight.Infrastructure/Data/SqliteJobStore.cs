@@ -1,6 +1,7 @@
 ﻿using Dapper;
 using Microsoft.Data.Sqlite;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using VannaLight.Core.Abstractions;
@@ -15,142 +16,229 @@ public class SqliteJobStore : IJobStore
 
     public SqliteJobStore(RuntimeDbOptions options)
     {
-        _connString = $"Data Source={options.DbPath};";
+        _connString = $"Data Source={options.DbPath}";
+        EnsureColumnsExist();
     }
 
-    public async Task<Guid> CreateJobAsync(string userId, string role, string question, CancellationToken ct = default)
+    private void EnsureColumnsExist()
     {
-        var jobId = Guid.NewGuid();
-        var now = DateTime.UtcNow;
-
         using var conn = new SqliteConnection(_connString);
-        await conn.OpenAsync(ct);
+        conn.Open();
 
-        const string sql = @"
-            INSERT INTO QuestionJobs (JobId, UserId, Role, Question, Status, CreatedUtc, UpdatedUtc)
-            VALUES (@JobId, @UserId, @Role, @Question, @Status, @CreatedUtc, @UpdatedUtc)";
+        TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN VerificationStatus TEXT DEFAULT 'Pending';");
+        TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN FeedbackComment TEXT;");
+        TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN Mode TEXT DEFAULT 'Data';");
+    }
 
-        await conn.ExecuteAsync(sql, new
+    private static void TryAddColumn(SqliteConnection conn, string sql)
+    {
+        try
         {
-            JobId = jobId.ToString(),
-            UserId = userId,
-            Role = role,
-            Question = question,
-            Status = "Pending",
-            CreatedUtc = now.ToString("O"),
-            UpdatedUtc = now.ToString("O")
-        });
+            conn.Execute(sql);
+        }
+        catch (SqliteException ex) when (ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
+        {
+            // OK: la columna ya existe
+        }
+    }
 
+    public async Task<Guid> CreateJobAsync(
+        string userId,
+        string role,
+        string question,
+        string mode = "Data",
+        CancellationToken ct = default)
+    {
+        using var conn = new SqliteConnection(_connString);
+        var jobId = Guid.NewGuid();
+
+        var command = new CommandDefinition(
+            @"INSERT INTO QuestionJobs
+              (JobId, UserId, Role, Question, Status, Mode, CreatedUtc, UpdatedUtc)
+              VALUES
+              (@Id, @UserId, @Role, @Question, 'Queued', @Mode, DATETIME('now'), DATETIME('now'))",
+            new
+            {
+                Id = jobId.ToString(),
+                UserId = userId,
+                Role = role,
+                Question = question,
+                Mode = mode
+            },
+            cancellationToken: ct);
+
+        await conn.ExecuteAsync(command);
         return jobId;
     }
 
     public async Task UpdateStatusAsync(Guid jobId, string status, CancellationToken ct = default)
     {
         using var conn = new SqliteConnection(_connString);
-        await conn.OpenAsync(ct);
 
-        const string sql = "UPDATE QuestionJobs SET Status = @Status, UpdatedUtc = @UpdatedUtc WHERE JobId = @JobId";
-        await conn.ExecuteAsync(sql, new { JobId = jobId.ToString(), Status = status, UpdatedUtc = DateTime.UtcNow.ToString("O") });
+        var command = new CommandDefinition(
+            "UPDATE QuestionJobs SET Status = @Status, UpdatedUtc = DATETIME('now') WHERE JobId = @Id",
+            new
+            {
+                Status = status,
+                Id = jobId.ToString()
+            },
+            cancellationToken: ct);
+
+        await conn.ExecuteAsync(command);
     }
 
     public async Task SetResultAsync(Guid jobId, string resultJson, CancellationToken ct = default)
     {
         using var conn = new SqliteConnection(_connString);
-        await conn.OpenAsync(ct);
 
-        const string sql = "UPDATE QuestionJobs SET Status = 'Completed', ResultJson = @ResultJson, UpdatedUtc = @UpdatedUtc WHERE JobId = @JobId";
-        await conn.ExecuteAsync(sql, new { JobId = jobId.ToString(), ResultJson = resultJson, UpdatedUtc = DateTime.UtcNow.ToString("O") });
+        var command = new CommandDefinition(
+            "UPDATE QuestionJobs SET Status = 'Completed', ResultJson = @Result, UpdatedUtc = DATETIME('now') WHERE JobId = @Id",
+            new
+            {
+                Result = resultJson,
+                Id = jobId.ToString()
+            },
+            cancellationToken: ct);
+
+        await conn.ExecuteAsync(command);
     }
 
     public async Task SetErrorAsync(Guid jobId, string errorText, string status = "Failed", CancellationToken ct = default)
     {
         using var conn = new SqliteConnection(_connString);
-        await conn.OpenAsync(ct);
 
-        const string sql = "UPDATE QuestionJobs SET Status = @Status, ErrorText = @ErrorText, UpdatedUtc = @UpdatedUtc WHERE JobId = @JobId";
-        await conn.ExecuteAsync(sql, new { JobId = jobId.ToString(), Status = status, ErrorText = errorText, UpdatedUtc = DateTime.UtcNow.ToString("O") });
+        var command = new CommandDefinition(
+            "UPDATE QuestionJobs SET Status = @Status, ErrorText = @Error, UpdatedUtc = DATETIME('now') WHERE JobId = @Id",
+            new
+            {
+                Status = status,
+                Error = errorText,
+                Id = jobId.ToString()
+            },
+            cancellationToken: ct);
+
+        await conn.ExecuteAsync(command);
     }
 
-    public async Task UpdateJobAsync(Guid jobId, string status, string? sqlText, string? resultJson, string? errorText, CancellationToken ct = default)
+    public async Task UpdateJobAsync(
+        Guid jobId,
+        string status,
+        string? sqlText,
+        string? resultJson,
+        string? errorText,
+        CancellationToken ct = default)
     {
         using var conn = new SqliteConnection(_connString);
-        await conn.OpenAsync(ct);
 
-        const string sql = @"
-            UPDATE QuestionJobs 
-            SET Status = @Status, SqlText = @SqlText, ResultJson = @ResultJson, ErrorText = @ErrorText, UpdatedUtc = @UpdatedUtc
-            WHERE JobId = @JobId";
+        var command = new CommandDefinition(
+            @"UPDATE QuestionJobs
+              SET Status = @Status,
+                  SqlText = @Sql,
+                  ResultJson = @Json,
+                  ErrorText = @Error,
+                  UpdatedUtc = DATETIME('now')
+              WHERE JobId = @Id",
+            new
+            {
+                Status = status,
+                Sql = sqlText,
+                Json = resultJson,
+                Error = errorText,
+                Id = jobId.ToString()
+            },
+            cancellationToken: ct);
 
-        await conn.ExecuteAsync(sql, new
-        {
-            JobId = jobId.ToString(),
-            Status = status,
-            SqlText = sqlText,
-            ResultJson = resultJson,
-            ErrorText = errorText,
-            UpdatedUtc = DateTime.UtcNow.ToString("O")
-        });
+        await conn.ExecuteAsync(command);
     }
 
     public async Task<QuestionJob?> GetJobAsync(Guid jobId, CancellationToken ct = default)
     {
         using var conn = new SqliteConnection(_connString);
-        await conn.OpenAsync(ct);
 
-        const string sql = "SELECT * FROM QuestionJobs WHERE JobId = @JobId";
-        var raw = await conn.QuerySingleOrDefaultAsync<dynamic>(sql, new { JobId = jobId.ToString() });
+        var command = new CommandDefinition(
+            "SELECT JobId, Question, SqlText, Status, ErrorText, VerificationStatus, FeedbackComment, Mode, CreatedUtc FROM QuestionJobs WHERE JobId = @Id",
+            new { Id = jobId.ToString() },
+            cancellationToken: ct);
 
-        if (raw == null) return null;
-
-        return new QuestionJob
-        {
-            JobId = Guid.Parse(raw.JobId),
-            UserId = raw.UserId,
-            Role = raw.Role,
-            Question = raw.Question,
-            Status = raw.Status,
-            SqlText = raw.SqlText,  // Ahora esto vendrá lleno gracias al cambio en el Worker
-            ErrorText = raw.ErrorText,
-            ResultJson = raw.ResultJson,
-            // Ajuste de casteo para SQLite (int64 -> int32)
-            Attempt = raw.Attempt != null ? (int)(long)raw.Attempt : 0,
-            TrainingExampleSaved = raw.TrainingExampleSaved != null && (long)raw.TrainingExampleSaved == 1,
-            CreatedUtc = DateTime.Parse(raw.CreatedUtc),
-            UpdatedUtc = DateTime.Parse(raw.UpdatedUtc)
-        };
+        var raw = await conn.QuerySingleOrDefaultAsync<QuestionJobRow>(command);
+        return raw == null ? null : MapToJob(raw);
     }
 
-    public async Task<IEnumerable<QuestionJob>> GetRecentJobsAsync(int limit = 20, CancellationToken ct = default)
+    public async Task<IEnumerable<QuestionJob>> GetRecentJobsAsync(int limit = 20, string? mode = null, CancellationToken ct = default)
     {
         using var conn = new SqliteConnection(_connString);
         await conn.OpenAsync(ct);
 
-        const string sql = @"
-            SELECT JobId, Question, SqlText, Status, ErrorText, CreatedUtc 
-            FROM QuestionJobs 
-            ORDER BY CreatedUtc DESC 
-            LIMIT @Limit";
+        var command = new CommandDefinition(
+            @"SELECT JobId, Question, SqlText, Status, ErrorText, VerificationStatus, FeedbackComment, Mode, CreatedUtc
+              FROM QuestionJobs
+              WHERE (@Mode IS NULL OR Mode = @Mode)
+              ORDER BY CreatedUtc DESC
+              LIMIT @Limit",
+            new
+            {
+                Limit = limit,
+                Mode = mode
+            },
+            cancellationToken: ct);
 
-        // 1. Obtenemos los datos de SQLite de forma dinámica (como texto)
-        var rawJobs = await conn.QueryAsync<dynamic>(sql, new { Limit = limit });
-
+        var rawJobs = await conn.QueryAsync<QuestionJobRow>(command);
         var result = new List<QuestionJob>();
 
-        // 2. Parseamos manualmente los strings a los tipos fuertemente tipados de C#
         foreach (var raw in rawJobs)
-        {
-            result.Add(new QuestionJob
-            {
-                JobId = Guid.Parse((string)raw.JobId),
-                Question = (string)raw.Question,
-                SqlText = raw.SqlText != null ? (string)raw.SqlText : null,
-                Status = (string)raw.Status,
-                ErrorText = raw.ErrorText != null ? (string)raw.ErrorText : null,
-                CreatedUtc = DateTime.Parse((string)raw.CreatedUtc)
-            });
-        }
+            result.Add(MapToJob(raw));
 
         return result;
     }
 
+    public async Task<bool> UpdateFeedbackAsync(Guid jobId, string verificationStatus, string? comment = null, CancellationToken ct = default)
+    {
+        using var conn = new SqliteConnection(_connString);
+
+        var command = new CommandDefinition(
+            @"UPDATE QuestionJobs
+              SET VerificationStatus = @Status,
+                  FeedbackComment = @Comment,
+                  UpdatedUtc = DATETIME('now')
+              WHERE JobId = @Id",
+            new
+            {
+                Id = jobId.ToString(),
+                Status = verificationStatus,
+                Comment = comment
+            },
+            cancellationToken: ct);
+
+        var rows = await conn.ExecuteAsync(command);
+        return rows > 0;
+    }
+
+    private static QuestionJob MapToJob(QuestionJobRow raw)
+    {
+        return new QuestionJob
+        {
+            JobId = Guid.TryParse(raw.JobId, out var parsedId) ? parsedId : Guid.Empty,
+            Question = raw.Question ?? string.Empty,
+            SqlText = raw.SqlText,
+            Status = raw.Status ?? "Unknown",
+            Mode = raw.Mode ?? "Data",
+            ErrorText = raw.ErrorText,
+            VerificationStatus = raw.VerificationStatus ?? "Pending",
+            FeedbackComment = raw.FeedbackComment,
+            CreatedUtc = DateTime.TryParse(raw.CreatedUtc, out var parsedDate) ? parsedDate : DateTime.MinValue
+        };
+    }
+
+    private sealed class QuestionJobRow
+    {
+        public string JobId { get; set; } = string.Empty;
+        public string? Question { get; set; }
+        public string? SqlText { get; set; }
+        public string? Status { get; set; }
+        public string? ErrorText { get; set; }
+        public string? VerificationStatus { get; set; }
+        public string? FeedbackComment { get; set; }
+        public string? Mode { get; set; }
+        public string CreatedUtc { get; set; } = string.Empty;
+    }
 }

@@ -10,12 +10,19 @@ public class QuestionJob
     public string UserId { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;
     public string Question { get; set; } = string.Empty;
-    public string Status { get; set; } = "Queued";
-    public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
-    public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
+    public string Status { get; set; } = string.Empty;
+
+    // --- NUEVO: Etiqueta para separar SQL (Data) de ML (Predict) ---
+    public string Mode { get; set; } = "Data";
+
     public string? SqlText { get; set; }
     public string? ErrorText { get; set; }
     public string? ResultJson { get; set; }
     public int Attempt { get; set; }
-    public bool TrainingExampleSaved { get; set; }
+    public int TrainingExampleSaved { get; set; }
+    public DateTime CreatedUtc { get; set; }
+    public DateTime UpdatedUtc { get; set; }
+
+    public string VerificationStatus { get; set; } = "Pending";
+    public string? FeedbackComment { get; set; }
 }

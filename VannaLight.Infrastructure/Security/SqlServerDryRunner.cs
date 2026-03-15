@@ -5,7 +5,12 @@ namespace VannaLight.Infrastructure.Security;
 
 public class SqlServerDryRunner : ISqlDryRunner
 {
-    public async Task<(bool Ok, string? Error)> DryRunAsync(string sqlServerConnectionString, string sql, CancellationToken ct)
+    private const int DryRunTimeoutSeconds = 5;
+
+    public async Task<(bool Ok, string? Error)> DryRunAsync(
+        string sqlServerConnectionString,
+        string sql,
+        CancellationToken ct)
     {
         try
         {
@@ -13,8 +18,9 @@ public class SqlServerDryRunner : ISqlDryRunner
             await connection.OpenAsync(ct);
 
             await using var command = connection.CreateCommand();
-            // SET NOEXEC ON le dice a SQL Server que compile la consulta, valide la sintaxis 
-            // y los nombres de objetos, pero que NO la ejecute.
+            command.CommandTimeout = DryRunTimeoutSeconds;
+
+            // Compila, valida sintaxis y objetos, pero no ejecuta
             command.CommandText = $"SET NOEXEC ON;\n{sql}\nSET NOEXEC OFF;";
 
             await command.ExecuteNonQueryAsync(ct);

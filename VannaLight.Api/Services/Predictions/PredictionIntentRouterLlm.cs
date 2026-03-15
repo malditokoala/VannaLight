@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using VannaLight.Core.Abstractions;
@@ -7,6 +8,9 @@ using VannaLight.Core.Models;
 
 namespace VannaLight.Api.Services.Predictions;
 
+/// <summary>
+/// Enrutador semántico que discrimina entre consultas SQL y Predicciones de ML.
+/// </summary>
 public class PredictionIntentRouterLlm : IPredictionIntentRouter
 {
     private readonly ILlmClient _llm;
@@ -20,21 +24,27 @@ public class PredictionIntentRouterLlm : IPredictionIntentRouter
     {
         var prompt = $@"
 <|im_start|>system
-Eres un enrutador analítico de manufactura. Tu tarea es extraer la intención de predicción de la pregunta del usuario.
+Eres el enrutador analítico de VannaLight.
+Tu objetivo es discriminar entre consultas de DATOS REALES y PRONÓSTICOS FUTUROS (ML).
 
-REGLAS ESTRICTAS DE TIEMPO (MUY IMPORTANTE):
-1. El modelo actual de ML.NET **SOLO** soporta pronósticos de MESES CALENDARIO FUTUROS (ej. 'próximo mes', 'en 2 meses').
-2. Si el usuario pide predicciones para 'hoy', 'ayer', 'esta semana', 'este mes', 'acumulado', 'en curso' o 'al día de hoy', DEBES marcar ""IsSupportedByCurrentModel"": false.
-3. Si lo rechazas, explica el motivo en ""UnsupportedReason"" (Ej. 'El modelo solo predice meses futuros completos, no días ni acumulados en curso.').
+REGLA DE ORO:
+- DATOS EN CURSO O PASADOS -> IsPredictionRequest = false. Ejemplos: ""hoy"", ""ayer"", ""este turno"", ""cuánto lleva"", ""acumulado"", ""actual"".
+- PRONÓSTICOS FUTUROS -> IsPredictionRequest = true. Ejemplos: ""pronóstico cierre de turno"", ""próximo turno"", ""mañana"", ""próximo mes"".
 
-Devuelve SOLO un JSON válido con esta estructura:
+Si la pregunta es de pronóstico futuro para un Número de Parte, debes mapearla a uno de estos ""PredictionTarget"":
+- ""EndOfCurrentShift"" (ej. cierre de turno actual, final de turno)
+- ""NextShift"" (ej. próximo turno)
+- ""Tomorrow"" (ej. pronóstico de mañana)
+- ""NextMonth"" (ej. próximo mes completo)
+
+Si el usuario pide predecir periodos ambiguos o en curso, marca IsPredictionRequest = false y pon en UnsupportedReason: ""Datos en curso o periodo ambiguo. Se procesará vía SQL normal.""
+
+Retorna SOLO un JSON válido:
 {{
   ""IsPredictionRequest"": true/false,
-  ""EntityName"": ""Número de parte exacto o null"",
-  ""Horizon"": (int) meses a predecir, 1 por defecto,
-  ""UserTechnicalLevel"": ""Operativo"" o ""Gerencial"",
-  ""IsSupportedByCurrentModel"": true/false,
-  ""UnsupportedReason"": ""Motivo del rechazo o null""
+  ""EntityName"": ""Número de Parte o null"",
+  ""PredictionTarget"": ""EndOfCurrentShift, NextShift, Tomorrow o NextMonth"",
+  ""UnsupportedReason"": ""Motivo de rechazo o null""
 }}
 <|im_end|>
 <|im_start|>user
@@ -43,6 +53,7 @@ Devuelve SOLO un JSON válido con esta estructura:
 <|im_start|>assistant
 {{";
 
+        // Ejecución de la inferencia
         var rawResponse = "{" + await _llm.CompleteAsync(prompt, ct);
         var cleanJson = ExtractValidJson(rawResponse);
 
@@ -52,17 +63,24 @@ Devuelve SOLO un JSON válido con esta estructura:
             return JsonSerializer.Deserialize<PredictionIntent>(cleanJson, options)
                    ?? new PredictionIntent { IsPredictionRequest = false };
         }
-        catch
+        catch (Exception)
         {
-            return new PredictionIntent { IsPredictionRequest = false };
+            // En caso de fallo crítico del LLM, devolvemos un objeto de intención fallida seguro
+            return new PredictionIntent
+            {
+                IsPredictionRequest = false,
+                UnsupportedReason = "Error al interpretar la intención de la pregunta."
+            };
         }
     }
 
+    /// <summary>
+    /// Utiliza Regex para garantizar la extracción de un JSON válido incluso si el LLM agrega ruido.
+    /// </summary>
     private string ExtractValidJson(string text)
     {
-        int start = text.IndexOf('{');
-        int end = text.LastIndexOf('}');
-        if (start == -1 || end == -1 || end < start) return "{}";
-        return text.Substring(start, end - start + 1);
+        if (string.IsNullOrWhiteSpace(text)) return "{}";
+        var match = Regex.Match(text, @"\{[\s\S]*\}");
+        return match.Success ? match.Value : "{}";
     }
 }

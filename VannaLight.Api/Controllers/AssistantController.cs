@@ -1,9 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
+using System;
+using System.Threading.Tasks;
 using VannaLight.Api.Contracts;
 using VannaLight.Api.Hubs;
 using VannaLight.Api.Services;
 using VannaLight.Core.Abstractions;
+using VannaLight.Core.Models;
 
 namespace VannaLight.Api.Controllers;
 
@@ -56,12 +59,22 @@ public class AssistantController(
         }
 
         // --- 2) FLUJO NORMAL: ENCOLAR TRABAJO ---
-        var jobId = await jobStore.CreateJobAsync(userId, "User", cleanQuestion);
+        // FIX: Guardamos explícitamente el "Mode" en la base de datos para no mezclar
+        var jobId = await jobStore.CreateJobAsync(userId, "User", cleanQuestion, request.Mode.ToString());
 
         var workItem = new AskWorkItem(jobId, cleanQuestion, userId, connectionId, request.Mode);
         await queue.EnqueueAsync(workItem);
 
         return Accepted(new { JobId = jobId, Status = "Queued", Mode = request.Mode.ToString() });
+    }
+
+    // --- NUEVO: Endpoint para cargar el historial en el Chat separando SQL y ML ---
+    [HttpGet("history")]
+    public async Task<IActionResult> GetHistoryAsync([FromQuery] string mode = "Data", CancellationToken ct = default)
+    {
+        // El frontend de chat pasará '?mode=Data' o '?mode=Predict' según el tab activo
+        var jobs = await jobStore.GetRecentJobsAsync(50, mode, ct);
+        return Ok(jobs);
     }
 
     [HttpGet("status/{jobId:guid}")]

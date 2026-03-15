@@ -58,10 +58,10 @@
                 content: '';
                 position: fixed;
                 inset: 0;
-                background-image: radial-gradient(circle,rgba(255,255,255,.045) 1px,transparent 1px);
                 background-size: 28px 28px;
+                z-index: 0;
+                background-image: radial-gradient(circle,rgba(255,255,255,.045) 1px,transparent 1px);
                 pointer-events: none;
-                z-index: 0
             }
 
         .app {
@@ -322,7 +322,7 @@
             overflow-y: auto
         }
 
-        /* MODE CONTEXT BANNER */
+        /* MODE CONTEXT */
         .mode-context {
             border-radius: var(--radius);
             border: 1px solid color-mix(in srgb,var(--a) 28%,transparent);
@@ -683,476 +683,25 @@
                 transition: background .4s
             }
 
-        .view-toggle {
-            display: none;
-            gap: 2px;
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 3px
-        }
-
-        .vtog-btn {
-            padding: 5px 12px;
-            border: none;
-            border-radius: 4px;
-            background: transparent;
-            color: var(--muted);
-            font-family: var(--mono);
-            font-size: .6rem;
-            letter-spacing: .06em;
-            cursor: pointer;
-            transition: background .15s,color .15s
-        }
-
-            .vtog-btn.active {
-                background: var(--border2);
-                color: var(--text)
-            }
-
-        /* ═══════════════════════════════════════════
-            DOCS RESULT — REDISEÑO COMPLETO
-            ═══════════════════════════════════════════ */
-
-        /* Outer layout: contenido centrado, máx 680px */
-        .docs-result-wrap {
-            display: grid;
-            grid-template-columns: 1fr min(680px, 100%) 1fr;
-            gap: 0;
-        }
-
-            .docs-result-wrap > * {
-                grid-column: 2;
-            }
-
-        /* Tarjeta principal */
-        .docs-card-v2 {
+        /* DOCS CARD STYLES */
+        .docs-card {
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        /* Barra superior de color con ícono y título del documento */
-        .docs-card-header {
-            background: linear-gradient(135deg, color-mix(in srgb, var(--docs-c) 12%, var(--panel)), var(--panel));
-            border-bottom: 1px solid color-mix(in srgb, var(--docs-c) 20%, var(--border));
-            padding: 14px 20px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            position: relative;
-        }
-
-            .docs-card-header::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                height: 2px;
-                background: linear-gradient(90deg, var(--docs-c), transparent 60%);
-            }
-
-        .docs-hdr-icon {
-            width: 32px;
-            height: 32px;
-            border-radius: 6px;
-            background: color-mix(in srgb, var(--docs-c) 18%, transparent);
-            border: 1px solid color-mix(in srgb, var(--docs-c) 35%, transparent);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-
-            .docs-hdr-icon svg {
-                width: 16px;
-                height: 16px;
-                stroke: var(--docs-c);
-            }
-
-        .docs-hdr-meta {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .docs-hdr-title {
-            font-family: var(--cond);
-            font-size: .95rem;
-            font-weight: 700;
-            color: var(--docs-c);
-            letter-spacing: .03em;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .docs-hdr-sub {
-            font-family: var(--mono);
-            font-size: .55rem;
-            color: var(--muted);
-            letter-spacing: .1em;
-            margin-top: 2px;
-        }
-
-        .docs-hdr-badge {
-            font-family: var(--mono);
-            font-size: .55rem;
-            padding: 2px 8px;
-            border-radius: 3px;
-            background: color-mix(in srgb, var(--docs-c) 12%, transparent);
-            border: 1px solid color-mix(in srgb, var(--docs-c) 25%, transparent);
-            color: var(--docs-c);
-            letter-spacing: .08em;
-            flex-shrink: 0;
-        }
-
-        /* KPI highlight — valores numéricos importantes */
-        .docs-kpi-row {
-            display: flex;
-            gap: 1px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .docs-kpi-cell {
-            flex: 1;
-            padding: 18px 20px;
-            background: color-mix(in srgb, var(--docs-c) 4%, var(--bg));
-            position: relative;
-            text-align: center;
-        }
-
-            .docs-kpi-cell + .docs-kpi-cell {
-                border-left: 1px solid var(--border);
-            }
-
-        .docs-kpi-label {
-            font-family: var(--mono);
-            font-size: .56rem;
-            letter-spacing: .12em;
-            color: var(--muted);
-            text-transform: uppercase;
-            margin-bottom: 6px;
-        }
-
-        .docs-kpi-value {
-            font-family: var(--cond);
-            font-size: 2.2rem;
-            font-weight: 800;
-            color: var(--docs-c);
-            line-height: 1;
-            letter-spacing: -.01em;
-        }
-
-        .docs-kpi-unit {
-            font-family: var(--mono);
-            font-size: .65rem;
-            color: var(--muted);
-            margin-top: 4px;
-        }
-
-        /* Grid de campos */
-        .docs-fields-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 0;
-        }
-
-        .docs-field-v2 {
-            padding: 13px 20px;
-            border-bottom: 1px solid var(--border);
-            border-right: 1px solid var(--border);
-            transition: background .15s;
-        }
-
-            .docs-field-v2:nth-child(even) {
-                border-right: none;
-            }
-
-            .docs-field-v2:hover {
-                background: color-mix(in srgb, var(--docs-c) 3%, var(--panel));
-            }
-
-            /* Si hay número impar, último ocupa full ancho */
-            .docs-field-v2.full-width {
-                grid-column: 1 / -1;
-                border-right: none;
-            }
-
-        .docs-field-key-v2 {
-            font-family: var(--mono);
-            font-size: .58rem;
-            letter-spacing: .1em;
-            color: var(--muted);
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
-
-        .docs-field-val-v2 {
+            border-radius: var(--radius);
+            padding: 20px;
             font-family: var(--sans);
-            font-size: .9rem;
-            font-weight: 500;
+            font-size: 0.95rem;
+            line-height: 1.6;
             color: var(--text);
-            line-height: 1.4;
+            animation: fadeUp .4s ease-out;
+            border-left: 3px solid var(--docs-c);
         }
 
-        /* Sección de texto libre / párrafo */
-        .docs-prose {
-            padding: 18px 20px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .docs-prose-label {
-            font-family: var(--mono);
-            font-size: .56rem;
-            letter-spacing: .12em;
-            color: var(--muted);
-            text-transform: uppercase;
-            margin-bottom: 8px;
-        }
-
-        .docs-prose-text {
-            font-family: var(--sans);
-            font-size: .88rem;
-            color: var(--dim);
-            line-height: 1.75;
-        }
-
-        /* Footer de la tarjeta */
-        .docs-card-footer {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 8px 16px;
-            background: var(--panel);
-        }
-
-        .docs-footer-src {
-            font-family: var(--mono);
-            font-size: .56rem;
-            color: var(--muted);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-            .docs-footer-src::before {
-                content: '';
-                width: 5px;
-                height: 5px;
-                border-radius: 50%;
-                background: var(--docs-c);
-                box-shadow: 0 0 6px var(--docs-c);
-            }
-
-        /* Confidence bar — embedded dentro del footer */
-        .docs-conf-inline {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .docs-conf-label-sm {
-            font-family: var(--mono);
-            font-size: .54rem;
-            color: var(--muted);
-            letter-spacing: .08em;
-            white-space: nowrap;
-        }
-
-        .docs-conf-bg {
-            width: 80px;
-            height: 3px;
-            background: var(--border2);
-            border-radius: 2px;
-            overflow: hidden;
-        }
-
-        .docs-conf-fill {
-            height: 100%;
-            background: var(--docs-c);
-            border-radius: 2px;
-            box-shadow: 0 0 6px var(--docs-c);
-            transition: width .8s cubic-bezier(.16,1,.3,1);
-        }
-
-        .docs-conf-pct {
-            font-family: var(--mono);
-            font-size: .58rem;
-            color: var(--docs-c);
-            white-space: nowrap;
-            min-width: 30px;
-            text-align: right;
-        }
-
-        /* Texto puro (fallback) */
-        .docs-prose-only {
-            padding: 24px 28px;
-        }
-
-            .docs-prose-only pre {
-                font-family: var(--sans);
-                font-size: .9rem;
-                line-height: 1.8;
-                color: var(--dim);
-                white-space: pre-wrap;
-                word-break: break-word;
-            }
-
-        /* Fade-in stagger en campos */
-        .docs-field-v2 {
-            animation: fieldIn .25s ease-out both;
-        }
-
-            .docs-field-v2:nth-child(1) {
-                animation-delay: .03s
-            }
-
-            .docs-field-v2:nth-child(2) {
-                animation-delay: .06s
-            }
-
-            .docs-field-v2:nth-child(3) {
-                animation-delay: .09s
-            }
-
-            .docs-field-v2:nth-child(4) {
-                animation-delay: .12s
-            }
-
-            .docs-field-v2:nth-child(5) {
-                animation-delay: .15s
-            }
-
-            .docs-field-v2:nth-child(6) {
-                animation-delay: .18s
-            }
-
-            .docs-field-v2:nth-child(7) {
-                animation-delay: .21s
-            }
-
-            .docs-field-v2:nth-child(8) {
-                animation-delay: .24s
-            }
-
-        @keyframes fieldIn {
-            from {
-                opacity: 0;
-                transform: translateX(-6px)
-            }
-
-            to {
-                opacity: 1;
-                transform: translateX(0)
-            }
-        }
-
-        /* ═══════════════════════════════════════════ */
-
-        /* KPI (SQL) */
-        .kpi-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
-            gap: 10px
-        }
-
-        .kpi-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 18px 20px;
-            transition: border-color .2s,box-shadow .2s
-        }
-
-            .kpi-card:hover {
-                border-color: var(--a);
-                box-shadow: 0 0 20px color-mix(in srgb,var(--a) 14%,transparent)
-            }
-
-        .kpi-label {
-            font-family: var(--mono);
-            font-size: .58rem;
-            letter-spacing: .12em;
-            color: var(--muted);
-            text-transform: uppercase;
-            margin-bottom: 8px
-        }
-
-        .kpi-value {
-            font-family: var(--cond);
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: var(--a);
-            word-break: break-all;
-            line-height: 1;
-            transition: color .4s
-        }
-
-        /* CHART / TABLE */
-        .chart-wrap {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 18px;
-            display: none
-        }
-
-        .chart-inner {
-            height: 300px;
-            position: relative
-        }
-
-        .table-wrap {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            overflow: hidden;
-            display: none
-        }
-
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: .8rem
-        }
-
-            .data-table th {
-                background: var(--panel);
-                color: var(--muted);
-                font-family: var(--mono);
-                font-size: .58rem;
-                letter-spacing: .1em;
-                text-transform: uppercase;
-                padding: 10px 14px;
-                text-align: left;
-                border-bottom: 1px solid var(--border)
-            }
-
-            .data-table td {
-                padding: 9px 14px;
-                border-bottom: 1px solid var(--border);
-                color: var(--dim);
-                font-family: var(--mono);
-                font-size: .74rem
-            }
-
-            .data-table tr:last-child td {
-                border-bottom: none
-            }
-
-            .data-table tr:hover td {
-                background: var(--panel);
-                color: var(--text)
-            }
-
-        /* PREDICT */
+        /* PREDICT STYLES */
         .pred-grid {
             display: none;
-            grid-template-columns: repeat(auto-fit,minmax(210px,1fr));
-            gap: 10px
+            grid-template-columns: repeat(auto-fit,minmax(240px,1fr));
+            gap: 12px
         }
 
         .pred-card {
@@ -1161,7 +710,8 @@
             border-radius: var(--radius);
             padding: 20px;
             position: relative;
-            overflow: hidden
+            overflow: hidden;
+            animation: fadeUp .4s ease-out;
         }
 
             .pred-card::after {
@@ -1185,7 +735,7 @@
 
         .pred-value {
             font-family: var(--cond);
-            font-size: 2rem;
+            font-size: 2.2rem;
             font-weight: 700;
             color: var(--pred-c);
             line-height: 1;
@@ -1193,9 +743,10 @@
         }
 
         .pred-label {
-            font-size: .82rem;
+            font-size: .85rem;
             color: var(--dim);
-            margin-bottom: 14px
+            margin-bottom: 14px;
+            line-height: 1.4;
         }
 
         .pred-confidence {
@@ -1206,7 +757,7 @@
 
         .pred-bar-bg {
             flex: 1;
-            height: 3px;
+            height: 4px;
             background: var(--border2);
             border-radius: 2px;
             overflow: hidden
@@ -1216,13 +767,14 @@
             height: 100%;
             background: var(--pred-c);
             border-radius: 2px;
-            transition: width .8s ease-out
+            transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 0 8px var(--pred-c);
         }
 
         .pred-conf-val {
             font-family: var(--mono);
             font-size: .6rem;
-            color: var(--pred-c);
+            color: var(--dim);
             white-space: nowrap
         }
 
@@ -1237,46 +789,16 @@
             margin-top: 10px
         }
 
-            .pred-trend.up {
-                background: rgba(248,113,113,.1);
-                color: #f87171
-            }
-
-            .pred-trend.down {
-                background: rgba(74,222,128,.1);
-                color: #4ade80
-            }
-
             .pred-trend.flat {
                 background: rgba(148,163,184,.1);
                 color: #94a3b8
             }
 
-        /* SQL FOOTER */
+        /* SQL T-SQL */
         .sql-footer {
-            display: none
+            display: none;
+            margin-top: 10px;
         }
-
-        .sql-toggle-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: var(--panel);
-            border: 1px solid var(--border);
-            color: var(--muted);
-            font-family: var(--mono);
-            font-size: .6rem;
-            letter-spacing: .06em;
-            padding: 5px 12px;
-            border-radius: var(--radius);
-            cursor: pointer;
-            transition: border-color .2s,color .2s
-        }
-
-            .sql-toggle-btn:hover {
-                border-color: var(--sql-c);
-                color: var(--sql-c)
-            }
 
         #sqlContainer {
             display: none;
@@ -1293,47 +815,75 @@
             line-height: 1.7
         }
 
-        /* CONFIDENCE — legacy, solo visible en non-docs */
-        .confidence-bar-wrap {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 0;
-            border-top: 1px solid var(--border);
-            margin-top: 12px
+        .sql-toggle-btn {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: .6rem;
+            padding: 5px 12px;
+            border-radius: var(--radius);
+            cursor: pointer;
         }
 
-        .conf-label {
+        /* UTILS */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .8rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+            .data-table th {
+                background: var(--panel);
+                color: var(--muted);
+                font-family: var(--mono);
+                font-size: .58rem;
+                padding: 10px 14px;
+                text-align: left;
+                border-bottom: 1px solid var(--border)
+            }
+
+            .data-table td {
+                padding: 9px 14px;
+                border-bottom: 1px solid var(--border);
+                color: var(--dim);
+                font-family: var(--mono);
+                font-size: .74rem
+            }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
+            gap: 10px
+        }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+        }
+
+        .kpi-label {
             font-family: var(--mono);
             font-size: .58rem;
             color: var(--muted);
-            letter-spacing: .08em
+            text-transform: uppercase;
+            margin-bottom: 8px
         }
 
-        .conf-bg {
-            flex: 1;
-            height: 4px;
-            background: var(--border2);
-            border-radius: 2px;
-            overflow: hidden
-        }
-
-        .conf-fill {
-            height: 100%;
-            background: var(--a);
-            border-radius: 2px;
-            transition: width .6s ease-out,background .4s
-        }
-
-        .conf-val {
-            font-family: var(--mono);
-            font-size: .62rem;
+        .kpi-value {
+            font-family: var(--cond);
+            font-size: 1.75rem;
+            font-weight: 700;
             color: var(--a);
-            white-space: nowrap;
-            transition: color .4s
+            line-height: 1;
         }
 
-        /* RESPONSIVE */
         @media(max-width:680px) {
             .app {
                 grid-template-columns: 1fr;
@@ -1346,7 +896,6 @@
                 flex-direction: row;
                 height: 48px;
                 padding: 0 10px;
-                gap: 4px;
                 border-right: none;
                 border-bottom: 1px solid var(--border);
                 position: sticky;
@@ -1368,57 +917,15 @@
                     border-radius: 2px 2px 0 0
                 }
 
-                .sb-btn.active-sql::before, .sb-btn.active-docs::before, .sb-btn.active-pred::before {
-                    transform: translateX(-50%) scaleX(1)
-                }
-
-            .sb-divider {
-                width: 1px;
-                height: 24px;
-                margin: 0 4px
-            }
-
             .main {
                 grid-row: 3;
-                grid-column: 1;
-                padding: 12px 12px 50px
-            }
-
-            .mc-shortcut {
-                display: none
-            }
-
-            .docs-fields-grid {
-                grid-template-columns: 1fr
-            }
-
-            .docs-field-v2 {
-                border-right: none !important
-            }
-
-                .docs-field-v2.full-width {
-                    grid-column: 1
-                }
-
-            .docs-kpi-row {
-                flex-direction: column;
-                gap: 0
-            }
-
-            .docs-kpi-cell + .docs-kpi-cell {
-                border-left: none;
-                border-top: 1px solid var(--border)
-            }
-
-            #txtQuestion {
-                font-size: 16px
+                padding: 12px
             }
         }
     </style>
 </head>
 <body>
     <div class="app">
-
         <!-- TOPBAR -->
         <header class="topbar">
             <div class="tb-logo">
@@ -1429,180 +936,81 @@
                     </svg>
                 </div>
             </div>
-            <div class="tb-wordmark">
-                VANNA<em>LIGHT</em>
-                <span class="tb-tag">Industrial Intelligence</span>
-            </div>
+            <div class="tb-wordmark">VANNA<em>LIGHT</em> <span class="tb-tag">Industrial Intelligence</span></div>
             <div class="tb-right">
-                <div class="tb-mode-badge" id="tbBadge">
-                    <div class="tb-blink"></div>
-                    <span id="tbModeText">DATOS · SQL</span>
-                </div>
-                <div class="tb-status">
-                    <div class="status-dot" id="statusDot"></div>
-                    <span id="statusText">Iniciando...</span>
-                </div>
+                <div class="tb-mode-badge" id="tbBadge"><div class="tb-blink"></div><span id="tbModeText">DATOS · SQL</span></div>
+                <div class="tb-status"><div class="status-dot" id="statusDot"></div><span id="statusText">Iniciando...</span></div>
             </div>
         </header>
 
         <!-- SIDEBAR -->
         <nav class="sidebar">
-            <button class="sb-btn active-sql" id="sb-sql" onclick="setMode('sql')" title="Datos SQL [1]">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <ellipse cx="12" cy="5" rx="9" ry="3" />
-                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-                </svg>SQL
+            <button class="sb-btn active-sql" id="sb-sql" onclick="setMode('sql')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>SQL
             </button>
-            <button class="sb-btn" id="sb-docs" onclick="setMode('docs')" title="Documentos PDF [2]">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                </svg>PDF
+            <button class="sb-btn" id="sb-docs" onclick="setMode('docs')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>PDF
             </button>
-            <button class="sb-btn" id="sb-pred" onclick="setMode('pred')" title="Predicción ML [3]">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-                    <polyline points="16 7 22 7 22 13" />
-                </svg>ML
+            <button class="sb-btn" id="sb-pred" onclick="setMode('pred')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></svg>ML
             </button>
             <div class="sb-divider"></div>
-            <button class="sb-btn" id="sb-mic" onclick="startDictation()" title="Dictar [M]">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="23" />
-                    <line x1="8" y1="23" x2="16" y2="23" />
-                </svg>VOZ
-            </button>
+            <button class="sb-btn" id="sb-mic" onclick="startDictation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>VOZ</button>
         </nav>
 
         <!-- MAIN -->
         <main class="main">
-
             <div class="mode-context" id="modeContext">
-                <div class="mc-icon">
-                    <svg id="mcSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                        <ellipse cx="12" cy="5" rx="9" ry="3" />
-                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-                    </svg>
-                </div>
-                <div class="mc-text">
-                    <div class="mc-title" id="mcTitle">MODO DATOS — SQL</div>
-                    <div class="mc-desc" id="mcDesc">Consultas sobre bases de datos estructuradas · Northwind / Planta</div>
-                </div>
-                <div class="mc-shortcut">
-                    <div><kbd>1</kbd> SQL &nbsp;<kbd>2</kbd> PDF &nbsp;<kbd>3</kbd> ML</div>
-                    <div><kbd>Enter</kbd> ejecutar &nbsp;<kbd>M</kbd> micrófono</div>
-                </div>
+                <div class="mc-icon"><svg id="mcSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg></div>
+                <div class="mc-text"><div class="mc-title" id="mcTitle">MODO DATOS — SQL</div><div class="mc-desc" id="mcDesc">Consultas sobre bases de datos estructuradas</div></div>
+                <div class="mc-shortcut"><div><kbd>1</kbd> SQL <kbd>2</kbd> PDF <kbd>3</kbd> ML</div></div>
             </div>
 
             <div class="input-panel">
                 <div class="input-row">
-                    <div class="inp-pill">
-                        <span class="inp-key" id="inpKey">SQL</span>
-                        <span class="inp-sub" id="inpSub">datos</span>
-                    </div>
-                    <input type="text" id="txtQuestion" placeholder="¿Cuáles son los 5 productos con más scrap este mes?" onkeypress="handleKeyPress(event)" autocomplete="off" />
+                    <div class="inp-pill"><span class="inp-key" id="inpKey">SQL</span><span class="inp-sub" id="inpSub">datos</span></div>
+                    <input type="text" id="txtQuestion" placeholder="Escribe tu consulta..." onkeypress="handleKeyPress(event)" autocomplete="off" />
                     <div class="input-actions">
-                        <button class="iact-btn" id="btnMic" onclick="startDictation()" title="Dictar">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                <line x1="12" y1="19" x2="12" y2="23" />
-                                <line x1="8" y1="23" x2="16" y2="23" />
-                            </svg>
-                        </button>
-                        <button class="btn-send" id="btnSend" onclick="sendQuestion()">
-                            <div class="spinner" id="loadingIcon"></div>
-                            <span id="btnLabel">EJECUTAR</span>
-                        </button>
+                        <button class="iact-btn" id="btnMic" onclick="startDictation()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /></svg></button>
+                        <button class="btn-send" id="btnSend" onclick="sendQuestion()"><div class="spinner" id="loadingIcon"></div><span id="btnLabel">EJECUTAR</span></button>
                     </div>
                 </div>
             </div>
 
             <div class="log-wrap">
-                <div class="log-bar">
-                    <span class="log-bar-label">Consola del sistema</span>
-                    <div class="log-dots">
-                        <span style="background:#f87171"></span>
-                        <span style="background:#fbbf24"></span>
-                        <span style="background:#4ade80"></span>
-                    </div>
-                </div>
+                <div class="log-bar"><span class="log-bar-label">Consola del sistema</span></div>
                 <div id="logArea"></div>
             </div>
 
             <div id="resultArea">
-                <div class="result-header">
-                    <div class="result-label" id="resultLabel">RESULTADO</div>
-                    <div class="view-toggle" id="viewToggle">
-                        <button class="vtog-btn active" onclick="switchView('chart',this)">◧ Gráfica</button>
-                        <button class="vtog-btn" onclick="switchView('table',this)">⊞ Tabla</button>
-                    </div>
-                </div>
-                <!-- DOCS result target (v2) -->
-                <div id="docsResultWrap" style="display:none;"></div>
-                <!-- SQL / legacy -->
+                <div class="result-header"><div class="result-label" id="resultLabel">RESULTADO</div></div>
                 <div class="docs-card" id="docsCard" style="display:none;"></div>
                 <div class="kpi-grid" id="kpiContainer"></div>
-                <div class="chart-wrap" id="chartContainer"><div class="chart-inner"><canvas id="liaChart"></canvas></div></div>
-                <div class="table-wrap" id="tableContainer"></div>
+                <div class="chart-wrap" id="chartContainer" style="display:none;"><div class="chart-inner"><canvas id="liaChart"></canvas></div></div>
+                <div class="table-wrap" id="tableContainer" style="display:none;"></div>
                 <div class="pred-grid" id="predGrid"></div>
-                <div class="confidence-bar-wrap" id="confBar" style="display:none;">
-                    <span class="conf-label">CONFIANZA</span>
-                    <div class="conf-bg"><div class="conf-fill" id="confFill" style="width:0%"></div></div>
-                    <span class="conf-val" id="confVal">—</span>
-                </div>
                 <div class="sql-footer" id="sqlFooter">
-                    <button class="sql-toggle-btn" onclick="toggleSql()">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
-                        VER T-SQL
-                    </button>
+                    <button class="sql-toggle-btn" onclick="toggleSql()">VER T-SQL</button>
                     <div id="sqlContainer"></div>
                 </div>
             </div>
-
         </main>
     </div>
 
     <script>
-        // ═══════════════════════════════════════════════════════════
-        // CONFIG
-        // ═══════════════════════════════════════════════════════════
         const MODES = {
-            sql: {
-                key: 'sql', modeVal: 0, label: 'SQL', sub: 'datos', title: 'MODO DATOS — SQL', desc: 'Consultas sobre bases de datos estructuradas · Northwind / Planta', badge: 'DATOS · SQL', ph: '¿Cuáles son los 5 productos con más scrap este mes?',
-                icon: `<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>`
-            },
-            docs: {
-                key: 'docs', modeVal: 1, label: 'PDF', sub: 'documentos', title: 'MODO DOCUMENTOS — PDF', desc: 'Work Instructions, fichas técnicas, procedimientos de planta', badge: 'DOCUMENTOS · PDF', ph: '¿Cuál es el molde y estándar del número de parte 421084-0006?',
-                icon: `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>`
-            },
-            pred: {
-                key: 'pred', modeVal: 2, label: 'ML', sub: 'predicción', title: 'MODO PREDICCIÓN — ML.NET', desc: 'Pronósticos de scrap, producción y riesgo de paro · Machine Learning', badge: 'PREDICCIÓN · ML', ph: '¿Cuál es el pronóstico de scrap para el siguiente turno?',
-                icon: `<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>`
-            }
+            sql: { key: 'sql', modeVal: 0, label: 'SQL', sub: 'datos', title: 'MODO DATOS — SQL', desc: 'Consultas sobre bases de datos estructuradas KPI', ph: '¿Cuáles son los 5 números de parte con más scrap?', badge: 'DATOS · SQL', icon: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>' },
+            docs: { key: 'docs', modeVal: 1, label: 'PDF', sub: 'documentos', title: 'MODO DOCUMENTOS — PDF', desc: 'Work Instructions y procedimientos de planta', ph: '¿Cuál es el empaque del N/P 421084-0006?', badge: 'DOCUMENTOS · PDF', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' },
+            pred: { key: 'pred', modeVal: 2, label: 'ML', sub: 'predicción', title: 'MODO PREDICCIÓN — ML.NET', desc: 'Pronósticos de scrap a nivel turno', ph: '¿Cuál es el pronóstico de scrap para el cierre de este turno?', badge: 'PREDICCIÓN · ML', icon: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>' }
         };
 
         let currentMode = 'sql', myConnectionId = '', currentChart = null;
 
-        // ═══════════════════════════════════════════════════════════
-        // MODE SWITCHING
-        // ═══════════════════════════════════════════════════════════
         function setMode(m) {
             currentMode = m;
             const c = MODES[m];
-            const r = document.documentElement;
-            r.style.setProperty('--a', `var(--${m}-c)`);
-            r.style.setProperty('--a-bg', `var(--${m}-bg)`);
-            r.style.setProperty('--a-glow', `var(--${m}-glow)`);
-            ['sql', 'docs', 'pred'].forEach(k => {
-                document.getElementById('sb-' + k).className = 'sb-btn' + (k === m ? ' active-' + k : '');
-            });
+            document.documentElement.style.setProperty('--a', `var(--${m}-c)`);
+            ['sql', 'docs', 'pred'].forEach(k => document.getElementById('sb-' + k).className = 'sb-btn' + (k === m ? ' active-' + k : ''));
             document.getElementById('tbModeText').textContent = c.badge;
             document.getElementById('mcTitle').textContent = c.title;
             document.getElementById('mcDesc').textContent = c.desc;
@@ -1610,403 +1018,196 @@
             document.getElementById('inpKey').textContent = c.label;
             document.getElementById('inpSub').textContent = c.sub;
             document.getElementById('txtQuestion').placeholder = c.ph;
-            document.querySelector('.tb-wordmark em').style.color = `var(--${m}-c)`;
             logLine(`Modo → ${c.title}`, 'sys');
             hideResult();
         }
-        document.addEventListener('keydown', e => {
-            if (document.activeElement === document.getElementById('txtQuestion')) return;
-            if (e.key === '1') setMode('sql');
-            if (e.key === '2') setMode('docs');
-            if (e.key === '3') setMode('pred');
-            if (e.key === 'm' || e.key === 'M') startDictation();
-        });
 
-        // ═══════════════════════════════════════════════════════════
-        // SIGNALR & DYNAMIC PROFILE
-        // ═══════════════════════════════════════════════════════════
         const connection = new signalR.HubConnectionBuilder().withUrl('/hub/assistant').withAutomaticReconnect().build();
         connection.on('JobStatusUpdated', d => logLine(`⏳ ${d.status}`, 'sys'));
         connection.on('JobFailed', d => { logLine(`❌ ${d.error}`, 'err'); resetUI() });
-        connection.on('JobRequiresReview', d => { logLine(`⚠️ ${d.reason}`, 'sys'); resetUI() });
         connection.on('JobCompleted', payload => {
-            logLine('✅ Consulta completada', 'ok'); resetUI();
+            logLine('✅ Completado', 'ok'); resetUI();
             let data = payload;
             if (payload.resultJson) { try { data = JSON.parse(payload.resultJson) } catch { } }
-            else if (payload.data && typeof payload.data === 'string') { try { data = JSON.parse(payload.data) } catch { } }
-            if (data?.type === 'prediction') renderPred(data);
-            else if (currentMode === 'docs') renderDocs(data);
-            else renderSql(data);
+
+            // Lógica de ruteo por tipo de resultado
+            if (data?.IsPredictionRequest === true || data?.type === 'prediction') {
+                renderPred(data);
+            } else if (currentMode === 'docs') {
+                renderDocs(data); // <-- ESTA FUNCIÓN FALTABA
+            } else {
+                renderSql(data);
+            }
         });
 
         async function startConnection() {
             try {
-                // 1. Obtenemos el perfil activo mediante la API del Admin (Sin tocar el Backend de Inferencia)
-                let profileName = 'LLM';
-                try {
-                    const res = await fetch('/api/admin/llm-profiles');
-                    if (res.ok) {
-                        const profiles = await res.json();
-                        const active = profiles.find(p => p.isActive || p.IsActive);
-                        if (active) profileName = active.name || active.Name;
-                    }
-                } catch (e) {
-                    console.warn("No se pudo cargar el perfil activo", e);
-                }
-
-                // 2. Iniciamos la conexión WebSocket
                 await connection.start();
                 myConnectionId = connection.connectionId;
-                document.getElementById('statusDot').style.cssText = 'background:#4ade80;box-shadow:0 0 7px #4ade80';
-                document.getElementById('statusText').textContent = `${profileName} · LLM listo`;
-                logLine('Sistema en línea. Motor neural activo.', 'ok');
-            } catch {
-                document.getElementById('statusDot').style.cssText = 'background:#f87171;box-shadow:0 0 7px #f87171';
-                document.getElementById('statusText').textContent = 'Sin conexión';
-                logLine('Error WebSocket. Reintentando...', 'err');
-                setTimeout(startConnection, 5000);
-            }
+                document.getElementById('statusText').textContent = 'Vanna Neural Active';
+                logLine('Sistema listo.', 'ok');
+            } catch { setTimeout(startConnection, 5000); }
         }
         startConnection();
 
-        // ═══════════════════════════════════════════════════════════
-        // SEND
-        // ═══════════════════════════════════════════════════════════
         async function sendQuestion() {
             const q = document.getElementById('txtQuestion').value.trim();
-            if (!q || !myConnectionId || document.getElementById('btnSend').disabled) return;
+            if (!q || !myConnectionId) return;
             document.getElementById('loadingIcon').style.display = 'block';
-            document.getElementById('btnLabel').textContent = 'PROCESANDO';
             document.getElementById('btnSend').disabled = true;
             hideResult();
             logLine(`→ ${q}`, 'user');
             try {
-                const r = await fetch('/api/assistant/ask', {
+                await fetch('/api/assistant/ask', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ question: q, userId: 'vanna-web-user', connectionId: myConnectionId, mode: MODES[currentMode].modeVal })
+                    body: JSON.stringify({ question: q, userId: 'user_01', connectionId: myConnectionId, mode: MODES[currentMode].modeVal })
                 });
-                if (!r.ok) { logLine(`HTTP ${r.status}`, 'err'); resetUI() }
-            } catch (e) { logLine(`Red: ${e.message}`, 'err'); resetUI() }
-            document.getElementById('txtQuestion').value = '';
+            } catch (e) { logLine(`Error red: ${e.message}`, 'err'); resetUI() }
         }
+
         function handleKeyPress(e) { if (e.key === 'Enter') sendQuestion() }
-        function resetUI() { document.getElementById('loadingIcon').style.display = 'none'; document.getElementById('btnLabel').textContent = 'EJECUTAR'; document.getElementById('btnSend').disabled = false }
+        function resetUI() { document.getElementById('loadingIcon').style.display = 'none'; document.getElementById('btnSend').disabled = false }
         function hideResult() { document.getElementById('resultArea').style.display = 'none' }
 
-        // ═══════════════════════════════════════════════════════════
-        // PRE RENDER
-        // ═══════════════════════════════════════════════════════════
         function preRender() {
             document.getElementById('resultArea').style.display = 'flex';
-            document.getElementById('docsResultWrap').style.display = 'none';
-            document.getElementById('docsResultWrap').innerHTML = '';
-            document.getElementById('docsCard').style.display = 'none';
             document.getElementById('kpiContainer').innerHTML = '';
             document.getElementById('chartContainer').style.display = 'none';
             document.getElementById('tableContainer').style.display = 'none';
-            document.getElementById('tableContainer').innerHTML = '';
             document.getElementById('predGrid').style.display = 'none';
-            document.getElementById('predGrid').innerHTML = '';
-            document.getElementById('viewToggle').style.display = 'none';
             document.getElementById('sqlFooter').style.display = 'none';
-            document.getElementById('confBar').style.display = 'none';
-            if (currentChart) { currentChart.destroy(); currentChart = null }
+            document.getElementById('docsCard').style.display = 'none'; // <-- AÑADIDO PARA LIMPIAR RAG
+            if (currentChart) currentChart.destroy();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        // RENDER DOCS — rediseño completo
-        // ═══════════════════════════════════════════════════════════
+        // --- NUEVA FUNCIÓN PARA RENDERIZAR RAG (PDF) ---
         function renderDocs(payload) {
             preRender();
             document.getElementById('resultLabel').textContent = 'RESULTADO — DOCUMENTOS';
 
-            const raw = payload.sqlText || payload.sql || payload.answer || payload.text || '';
-            if (!raw.trim()) {
-                document.getElementById('docsResultWrap').style.display = 'block';
-                document.getElementById('docsResultWrap').innerHTML =
-                    `<div class="docs-result-wrap"><div class="docs-card-v2"><div class="docs-prose-only"><pre>Sin respuesta del servidor.</pre></div></div></div>`;
-                return;
-            }
+            const docsCard = document.getElementById('docsCard');
+            docsCard.style.display = 'block';
 
-            // ── Parse estructurado ─────────────────────────────────
-            const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+            // Buscamos el texto de respuesta donde sea que lo envíe tu backend
+            const answer = payload.HumanizedMessage || payload.answer || payload.sqlText || payload.data || "Documento analizado correctamente.";
 
-            let titleLine = '';
-            let contentLines = [...lines];
-
-            const titlePatterns = [/ficha/i, /información/i, /resultado/i, /datos del/i, /registro/i];
-            if (lines.length > 0) {
-                const firstLine = lines[0].replace(/[-:*]/g, '').trim();
-                const isTitle = titlePatterns.some(p => p.test(firstLine)) || !lines[0].includes(':');
-                if (isTitle && lines.length > 1) {
-                    titleLine = firstLine;
-                    contentLines = lines.slice(1);
-                }
-            }
-
-            // Separar key:value de texto libre
-            const kvPairs = [];   // { key, value, isNumeric }
-            const proseLines = [];
-
-            for (const line of contentLines) {
-                const m = line.match(/^[-•*\s]*(.+?):\s*(.+)$/);
-                if (m) {
-                    const key = m[1].trim();
-                    const val = m[2].trim();
-                    const numMatch = val.match(/^([\d,.\s]+)\s*([a-zA-Z%\/]+)?$/);
-                    kvPairs.push({
-                        key,
-                        value: val,
-                        numericVal: numMatch ? parseFloat(val.replace(/,/g, '')) : null,
-                        unit: numMatch ? (numMatch[2] || '') : '',
-                        isNumeric: !!numMatch && !isNaN(parseFloat(val.replace(/,/g, '')))
-                    });
-                } else if (line.length > 2) {
-                    proseLines.push(line);
-                }
-            }
-
-            const kpiFields = kvPairs.filter(f => f.isNumeric && f.numericVal > 0);
-            const plainFields = kvPairs.filter(f => !f.isNumeric);
-
-            const kpiDisplay = kpiFields.slice(0, 3);
-            const kpiOverflow = kpiFields.slice(3);
-
-            const allPlainFields = [...plainFields, ...kpiOverflow];
-
-            const conf = payload.confidence;
-
-            // ── Detectar número de parte de la query ───────────────
-            const partMatch = raw.match(/\b(\d{6}-\d{4}|\d{5,}[-\/]\d{2,})\b/);
-            const partNumber = partMatch ? partMatch[0] : null;
-
-            // ── Construir HTML ──────────────────────────────────────
-            let html = `<div class="docs-result-wrap"><div class="docs-card-v2">`;
-
-            // Header
-            const docTitle = titleLine || (partNumber ? `N/P ${partNumber}` : 'Ficha Técnica');
-            html += `
-                <div class="docs-card-header">
-                    <div class="docs-hdr-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                            <polyline points="14 2 14 8 20 8"/>
-                            <line x1="16" y1="13" x2="8" y2="13"/>
-                            <line x1="16" y1="17" x2="8" y2="17"/>
-                        </svg>
-                    </div>
-                    <div class="docs-hdr-meta">
-                        <div class="docs-hdr-title">${escHtml(docTitle)}</div>
-                        <div class="docs-hdr-sub">WORK INSTRUCTION · PLANTA</div>
-                    </div>
-                    ${partNumber ? `<div class="docs-hdr-badge">${escHtml(partNumber)}</div>` : ''}
-                </div>`;
-
-            // KPI row
-            if (kpiDisplay.length > 0) {
-                html += `<div class="docs-kpi-row">`;
-                for (const f of kpiDisplay) {
-                    const valFormatted = f.numericVal.toLocaleString('es-MX');
-                    html += `
-                        <div class="docs-kpi-cell">
-                            <div class="docs-kpi-label">${escHtml(f.key)}</div>
-                            <div class="docs-kpi-value">${valFormatted}</div>
-                            ${f.unit ? `<div class="docs-kpi-unit">${escHtml(f.unit)}</div>` : ''}
-                        </div>`;
-                }
-                html += `</div>`;
-            }
-
-            // Campos en grid 2 columnas
-            if (allPlainFields.length > 0) {
-                html += `<div class="docs-fields-grid">`;
-                for (let i = 0; i < allPlainFields.length; i++) {
-                    const f = allPlainFields[i];
-                    const isLast = i === allPlainFields.length - 1;
-                    const isOdd = allPlainFields.length % 2 !== 0;
-                    const fullWidth = isLast && isOdd ? ' full-width' : '';
-                    html += `
-                        <div class="docs-field-v2${fullWidth}">
-                            <div class="docs-field-key-v2">${escHtml(f.key)}</div>
-                            <div class="docs-field-val-v2">${escHtml(f.value)}</div>
-                        </div>`;
-                }
-                html += `</div>`;
-            }
-
-            // Texto libre
-            if (proseLines.length > 0) {
-                html += `
-                    <div class="docs-prose">
-                        <div class="docs-prose-label">Observaciones</div>
-                        <div class="docs-prose-text">${proseLines.map(escHtml).join('<br>')}</div>
-                    </div>`;
-            }
-
-            // Footer con confianza
-            const confPct = conf != null ? Math.round(conf * 100) : null;
-            html += `
-                <div class="docs-card-footer">
-                    <div class="docs-footer-src">PDF · Motor LLM + BM25</div>
-                    ${confPct != null ? `
-                    <div class="docs-conf-inline">
-                        <span class="docs-conf-label-sm">CONFIANZA</span>
-                        <div class="docs-conf-bg"><div class="docs-conf-fill" id="docsConfFill" style="width:0%"></div></div>
-                        <span class="docs-conf-pct" id="docsConfPct">—</span>
-                    </div>` : ''}
-                </div>`;
-
-            html += `</div></div>`;
-
-            const wrap = document.getElementById('docsResultWrap');
-            wrap.style.display = 'block';
-            wrap.innerHTML = html;
-
-            if (confPct != null) {
-                setTimeout(() => {
-                    const fill = document.getElementById('docsConfFill');
-                    const lbl = document.getElementById('docsConfPct');
-                    if (fill) fill.style.width = confPct + '%';
-                    if (lbl) lbl.textContent = confPct + '%';
-                }, 120);
-            }
-
-            speakSummary(buildSpeakText(kpiDisplay, allPlainFields, docTitle));
+            docsCard.innerHTML = answer;
+            speakSummary(answer);
         }
 
-        function buildSpeakText(kpis, fields, title) {
-            const parts = [`${title}.`];
-            for (const f of kpis) parts.push(`${f.key}: ${f.numericVal.toLocaleString('es-MX')} ${f.unit}.`);
-            for (const f of fields.slice(0, 3)) parts.push(`${f.key}: ${f.value}.`);
-            return parts.join(' ');
+        function renderPred(payload) {
+            preRender();
+            document.getElementById('resultLabel').textContent = 'RESULTADO — PRONÓSTICO INDUSTRIAL';
+            const grid = document.getElementById('predGrid');
+            grid.style.display = 'grid';
+
+            // El payload puede venir directo o dentro de .data según como se serialice en el backend
+            const p = payload.data || payload;
+
+            if (p && p.PredictedValue !== undefined) {
+                // Renderizado Profesional Shift-Level
+                grid.innerHTML = `
+                            <div class="pred-card">
+                                <div class="pred-category">PRONÓSTICO DE SCRAP (CIERRE)</div>
+                                <div class="pred-value">
+                                    ${fmtVal(p.PredictedValue)}
+                                    <span style="font-size:1rem;font-weight:400;margin-left:4px;color:var(--muted)">piezas</span>
+                                </div>
+                                <div class="pred-label">
+                                    N/P: <strong style="color:var(--text)">${p.EntityName || 'General'}</strong><br>
+                                    <span style="color:var(--dim); font-size:0.75rem;">Periodo: ${p.ForecastPeriodLabel || 'Turno'}</span>
+                                </div>
+                                <div class="pred-confidence">
+                                    <div class="pred-bar-bg"><div class="pred-bar-fill" style="width:100%"></div></div>
+                                    <span class="pred-conf-val">🛡️ ${p.HistoryShiftsUsed || 0} turnos históricos</span>
+                                </div>
+                                <div class="pred-trend flat">Baseline ML.NET v1.0</div>
+                            </div>
+                            <div style="grid-column:1/-1;margin-top:10px;font-size:.85rem;padding:12px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+                                <span style="color:var(--pred-c)">🤖 Análisis:</span> ${p.HumanizedMessage || payload.explanation || 'Predicción de cierre de turno generada.'}
+                            </div>
+                        `;
+                speakSummary(p.HumanizedMessage || payload.explanation);
+            } else {
+                grid.innerHTML = `<div style="color:var(--dim); font-family:var(--mono); padding:20px;">No se recibieron datos de predicción válidos.</div>`;
+            }
         }
 
-        function escHtml(str) {
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        // RENDER SQL
-        // ═══════════════════════════════════════════════════════════
         function renderSql(payload) {
             preRender();
             document.getElementById('resultLabel').textContent = 'RESULTADO — DATOS';
             document.getElementById('sqlFooter').style.display = 'block';
             document.getElementById('sqlContainer').textContent = payload.sql || payload.sqlText || '';
             const data = payload.data;
-            if (!data || data.length === 0) { document.getElementById('kpiContainer').innerHTML = `<div style="color:var(--muted);font-family:var(--mono);font-size:.76rem;padding:16px 0">Sin resultados.</div>`; return }
+            if (!data || data.length === 0) { document.getElementById('kpiContainer').innerHTML = 'Sin datos'; return; }
             if (data.length === 1) {
                 document.getElementById('kpiContainer').innerHTML = Object.entries(data[0]).map(([k, v]) => `<div class="kpi-card"><div class="kpi-label">${k}</div><div class="kpi-value">${fmtVal(v)}</div></div>`).join('');
-                speakSummary(`El resultado es ${fmtVal(Object.values(data[0])[0])}.`); return;
-            }
-            renderTable(data);
-            const headers = Object.keys(data[0]); let lc = null, vc = null;
-            for (const h of headers) { if (typeof data[0][h] === 'number' && !vc) vc = h; else if (!lc) lc = h }
-            if (lc && vc && data.length <= 60) {
-                renderChart(data.map(r => r[lc]), data.map(r => r[vc]), vc);
-                document.getElementById('viewToggle').style.display = 'flex';
-                switchView('chart', document.querySelector('.vtog-btn'));
-            } else { document.getElementById('tableContainer').style.display = 'block' }
-            speakSummary(`Encontré ${data.length} registros.`);
-        }
-
-        function renderTable(data) {
-            const h = Object.keys(data[0]);
-            document.getElementById('tableContainer').innerHTML = `<table class="data-table"><thead><tr>${h.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${data.map(r => `<tr>${h.map(c => `<td>${fmtVal(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-        }
-
-        function renderChart(labels, values, valLabel) {
-            const ctx = document.getElementById('liaChart').getContext('2d');
-            if (currentChart) currentChart.destroy();
-            const horiz = labels.length > 8;
-            const ac = { sql: '#22d3ee', docs: '#34d399', pred: '#a78bfa' }[currentMode];
-            document.getElementById('chartContainer').style.display = 'block';
-            currentChart = new Chart(ctx, {
-                type: 'bar', data: { labels, datasets: [{ label: valLabel, data: values, backgroundColor: ac + '50', borderColor: ac, borderWidth: 1, borderRadius: 4 }] },
-                options: {
-                    indexAxis: horiz ? 'y' : 'x', responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, tooltip: { backgroundColor: '#161b25', borderColor: '#1e2535', borderWidth: 1, titleColor: '#7a8a9e', bodyColor: '#dde4f0', titleFont: { family: 'IBM Plex Mono', size: 11 }, bodyFont: { family: 'IBM Plex Mono', size: 12 }, callbacks: { label: c => ` ${fmtVal(c.parsed[horiz ? 'x' : 'y'])}` } } },
-                    scales: { x: { ticks: { color: '#4a5568', font: { family: 'IBM Plex Mono', size: 11 } }, grid: { color: '#161b25' } }, y: { ticks: { color: '#4a5568', font: { family: 'IBM Plex Mono', size: 11 } }, grid: { color: '#1e2535' }, beginAtZero: true } }
-                }
-            });
-        }
-
-        function switchView(type, btn) {
-            document.querySelectorAll('.vtog-btn').forEach(b => b.classList.remove('active'));
-            if (btn) btn.classList.add('active');
-            document.getElementById('chartContainer').style.display = type === 'chart' ? 'block' : 'none';
-            document.getElementById('tableContainer').style.display = type === 'table' ? 'block' : 'none';
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        // RENDER PREDICT
-        // ═══════════════════════════════════════════════════════════
-        function renderPred(payload) {
-            preRender();
-            document.getElementById('resultLabel').textContent = 'RESULTADO — PREDICCIÓN ML';
-            const grid = document.getElementById('predGrid'); grid.style.display = 'grid';
-            const pData = payload.data;
-            if (pData?.ProductName) {
-                const conf = Math.round((pData.Confidence || .85) * 100);
-                grid.innerHTML = `<div class="pred-card"><div class="pred-category">PRONÓSTICO DE VENTAS</div><div class="pred-value">${fmtVal(pData.PredictedSales)}<span style="font-size:1rem;font-weight:400;margin-left:4px;color:var(--muted)">unidades</span></div><div class="pred-label">Producto: <strong style="color:var(--text)">${pData.ProductName}</strong></div><div class="pred-confidence"><div class="pred-bar-bg"><div class="pred-bar-fill" style="width:0%" data-target="${conf}%"></div></div><span class="pred-conf-val">${conf}% conf.</span></div><div class="pred-trend flat">Tendencia ML.NET</div></div><div style="grid-column:1/-1;margin-top:10px;font-size:.85rem;padding:12px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)"><span style="color:var(--pred-c)">🤖 Análisis:</span> ${payload.explanation || 'Pronóstico generado.'}</div>`;
-                speakSummary(payload.explanation || `Se estiman ${fmtVal(pData.PredictedSales)} unidades para ${pData.ProductName}.`);
             } else {
-                const preds = [{ category: 'SCRAP', value: 3.2, unit: '%', label: 'Próximo turno', confidence: .91, trend: 'down', trendPct: 12 }, { category: 'TIEMPO CAÍDO', value: 18, unit: 'min', label: 'Próximas 8 hrs', confidence: .84, trend: 'up', trendPct: 6 }, { category: 'PIEZAS / HORA', value: 341, unit: 'pzs', label: 'Proyección', confidence: .88, trend: 'flat' }, { category: 'RIESGO DE PARO', value: 'MEDIO', unit: '', label: 'Nivel estimado', confidence: .76, trend: 'up', trendPct: 3 }];
-                grid.innerHTML = preds.map(p => { const conf = Math.round(p.confidence * 100); const ti = p.trend === 'up' ? '↑' : p.trend === 'down' ? '↓' : '→'; return `<div class="pred-card"><div class="pred-category">${p.category}</div><div class="pred-value">${fmtVal(p.value)}<span style="font-size:1rem;font-weight:400;margin-left:4px;color:var(--muted)">${p.unit}</span></div><div class="pred-label">${p.label}</div><div class="pred-confidence"><div class="pred-bar-bg"><div class="pred-bar-fill" style="width:0%" data-target="${conf}%"></div></div><span class="pred-conf-val">${conf}% conf.</span></div><div class="pred-trend ${p.trend}">${ti}${p.trendPct ? ' ' + Math.abs(p.trendPct) + '%' : ''} vs anterior</div></div>` }).join('');
-                speakSummary('Mostrando predicciones del sistema.');
+                document.getElementById('tableContainer').style.display = 'block';
+                const h = Object.keys(data[0]);
+                document.getElementById('tableContainer').innerHTML = `<table class="data-table"><thead><tr>${h.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${data.map(r => `<tr>${h.map(c => `<td>${fmtVal(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
             }
-            setTimeout(() => { grid.querySelectorAll('.pred-bar-fill').forEach(el => { el.style.width = el.dataset.target }) }, 100);
+        }
+
+        function logLine(msg, type = 'ok') {
+            const la = document.getElementById('logArea');
+            const div = document.createElement('div'); div.className = 'log-line';
+            div.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span><span class="c-${type}">${msg}</span>`;
+            la.appendChild(div); la.scrollTop = la.scrollHeight;
+        }
+
+        // --- NUEVA FUNCIÓN DE DICTADO POR VOZ ---
+        function startDictation() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                logLine('Voz no soportada en este navegador.', 'err');
+                return;
+            }
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const recognition = new SpeechRecognition();
+
+            recognition.lang = 'es-MX'; // Idioma
+            recognition.interimResults = false;
+
+            document.getElementById('btnMic').classList.add('mic-active');
+            logLine('Escuchando...', 'sys');
+
+            recognition.onresult = function (event) {
+                const transcript = event.results[0][0].transcript;
+                document.getElementById('txtQuestion').value = transcript;
+                logLine(`Voz detectada: "${transcript}"`, 'ok');
+                sendQuestion(); // Enviar automáticamente
+            };
+
+            recognition.onerror = function (event) {
+                logLine('Error en dictado: ' + event.error, 'err');
+                document.getElementById('btnMic').classList.remove('mic-active');
+            };
+
+            recognition.onend = function () {
+                document.getElementById('btnMic').classList.remove('mic-active');
+            };
+
+            recognition.start();
+        }
+
+        function speakSummary(text) {
+            if (!window.speechSynthesis || !text) return;
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text.replace(/🤖/g, ''));
+            u.lang = 'es-MX'; u.rate = 1.0;
+            window.speechSynthesis.speak(u);
+        }
+
+        function fmtVal(v) {
+            if (typeof v === 'number') return v.toLocaleString('es-MX', { maximumFractionDigits: 2 });
+            return v ?? '—';
         }
 
         function toggleSql() { const c = document.getElementById('sqlContainer'); c.style.display = c.style.display === 'none' ? 'block' : 'none' }
 
-        // ═══════════════════════════════════════════════════════════
-        // LOG
-        // ═══════════════════════════════════════════════════════════
-        function logLine(msg, type = 'ok') {
-            const la = document.getElementById('logArea');
-            const t = new Date().toLocaleTimeString('es-MX', { hour12: false });
-            const cls = { ok: 'c-ok', err: 'c-err', sys: 'c-sys', user: 'c-user' }[type] || 'c-ok';
-            const div = document.createElement('div'); div.className = 'log-line';
-            div.innerHTML = `<span class="log-time">${t}</span><span class="${cls}">${msg}</span>`;
-            la.appendChild(div); la.scrollTop = la.scrollHeight;
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        // VOICE
-        // ═══════════════════════════════════════════════════════════
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = SR ? new SR() : null;
-        if (recognition) {
-            recognition.lang = 'es-MX'; recognition.continuous = false; recognition.interimResults = false;
-            recognition.onstart = () => { document.getElementById('btnMic').classList.add('mic-active'); document.getElementById('sb-mic').classList.add('mic-active'); logLine('Escuchando...', 'sys') };
-            recognition.onresult = e => { const t = e.results[0][0].transcript; document.getElementById('txtQuestion').value = t; logLine(`Voz: "${t}"`, 'sys'); sendQuestion() };
-            recognition.onend = () => { document.getElementById('btnMic').classList.remove('mic-active'); document.getElementById('sb-mic').classList.remove('mic-active') };
-        }
-        function startDictation() { if (recognition) recognition.start(); else alert('Tu navegador no soporta dictado por voz.') }
-
-        let voices = [];
-        window.speechSynthesis.onvoiceschanged = () => { voices = window.speechSynthesis.getVoices() };
-        function speakSummary(text) {
-            if (!('speechSynthesis' in window)) return;
-            window.speechSynthesis.cancel();
-            const clean = text.replace(/🤖/g, '').replace(/Ficha solicitada:/g, 'Información:');
-            const u = new SpeechSynthesisUtterance(clean);
-            const priority = [v => v.name.includes('Sabina') && v.lang.startsWith('es'), v => v.name.includes('Paulina') && v.lang.startsWith('es'), v => v.name.includes('Dalia') && v.lang.startsWith('es'), v => v.name.includes('Online') && v.lang.startsWith('es'), v => v.name.includes('Google') && v.lang.startsWith('es'), v => v.lang === 'es-MX', v => v.lang.startsWith('es')];
-            let voice = null; for (const fn of priority) { voice = voices.find(fn); if (voice) break }
-            if (voice) u.voice = voice; u.lang = 'es-MX'; u.rate = 0.95; u.pitch = 1.0;
-            window.speechSynthesis.speak(u);
-        }
-
-        function fmtVal(val) { if (typeof val === 'number') return val % 1 !== 0 ? val.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : val.toLocaleString('es-MX'); return val ?? '—' }
-
-        // INIT
-        logLine('VannaLight Industrial Intelligence v2.0', 'sys');
-        logLine('Iniciando conexión WebSocket...', 'sys');
+        // Inicializar
+        setMode('sql');
     </script>
 </body>
 </html>

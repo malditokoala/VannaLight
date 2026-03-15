@@ -22,7 +22,7 @@ public class LlmClient : ILlmClient, IDisposable
         var parameters = new ModelParams(_settings.Llm.ModelPath)
         {
             ContextSize = (uint)_settings.Llm.ContextSize,
-            GpuLayerCount = 35 // Ajustado para tu RTX 4060
+            GpuLayerCount = 12 // Ajustado para tu RTX 4060
         };
 
         _weights = LLamaWeights.LoadFromFile(parameters);

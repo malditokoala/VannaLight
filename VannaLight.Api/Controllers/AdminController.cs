@@ -57,8 +57,9 @@ public class AdminController(
     [HttpGet("history")]
     public async Task<IActionResult> GetHistory(CancellationToken ct)
     {
-        // Se delega la búsqueda a SQLite a través de la abstracción (IJobStore)
-        var jobs = await jobStore.GetRecentJobsAsync(20, ct);
+        // FIX: Forzamos el modo "Data" (SQL). 
+        // El Admin de RAG NUNCA debe ver las predicciones de ML.NET.
+        var jobs = await jobStore.GetRecentJobsAsync(20, "Data", ct);
         return Ok(jobs);
     }
 

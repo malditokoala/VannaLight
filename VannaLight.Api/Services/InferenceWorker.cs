@@ -1,209 +1,268 @@
-﻿using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using System;
+﻿using Dapper;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.Data.SqlClient;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using VannaLight.Api.Contracts;
 using VannaLight.Api.Hubs;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.UseCases;
 
 namespace VannaLight.Api.Services;
 
-public class InferenceWorker : BackgroundService
+public class InferenceWorker(
+    IAskRequestQueue queue,
+    IServiceScopeFactory scopeFactory,
+    IHubContext<AssistantHub> hubContext,
+    ILogger<InferenceWorker> logger,
+    IConfiguration configuration) : BackgroundService
 {
-    private readonly IAskRequestQueue _queue;
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<InferenceWorker> _logger;
-    private readonly IHubContext<AssistantHub> _hubContext;
+    private const int SqlExecutionTimeoutSeconds = 8;
 
-    public InferenceWorker(
-        IAskRequestQueue queue,
-        IServiceScopeFactory scopeFactory,
-        ILogger<InferenceWorker> logger,
-        IHubContext<AssistantHub> hubContext)
+    protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        _queue = queue;
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        _hubContext = hubContext;
-    }
+        logger.LogInformation("InferenceWorker iniciado. Esperando trabajos (SQL, Docs, Predict)...");
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        _logger.LogInformation("InferenceWorker iniciado y esperando preguntas...");
+        string sqlitePath = configuration["Paths:Sqlite"] ?? "Data/vanna_memory.db";
+        string sqlServerConnString = configuration.GetConnectionString("OperationalDb")
+            ?? throw new InvalidOperationException("Falta la cadena de conexión OperationalDb.");
 
-        while (!stoppingToken.IsCancellationRequested)
+        while (!ct.IsCancellationRequested)
         {
-            var workItem = await _queue.DequeueAsync(stoppingToken);
-
             try
             {
-                using var scope = _scopeFactory.CreateScope();
+                var workItem = await queue.DequeueAsync(ct);
+
+                Guid jobId = (Guid)workItem.JobId;
+                string connectionId = workItem.ConnectionId?.ToString() ?? string.Empty;
+                string mode = workItem.Mode.ToString();
+                string question = workItem.Question.ToString();
+
+                using var scope = scopeFactory.CreateScope();
                 var jobStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
 
-                await jobStore.UpdateStatusAsync(workItem.JobId, "Processing");
+                await jobStore.UpdateStatusAsync(jobId, "Analyzing", ct);
 
-                if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
+                if (!string.IsNullOrWhiteSpace(connectionId))
                 {
-                    await _hubContext.Clients.Client(workItem.ConnectionId)
-                        .SendAsync("JobStatusUpdated", new { workItem.JobId, Status = "Analyzing" }, stoppingToken);
+                    await hubContext.Clients.Client(connectionId)
+                        .SendAsync("JobStatusUpdated", new { JobId = jobId, Status = "Analyzing" }, ct);
                 }
 
-                // ==========================================
-                // 1) MODO DOCUMENTOS (PDF)
-                // ==========================================
-                if (workItem.Mode == AskMode.Docs)
+                // ========================================================
+                // CAMINO 1: PREDICCIÓN (ML.NET)
+                // ========================================================
+                if (mode == "Predict")
                 {
-                    var docsService = scope.ServiceProvider.GetRequiredService<IDocsAnswerService>();
-                    var docsResult = await docsService.AnswerAsync(workItem.Question, stoppingToken);
+                    logger.LogInformation("[Worker] Ejecutando ML.NET para Job {Id}", jobId);
 
-                    if (docsResult.Success)
+                    var askUseCase = scope.ServiceProvider.GetRequiredService<AskUseCase>();
+                    var mlResult = await askUseCase.PredictAsync(question, ct);
+
+                    if (mlResult.Success)
                     {
-                        var jsonPayload = JsonSerializer.Serialize(new { type = "docs", answer = docsResult.AnswerText, confidence = 0.95 });
-                        await jobStore.SetResultAsync(workItem.JobId, jsonPayload);
+                        await jobStore.UpdateJobAsync(
+                            jobId,
+                            "Completed",
+                            mlResult.Sql,
+                            mlResult.ResultJson,
+                            null,
+                            ct);
 
-                        if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
+                        if (!string.IsNullOrWhiteSpace(connectionId))
                         {
-                            await _hubContext.Clients.Client(workItem.ConnectionId)
-                                .SendAsync("JobCompleted", new { workItem.JobId, Mode = "Docs", ResultJson = jsonPayload }, stoppingToken);
+                            await hubContext.Clients.Client(connectionId)
+                                .SendAsync("JobCompleted", new
+                                {
+                                    JobId = jobId,
+                                    Mode = "Predict",
+                                    Explanation = mlResult.Sql,
+                                    ResultJson = mlResult.ResultJson
+                                }, ct);
                         }
                     }
                     else
                     {
-                        await jobStore.SetErrorAsync(workItem.JobId, docsResult.ErrorMessage ?? "Error en documentos.", "Failed");
-                        if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
-                            await _hubContext.Clients.Client(workItem.ConnectionId)
-                                .SendAsync("JobFailed", new { workItem.JobId, Error = docsResult.ErrorMessage }, stoppingToken);
+                        await HandleErrorAsync(jobId, connectionId, mlResult.Error, jobStore, ct);
                     }
+
                     continue;
                 }
 
-                // ==========================================
-                // 2) MODO PREDICCIONES (ML.NET)
-                // ==========================================
-                if (workItem.Mode == AskMode.Predict)
+                // ========================================================
+                // CAMINO 2: DOCUMENTOS (RAG PDF)
+                // ========================================================
+                if (mode == "Docs")
                 {
-                    var askUseCase = scope.ServiceProvider.GetRequiredService<AskUseCase>();
+                    logger.LogInformation("[Worker] Ejecutando Búsqueda RAG (Docs) para Job {Id}", jobId);
 
-                    // Llamamos al nuevo método exclusivo de predicciones
-                    var predictResult = await askUseCase.PredictAsync(workItem.Question, stoppingToken);
+                    var docsService = scope.ServiceProvider.GetRequiredService<IDocsAnswerService>();
+                    var docResult = await docsService.AnswerAsync(question, ct);
 
-                    if (predictResult.Success)
+                    if (docResult.Success)
                     {
-                        // Guardamos el JSON y lo mandamos a la UI
-                        await jobStore.SetResultAsync(workItem.JobId, predictResult.ResultJson ?? "");
-
-                        if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
-                        {
-                            await _hubContext.Clients.Client(workItem.ConnectionId)
-                                .SendAsync("JobCompleted", new
-                                {
-                                    JobId = workItem.JobId,
-                                    Mode = "Predict",
-                                    ResultJson = predictResult.ResultJson
-                                }, stoppingToken);
-                        }
-                    }
-                    else
-                    {
-                        await jobStore.SetErrorAsync(workItem.JobId, predictResult.Error ?? "Error en la predicción.", "Failed");
-
-                        if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
-                        {
-                            await _hubContext.Clients.Client(workItem.ConnectionId)
-                                .SendAsync("JobFailed", new { JobId = workItem.JobId, Error = predictResult.Error }, stoppingToken);
-                        }
-                    }
-
-                    continue; // Evita que pase al modo SQL
-                }
-
-                // ==========================================
-                // 3) MODO DATOS (SQL)
-                // ==========================================
-                if (workItem.Mode == AskMode.Data)
-                {
-                    var askUseCase = scope.ServiceProvider.GetRequiredService<AskUseCase>();
-                    var config = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
-
-                    var sqlitePath = config["Paths:Sqlite"] ?? "Data/vanna_memory.db";
-                    var sqlConn = config.GetConnectionString("OperationalDb");
-
-                    var result = await askUseCase.ExecuteAsync(workItem.Question, sqlitePath, sqlConn, stoppingToken);
-
-                    if (result.Success)
-                    {
-                        object? queryData = null;
-
-                        if (result.PassedDryRun)
-                        {
-                            using var conn = new Microsoft.Data.SqlClient.SqlConnection(sqlConn);
-                            queryData = await Dapper.SqlMapper.QueryAsync(conn, result.Sql);
-                        }
-
-                        var jsonPayload = JsonSerializer.Serialize(new
-                        {
-                            type = "data",
-                            sql = result.Sql,
-                            data = queryData
-                        });
+                        var jsonCitations = JsonSerializer.Serialize(docResult.Citations);
 
                         await jobStore.UpdateJobAsync(
-                            workItem.JobId,
+                            jobId,
                             "Completed",
-                            result.Sql,
-                            jsonPayload,
+                            docResult.AnswerText,
+                            jsonCitations,
                             null,
-                            stoppingToken
-                        );
+                            ct);
 
-                        if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
+                        if (!string.IsNullOrWhiteSpace(connectionId))
                         {
-                            await _hubContext.Clients.Client(workItem.ConnectionId)
+                            await hubContext.Clients.Client(connectionId)
                                 .SendAsync("JobCompleted", new
                                 {
-                                    workItem.JobId,
-                                    Mode = "Data",
-                                    Sql = result.Sql,
-                                    Data = queryData
-                                }, stoppingToken);
+                                    JobId = jobId,
+                                    Mode = "Docs",
+                                    Explanation = docResult.AnswerText,
+                                    ResultJson = jsonCitations
+                                }, ct);
                         }
                     }
                     else
                     {
-                        await jobStore.SetErrorAsync(workItem.JobId, result.Error ?? "Error SQL", "Failed");
-
-                        if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
-                        {
-                            await _hubContext.Clients.Client(workItem.ConnectionId)
-                                .SendAsync("JobFailed", new { workItem.JobId, Error = result.Error }, stoppingToken);
-                        }
+                        await HandleErrorAsync(jobId, connectionId, docResult.ErrorMessage, jobStore, ct);
                     }
+
+                    continue;
                 }
 
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error procesando JobId {JobId}", workItem.JobId);
+                // ========================================================
+                // CAMINO 3: DATOS (SQL SERVER)
+                // ========================================================
+                logger.LogInformation("[Worker] Ejecutando Text-to-SQL para Job {Id}", jobId);
+
+                var sqlUseCase = scope.ServiceProvider.GetRequiredService<AskUseCase>();
+                var sqlResult = await sqlUseCase.ExecuteAsync(question, sqlitePath, sqlServerConnString, ct);
+
+                if (!sqlResult.Success)
+                {
+                    if (sqlResult.FailureKind == AskFailureKind.ValidationError ||
+                        sqlResult.FailureKind == AskFailureKind.DryRunError)
+                    {
+                        await jobStore.UpdateJobAsync(
+                            jobId,
+                            "RequiresReview",
+                            sqlResult.Sql,
+                            null,
+                            sqlResult.Error,
+                            ct);
+
+                        await NotifyRequiresReviewAsync(jobId, connectionId, sqlResult.Error, ct);
+                    }
+                    else
+                    {
+                        await HandleErrorAsync(jobId, connectionId, sqlResult.Error, jobStore, ct);
+                    }
+
+                    continue;
+                }
 
                 try
                 {
-                    using var scope = _scopeFactory.CreateScope();
-                    var jobStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
-                    await jobStore.SetErrorAsync(workItem.JobId, ex.Message, "Failed");
+                    await using var connection = new SqlConnection(sqlServerConnString);
+                    await connection.OpenAsync(ct);
 
-                    if (!string.IsNullOrWhiteSpace(workItem.ConnectionId))
+                    var command = new CommandDefinition(
+                        sqlResult.Sql,
+                        commandTimeout: SqlExecutionTimeoutSeconds,
+                        cancellationToken: ct);
+
+                    var rawRows = await connection.QueryAsync(command);
+
+                    var rows = rawRows
+                        .Select(row => ((IDictionary<string, object>)row)
+                            .ToDictionary(k => k.Key, v => v.Value))
+                        .ToList();
+
+                    string jsonPayload = JsonSerializer.Serialize(rows);
+
+                    await jobStore.UpdateJobAsync(
+                        jobId,
+                        "Completed",
+                        sqlResult.Sql,
+                        jsonPayload,
+                        null,
+                        ct);
+
+                    if (!string.IsNullOrWhiteSpace(connectionId))
                     {
-                        await _hubContext.Clients.Client(workItem.ConnectionId)
-                            .SendAsync("JobFailed", new { workItem.JobId, Error = "Fallo crítico interno: " + ex.Message }, stoppingToken);
+                        await hubContext.Clients.Client(connectionId)
+                            .SendAsync("JobCompleted", new
+                            {
+                                JobId = jobId,
+                                Mode = "Data",
+                                Sql = sqlResult.Sql,
+                                Data = rows
+                            }, ct);
                     }
                 }
-                catch { /* ignorar errores en el manejo de errores */ }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error ejecutando SQL para Job {Id}", jobId);
+
+                    await jobStore.UpdateJobAsync(
+                        jobId,
+                        "Failed",
+                        sqlResult.Sql,
+                        null,
+                        $"Error al ejecutar SQL: {ex.Message}",
+                        ct);
+
+                    if (!string.IsNullOrWhiteSpace(connectionId))
+                    {
+                        await hubContext.Clients.Client(connectionId)
+                            .SendAsync("JobFailed", new
+                            {
+                                JobId = jobId,
+                                Error = $"Error al ejecutar SQL: {ex.Message}",
+                                Status = "Failed"
+                            }, ct);
+                    }
+                }
             }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error crítico procesando inferencia.");
+            }
+        }
+    }
+
+    private async Task HandleErrorAsync(Guid jobId, string connectionId, string? error, IJobStore store, CancellationToken ct)
+    {
+        await store.SetErrorAsync(jobId, error ?? "Error desconocido", "Failed", ct);
+
+        if (!string.IsNullOrWhiteSpace(connectionId))
+        {
+            await hubContext.Clients.Client(connectionId)
+                .SendAsync("JobFailed", new
+                {
+                    JobId = jobId,
+                    Error = error,
+                    Status = "Failed"
+                }, ct);
+        }
+    }
+
+    private async Task NotifyRequiresReviewAsync(Guid jobId, string connectionId, string? error, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(connectionId))
+        {
+            await hubContext.Clients.Client(connectionId)
+                .SendAsync("JobFailed", new
+                {
+                    JobId = jobId,
+                    Error = error,
+                    Status = "RequiresReview"
+                }, ct);
         }
     }
 }
