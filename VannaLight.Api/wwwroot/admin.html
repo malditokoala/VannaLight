@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
     <style>
         /* ═══════════════════════════════════════════════
-        TOKENS — idénticos a index.html
+        TOKENS
         ═══════════════════════════════════════════════ */
         :root {
             --bg: #09090c;
@@ -20,11 +20,12 @@
             --muted: #4a5568;
             --dim: #7a8a9e;
             --sql-c: #22d3ee;
-            --rag-c: #22d3ee; /* Tab RAG = cyan  */
-            --llm-c: #f59e0b; /* Tab LLM = amber */
+            --rag-c: #22d3ee;
+            --llm-c: #f59e0b;
             --ok-c: #4ade80;
             --err-c: #f87171;
             --warn-c: #fbbf24;
+            --verify-c: #a78bfa; /* nuevo: color para VerificationStatus */
             --radius: 6px;
             --mono: 'IBM Plex Mono', monospace;
             --sans: 'IBM Plex Sans', sans-serif;
@@ -70,7 +71,7 @@
             min-height: 100vh;
         }
 
-        /* ── TOPBAR ──────────────────────────────────── */
+        /* ── TOPBAR ── */
         .topbar {
             display: flex;
             align-items: center;
@@ -184,7 +185,7 @@
                 height: 12px;
             }
 
-        /* ── TAB RAIL ────────────────────────────────── */
+        /* ── TAB RAIL ── */
         .tab-rail {
             display: flex;
             gap: 2px;
@@ -209,7 +210,6 @@
             text-transform: uppercase;
             cursor: pointer;
             transition: color .2s, border-color .2s;
-            position: relative;
         }
 
             .tab-btn svg {
@@ -231,7 +231,7 @@
                 color: var(--dim);
             }
 
-        /* ── MAIN AREA ───────────────────────────────── */
+        /* ── MAIN AREA ── */
         .main-area {
             display: grid;
             grid-template-rows: 44px 1fr;
@@ -256,7 +256,7 @@
             overflow: hidden;
         }
 
-        /* ── LEFT PANEL: History list ────────────────── */
+        /* ── LEFT PANEL ── */
         .panel-left {
             border-right: 1px solid var(--border);
             display: flex;
@@ -299,6 +299,52 @@
             background: var(--border2);
             color: var(--dim);
         }
+
+        /* ── FILTER BAR — nuevo ── */
+        .filter-bar {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+            background: var(--surface);
+        }
+
+        .filter-btn {
+            font-family: var(--mono);
+            font-size: .56rem;
+            letter-spacing: .06em;
+            padding: 3px 9px;
+            border-radius: 3px;
+            border: 1px solid var(--border2);
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            transition: border-color .15s, color .15s, background .15s;
+        }
+
+            .filter-btn:hover {
+                color: var(--dim);
+                border-color: var(--dim);
+            }
+
+            .filter-btn.active-all {
+                border-color: var(--rag-c);
+                color: var(--rag-c);
+                background: color-mix(in srgb, var(--rag-c) 8%, transparent);
+            }
+
+            .filter-btn.active-pending {
+                border-color: var(--warn-c);
+                color: var(--warn-c);
+                background: color-mix(in srgb, var(--warn-c) 8%, transparent);
+            }
+
+            .filter-btn.active-verified {
+                border-color: var(--ok-c);
+                color: var(--ok-c);
+                background: color-mix(in srgb, var(--ok-c) 8%, transparent);
+            }
 
         .history-scroll {
             flex: 1;
@@ -349,7 +395,6 @@
             color: var(--text);
             line-height: 1.35;
             flex: 1;
-            /* clamp to 2 lines */
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
@@ -363,6 +408,14 @@
             white-space: nowrap;
             flex-shrink: 0;
             padding-top: 1px;
+        }
+
+        /* fila de badges en el item */
+        .hi-badges {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
         }
 
         .hi-status {
@@ -398,6 +451,33 @@
                 color: var(--err-c);
             }
 
+        /* badge de verification en la lista */
+        .hi-verify {
+            font-family: var(--mono);
+            font-size: .52rem;
+            letter-spacing: .06em;
+            padding: 1px 6px;
+            border-radius: 3px;
+        }
+
+            .hi-verify.verified {
+                background: color-mix(in srgb, var(--ok-c) 15%, transparent);
+                border: 1px solid color-mix(in srgb, var(--ok-c) 30%, transparent);
+                color: var(--ok-c);
+            }
+
+            .hi-verify.pending {
+                background: color-mix(in srgb, var(--warn-c) 12%, transparent);
+                border: 1px solid color-mix(in srgb, var(--warn-c) 25%, transparent);
+                color: var(--warn-c);
+            }
+
+            .hi-verify.rejected {
+                background: color-mix(in srgb, var(--err-c) 12%, transparent);
+                border: 1px solid color-mix(in srgb, var(--err-c) 25%, transparent);
+                color: var(--err-c);
+            }
+
         .empty-state {
             display: flex;
             flex-direction: column;
@@ -416,7 +496,7 @@
                 opacity: .3;
             }
 
-        /* ── RIGHT PANEL: Editor ─────────────────────── */
+        /* ── RIGHT PANEL: Editor ── */
         .panel-right {
             display: flex;
             flex-direction: column;
@@ -472,7 +552,6 @@
                 cursor: default;
             }
 
-        /* SQL textarea — monospace + neon */
         .sql-editor {
             background: var(--bg);
             border: 1px solid var(--border);
@@ -494,20 +573,36 @@
                 box-shadow: 0 0 0 3px color-mix(in srgb, var(--rag-c) 10%, transparent), inset 0 0 20px color-mix(in srgb, var(--rag-c) 3%, transparent);
             }
 
-        /* error banner */
-        .error-banner {
+        /* ── RAG BANNER — reemplaza error-banner fijo ── */
+        .rag-banner {
             display: none;
             padding: 10px 14px;
             border-radius: var(--radius);
-            border: 1px solid color-mix(in srgb, var(--err-c) 40%, transparent);
-            background: color-mix(in srgb, var(--err-c) 8%, transparent);
             font-family: var(--mono);
             font-size: .72rem;
-            color: var(--err-c);
             line-height: 1.6;
+            animation: fadeUp .2s ease-out;
         }
 
-        /* action bar at bottom of editor */
+            .rag-banner.ok {
+                border: 1px solid color-mix(in srgb, var(--ok-c) 40%, transparent);
+                background: color-mix(in srgb, var(--ok-c) 8%, transparent);
+                color: var(--ok-c);
+            }
+
+            .rag-banner.err {
+                border: 1px solid color-mix(in srgb, var(--err-c) 40%, transparent);
+                background: color-mix(in srgb, var(--err-c) 8%, transparent);
+                color: var(--err-c);
+            }
+
+            .rag-banner.warn {
+                border: 1px solid color-mix(in srgb, var(--warn-c) 40%, transparent);
+                background: color-mix(in srgb, var(--warn-c) 8%, transparent);
+                color: var(--warn-c);
+            }
+
+        /* action bar */
         .editor-actions {
             padding: 14px 28px;
             border-top: 1px solid var(--border);
@@ -518,16 +613,76 @@
             flex-shrink: 0;
         }
 
+        /* ── META ROW — muestra Status + VerificationStatus + TrainingSaved ── */
         .action-meta {
             font-family: var(--mono);
-            font-size: .6rem;
+            font-size: .58rem;
             color: var(--muted);
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
+            flex-wrap: wrap;
+            max-width: 60%;
         }
 
-        /* status badge */
+        .meta-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 7px;
+            border-radius: 3px;
+            font-size: .54rem;
+            letter-spacing: .05em;
+        }
+
+            .meta-chip.status-ok {
+                background: color-mix(in srgb,var(--ok-c) 10%,transparent);
+                color: var(--ok-c);
+                border: 1px solid color-mix(in srgb,var(--ok-c) 25%,transparent);
+            }
+
+            .meta-chip.status-err {
+                background: color-mix(in srgb,var(--err-c) 10%,transparent);
+                color: var(--err-c);
+                border: 1px solid color-mix(in srgb,var(--err-c) 25%,transparent);
+            }
+
+            .meta-chip.verify-ok {
+                background: color-mix(in srgb,var(--ok-c) 10%,transparent);
+                color: var(--ok-c);
+                border: 1px solid color-mix(in srgb,var(--ok-c) 25%,transparent);
+            }
+
+            .meta-chip.verify-pending {
+                background: color-mix(in srgb,var(--warn-c) 10%,transparent);
+                color: var(--warn-c);
+                border: 1px solid color-mix(in srgb,var(--warn-c) 25%,transparent);
+            }
+
+            .meta-chip.verify-err {
+                background: color-mix(in srgb,var(--err-c) 10%,transparent);
+                color: var(--err-c);
+                border: 1px solid color-mix(in srgb,var(--err-c) 25%,transparent);
+            }
+
+            .meta-chip.training-yes {
+                background: color-mix(in srgb,var(--rag-c) 10%,transparent);
+                color: var(--rag-c);
+                border: 1px solid color-mix(in srgb,var(--rag-c) 25%,transparent);
+            }
+
+            .meta-chip.training-no {
+                background: color-mix(in srgb,var(--muted) 10%,transparent);
+                color: var(--dim);
+                border: 1px solid var(--border2);
+            }
+
+        .meta-time {
+            color: var(--muted);
+            font-size: .54rem;
+        }
+
+        /* status badge (inside field label) */
         .status-badge {
             display: inline-flex;
             align-items: center;
@@ -551,6 +706,12 @@
                 border: 1px solid color-mix(in srgb,var(--err-c) 30%,transparent);
             }
 
+            .status-badge.warn {
+                background: color-mix(in srgb,var(--warn-c) 12%,transparent);
+                color: var(--warn-c);
+                border: 1px solid color-mix(in srgb,var(--warn-c) 30%,transparent);
+            }
+
         /* ═══════════════════════════════════════════════
         LLM TAB LAYOUT
         ═══════════════════════════════════════════════ */
@@ -561,7 +722,6 @@
             overflow: hidden;
         }
 
-        /* Profile list — similar to history */
         .profile-item {
             padding: 13px 18px;
             border-bottom: 1px solid var(--border);
@@ -574,11 +734,11 @@
                 background: var(--panel);
                 border-left-color: var(--muted);
             }
-            /* is-active: borde verde solo cuando NO está seleccionado */
+
             .profile-item.is-active {
                 border-left-color: var(--ok-c);
             }
-            /* selected siempre gana — mayor especificidad */
+
             .profile-item.selected,
             .profile-item.selected.is-active {
                 background: color-mix(in srgb, var(--llm-c) 8%, var(--panel));
@@ -614,7 +774,6 @@
             color: var(--muted);
         }
 
-        /* Profile editor */
         .profile-editor {
             flex: 1;
             overflow-y: auto;
@@ -624,7 +783,6 @@
             gap: 20px;
         }
 
-        /* Field grid for profile params */
         .params-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -643,7 +801,6 @@
             letter-spacing: .04em;
         }
 
-        /* Number input */
         .field-num {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -666,7 +823,6 @@
                 color: var(--dim);
             }
 
-            /* Highlight: GPU layers — amber accent */
             .field-num.key-param {
                 color: var(--llm-c);
             }
@@ -675,7 +831,6 @@
                     border-color: var(--llm-c);
                 }
 
-        /* Alert banner reusable */
         .alert-banner {
             display: none;
             padding: 10px 16px;
@@ -777,7 +932,6 @@
             color: var(--err-c);
         }
 
-        /* spinner inside button */
         .btn-spinner {
             width: 11px;
             height: 11px;
@@ -796,7 +950,7 @@
         }
 
         /* ═══════════════════════════════════════════════
-        VRAM METER (decorative)
+        VRAM METER
         ═══════════════════════════════════════════════ */
         .vram-meter {
             background: var(--surface);
@@ -854,7 +1008,7 @@
         }
 
         /* ═══════════════════════════════════════════════
-        SECTION HEADER inside editor
+        SECTION HEADER
         ═══════════════════════════════════════════════ */
         .section-header {
             display: flex;
@@ -915,7 +1069,7 @@
         }
 
         /* ═══════════════════════════════════════════════
-        PROFILE EDITOR ACTIONS
+        PROFILE ACTIONS
         ═══════════════════════════════════════════════ */
         .profile-actions {
             padding: 14px 28px;
@@ -949,13 +1103,19 @@
                 .params-grid .full {
                     grid-column: 1;
                 }
+
+            .action-meta {
+                max-width: 100%;
+            }
         }
     </style>
 </head>
 <body>
     <div class="app">
 
-        <!-- ── TOPBAR ──────────────────────────────────── -->
+        <input type="hidden" id="txtJobId" />
+
+        <!-- ── TOPBAR ── -->
         <header class="topbar">
             <div class="tb-left">
                 <div class="tb-logo">
@@ -979,7 +1139,7 @@
             </div>
         </header>
 
-        <!-- ── MAIN ───────────────────────────────────── -->
+        <!-- ── MAIN ── -->
         <div class="main-area">
 
             <!-- Tab rail -->
@@ -1010,7 +1170,7 @@
                 </button>
             </div>
 
-            <!-- ══ TAB: RAG ══════════════════════════════ -->
+            <!-- ══ TAB: RAG ══ -->
             <div class="tab-content active" id="pane-rag">
                 <div class="rag-layout" style="width:100%">
 
@@ -1026,6 +1186,14 @@
                             </div>
                             <span class="panel-count" id="ragCount">—</span>
                         </div>
+
+                        <!-- FILTER BAR — nuevo -->
+                        <div class="filter-bar">
+                            <button class="filter-btn active-all" id="filter-all" onclick="setFilter('all')">Todos</button>
+                            <button class="filter-btn" id="filter-pending" onclick="setFilter('pending')">Pendientes</button>
+                            <button class="filter-btn" id="filter-verified" onclick="setFilter('verified')">Verificados</button>
+                        </div>
+
                         <div class="history-scroll" id="historyList">
                             <div class="empty-state">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1057,31 +1225,48 @@
                             <!-- Question field -->
                             <div class="field-group">
                                 <label class="field-label">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                                    </svg>
                                     Pregunta original del usuario
-                                    <span class="status-badge ok" id="ragStatusBadge" style="display:none;margin-left:auto"></span>
+                                    <!-- Verification badge (reemplaza el badge de Status) -->
+                                    <span class="status-badge warn" id="ragVerifyBadge" style="display:none;margin-left:auto"></span>
                                 </label>
-                                <input type="text" id="txtQuestion" class="field-input" placeholder="Selecciona una consulta del historial para editar..." readonly />
+                                <input type="text" id="txtQuestion" class="field-input"
+                                       placeholder="Selecciona una consulta del historial para editar..." readonly />
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label">Comentario de validación (opcional)</label>
+                                <textarea id="txtFeedbackComment" class="field-input" rows="3"
+                                          placeholder="Ej. Se corrigió el join y se validó el agregado mensual."></textarea>
                             </div>
 
                             <!-- SQL editor -->
                             <div class="field-group" style="flex:1">
                                 <label class="field-label">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="16 18 22 12 16 6" />
+                                        <polyline points="8 6 2 12 8 18" />
+                                    </svg>
                                     Código T-SQL — edita lo que esté incorrecto
                                 </label>
-                                <textarea id="txtSql" class="sql-editor" rows="12" placeholder="-- El SQL generado aparecerá aquí
--- Corrige lo necesario antes de guardar en memoria RAG
-SELECT ..."></textarea>
+                                <textarea id="txtSql" class="sql-editor" rows="12"
+                                          placeholder="-- El SQL generado aparecerá aquí&#10;-- Corrige lo necesario antes de guardar en memoria RAG&#10;SELECT ..."></textarea>
                             </div>
 
-                            <!-- Error banner -->
-                            <div class="error-banner" id="ragError"></div>
+                            <!-- RAG banner (ok / err / warn — reemplaza error-banner) -->
+                            <div class="rag-banner" id="ragBanner"></div>
                         </div>
 
                         <!-- Actions bar -->
                         <div class="editor-actions">
-                            <div class="action-meta" id="ragMeta">Ninguna consulta seleccionada</div>
+                            <!-- Meta chips: Status · VerificationStatus · TrainingSaved · fecha -->
+                            <div class="action-meta" id="ragMeta">
+                                <span style="color:var(--muted)">Ninguna consulta seleccionada</span>
+                            </div>
                             <button class="btn btn-primary" id="btnSave" onclick="saveCorrection()" disabled>
                                 <div class="btn-spinner" id="ragSpinner"></div>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1095,7 +1280,7 @@ SELECT ..."></textarea>
                 </div>
             </div>
 
-            <!-- ══ TAB: LLM ══════════════════════════════ -->
+            <!-- ══ TAB: LLM ══ -->
             <div class="tab-content" id="pane-llm">
                 <div class="llm-layout" style="width:100%">
 
@@ -1148,7 +1333,6 @@ SELECT ..."></textarea>
 
                             <input type="hidden" id="txtProfileId">
 
-                            <!-- Profile name -->
                             <div class="field-group">
                                 <label class="field-label">Nombre del perfil</label>
                                 <input type="text" id="txtProfileName" class="field-input" readonly placeholder="Selecciona un perfil..." />
@@ -1182,7 +1366,9 @@ SELECT ..."></textarea>
                                 </div>
                                 <div class="field-group">
                                     <label class="field-label" style="color:var(--llm-c)">
-                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /></svg>
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                                        </svg>
                                         Context Size (Tokens)
                                     </label>
                                     <input type="number" id="txtContextSize" class="field-num key-param" placeholder="—" />
@@ -1202,9 +1388,7 @@ SELECT ..."></textarea>
                                 </div>
                             </div>
 
-                            <!-- Alert -->
                             <div class="alert-banner" id="llmAlert"></div>
-
                         </div>
 
                         <!-- Actions bar -->
@@ -1234,7 +1418,7 @@ SELECT ..."></textarea>
 
         </div><!-- /main-area -->
     </div><!-- /app -->
-    <!-- Sustituye todo el bloque <script> al final de tu admin.html con este -->
+
     <script>
         // ═══════════════════════════════════════════════════════════
         // TAB SWITCHING
@@ -1250,81 +1434,172 @@ SELECT ..."></textarea>
         // RAG TAB
         // ═══════════════════════════════════════════════════════════
         let globalJobs = [];
+        let activeFilter = 'all'; // 'all' | 'pending' | 'verified'
 
+        // ── FIX #4: validar response.ok antes de parsear ──
         async function loadHistory() {
             try {
                 const res = await fetch('/api/admin/history');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const jobs = await res.json();
                 globalJobs = jobs;
-
-                const list = document.getElementById('historyList');
-                document.getElementById('ragCount').textContent = jobs.length;
-
-                if (!jobs.length) {
-                    list.innerHTML = `<div class="empty-state">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                Sin historial disponible</div>`;
-                    return;
-                }
-
-                list.innerHTML = jobs.map((job, i) => {
-                    const status = job.status || job.Status;
-                    const question = job.question || job.Question;
-                    const created = job.createdUtc || job.CreatedUtc;
-                    const ok = status === 'Completed';
-                    const time = new Date(created).toLocaleTimeString('es-MX', { hour12: false, hour: '2-digit', minute: '2-digit' });
-                    return `
-                <div class="history-item" id="hi-${i}" onclick="loadEditor(${i})">
-                  <div class="hi-top">
-                    <div class="hi-question">${escHtml(question)}</div>
-                    <div class="hi-time">${time}</div>
-                  </div>
-                  <div class="hi-status ${ok ? 'ok' : 'err'}">
-                    <span class="dot"></span>${status}
-                  </div>
-                </div>`;
-                }).join('');
+                renderHistory();
             } catch (e) {
                 document.getElementById('historyList').innerHTML =
-                    `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>Error al cargar historial</div>`;
+                    `<div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                    Error al cargar historial</div>`;
             }
         }
 
-        function loadEditor(i) {
-            const job = globalJobs[i];
-            document.querySelectorAll('.history-item').forEach(el => el.classList.remove('selected'));
-            document.getElementById('hi-' + i).classList.add('selected');
+        // ── normaliza el VS a una de las 3 clases CSS conocidas (fix #4) ──
+        function normalizeVerificationClass(vs) {
+            const key = String(vs || '').toLowerCase();
+            if (key === 'verified') return 'verified';
+            if (key === 'rejected') return 'rejected';
+            return 'pending';
+        }
 
-            const status = job.status || job.Status;
-            const question = job.question || job.Question;
-            const sql = job.sqlText || job.SqlText || '';
-            const error = job.errorText || job.ErrorText;
+        function setFilter(f) {
+            activeFilter = f;
+            ['all', 'pending', 'verified'].forEach(id => {
+                const btn = document.getElementById('filter-' + id);
+                btn.className = 'filter-btn' + (id === f ? ' active-' + id : '');
+            });
+            renderHistory();
+        }
 
-            document.getElementById('txtQuestion').value = question;
-            document.getElementById('txtSql').value = sql;
+        function renderHistory() {
+            const list = document.getElementById('historyList');
 
-            const badge = document.getElementById('ragStatusBadge');
-            badge.style.display = 'inline-flex';
-            badge.className = 'status-badge ' + (status === 'Completed' ? 'ok' : 'err');
-            badge.textContent = status;
+            // filtrar — 'pending' = literalmente Pending; 'verified' = Verified; 'all' = todo
+            const filtered = globalJobs.filter(job => {
+                const vs = normalizeVerificationClass(job.verificationStatus || job.VerificationStatus);
+                if (activeFilter === 'pending') return vs === 'pending';
+                if (activeFilter === 'verified') return vs === 'verified';
+                return true;
+            });
 
-            const errEl = document.getElementById('ragError');
-            if (error && error !== 'null') {
-                errEl.textContent = `Error reportado: ${error}`;
-                errEl.style.display = 'block';
-            } else {
-                errEl.style.display = 'none';
+            document.getElementById('ragCount').textContent = filtered.length;
+
+            if (!filtered.length) {
+                list.innerHTML = `<div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                Sin resultados para este filtro</div>`;
+                return;
             }
 
-            const time = new Date(job.createdUtc || job.CreatedUtc).toLocaleString('es-MX', { hour12: false });
-            document.getElementById('ragMeta').textContent = time;
+            list.innerHTML = filtered.map((job) => {
+                // índice real en globalJobs para loadEditor
+                const realIdx = globalJobs.indexOf(job);
+
+                const status = job.status || job.Status || 'Unknown';
+                const vs = job.verificationStatus || job.VerificationStatus || 'Pending';
+                const question = job.question || job.Question || '';
+                const created = job.createdUtc || job.CreatedUtc;
+                const trained = !!(job.trainingExampleSaved || job.TrainingExampleSaved);
+
+                const opOk = status === 'Completed';
+                const vsKey = normalizeVerificationClass(vs); // siempre 'verified' | 'pending' | 'rejected'
+
+                const time = new Date(created).toLocaleTimeString('es-MX',
+                    { hour12: false, hour: '2-digit', minute: '2-digit' });
+
+                return `
+            <div class="history-item" id="hi-${realIdx}" onclick="loadEditor(${realIdx})">
+              <div class="hi-top">
+                <div class="hi-question">${escHtml(question)}</div>
+                <div class="hi-time">${time}</div>
+              </div>
+              <div class="hi-badges">
+                <span class="hi-status ${opOk ? 'ok' : 'err'}">
+                  <span class="dot"></span>${status}
+                </span>
+                <span class="hi-verify ${vsKey}">${vs}</span>
+                ${trained ? '<span class="hi-verify verified">RAG ✓</span>' : ''}
+              </div>
+            </div>`;
+            }).join('');
+        }
+
+        // ── loadEditor — options.preserveBanner evita que el banner de éxito sea tapado (fix #1) ──
+        function loadEditor(i, options = {}) {
+            const preserveBanner = options.preserveBanner === true;
+            const job = globalJobs[i];
+            if (!job) return;
+
+            document.querySelectorAll('.history-item').forEach(el => el.classList.remove('selected'));
+            const el = document.getElementById('hi-' + i);
+            if (el) el.classList.add('selected');
+
+            document.getElementById('txtJobId').value = job.jobId || job.JobId || '';
+            document.getElementById('txtFeedbackComment').value = job.feedbackComment || job.FeedbackComment || '';
+            document.getElementById('txtQuestion').value = job.question || job.Question || '';
+            document.getElementById('txtSql').value = job.sqlText || job.SqlText || '';
+
+            const status = job.status || job.Status || 'Unknown';
+            const vs = job.verificationStatus || job.VerificationStatus || 'Pending';
+            const trained = !!(job.trainingExampleSaved || job.TrainingExampleSaved);
+            const vsLow = normalizeVerificationClass(vs); // fix #4: normalizado
+
+            // Badge de VerificationStatus en la label de pregunta
+            const badge = document.getElementById('ragVerifyBadge');
+            badge.style.display = 'inline-flex';
+            badge.className = 'status-badge ' + (vsLow === 'verified' ? 'ok' : vsLow === 'rejected' ? 'err' : 'warn');
+            badge.textContent = vs;
+
+            // Banner: solo actualizar si no estamos preservando uno de éxito (fix #1)
+            if (!preserveBanner) {
+                const error = job.errorText || job.ErrorText;
+                if (error && error !== 'null') {
+                    showRagBanner('warn', `⚠ Error reportado: ${error}`);
+                } else {
+                    hideRagBanner();
+                }
+            }
+
+            // Meta row: chips de Status + VerificationStatus + TrainingSaved + fecha
+            const created = new Date(job.createdUtc || job.CreatedUtc).toLocaleString('es-MX', { hour12: false });
+            const opClass = status === 'Completed' ? 'status-ok' : 'status-err';
+            const vsClass = vsLow === 'verified' ? 'verify-ok' : vsLow === 'rejected' ? 'verify-err' : 'verify-pending';
+            const trClass = trained ? 'training-yes' : 'training-no';
+
+            document.getElementById('ragMeta').innerHTML = `
+            <span class="meta-chip ${opClass}">${escHtml(status)}</span>
+            <span class="meta-chip ${vsClass}">Verif: ${escHtml(vs)}</span>
+            <span class="meta-chip ${trClass}">RAG: ${trained ? 'Sí' : 'No'}</span>
+            <span class="meta-time">${created}</span>`;
+
             document.getElementById('btnSave').disabled = false;
         }
 
+        // ── FIX #2: showRagBanner — helper consistente para ok/err/warn ──
+        function showRagBanner(type, message) {
+            const el = document.getElementById('ragBanner');
+            el.className = 'rag-banner ' + type;
+            el.textContent = message;
+            el.style.display = 'block';
+        }
+        function hideRagBanner() {
+            const el = document.getElementById('ragBanner');
+            el.style.display = 'none';
+            el.className = 'rag-banner';
+        }
+
+        // ── FIX #3: después de guardar, reseleccionar el mismo JobId ──
         async function saveCorrection() {
+            const jobId = document.getElementById('txtJobId').value;
             const question = document.getElementById('txtQuestion').value;
             const sql = document.getElementById('txtSql').value;
-            if (!question || !sql) return;
+            const feedbackComment = document.getElementById('txtFeedbackComment').value;
+
+            if (!jobId || !question || !sql) return;
 
             const btn = document.getElementById('btnSave');
             const spin = document.getElementById('ragSpinner');
@@ -1335,19 +1610,28 @@ SELECT ..."></textarea>
                 const res = await fetch('/api/admin/train', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ Question: question, SqlText: sql })
+                    body: JSON.stringify({
+                        JobId: jobId,
+                        Question: question,
+                        SqlText: sql,
+                        FeedbackComment: feedbackComment || null
+                    })
                 });
-                const errEl = document.getElementById('ragError');
+
                 if (res.ok) {
-                    errEl.style.cssText = 'display:block;border-color:color-mix(in srgb,var(--ok-c) 40%,transparent);background:color-mix(in srgb,var(--ok-c) 8%,transparent);color:var(--ok-c)';
-                    errEl.textContent = '✓ Guardado correctamente en memoria RAG';
+                    showRagBanner('ok', '✓ Guardado correctamente en memoria RAG y runtime actualizado.');
+                    // Fix #3: volver a 'all' para que el job no desaparezca si estaba en filtro 'pending'
+                    setFilter('all');
+                    await loadHistory();
+                    // Reseleccionar por JobId preservando el banner de éxito (fix #1)
+                    const refreshedIdx = globalJobs.findIndex(j => (j.jobId || j.JobId) === jobId);
+                    if (refreshedIdx >= 0) loadEditor(refreshedIdx, { preserveBanner: true });
                 } else {
-                    errEl.style.cssText = 'display:block';
-                    errEl.textContent = 'Error al guardar. Código: ' + res.status;
+                    const body = await res.json().catch(() => null);
+                    showRagBanner('err', body?.Error || ('Error al guardar. Código: ' + res.status));
                 }
             } catch (e) {
-                document.getElementById('ragError').style.cssText = 'display:block';
-                document.getElementById('ragError').textContent = 'Error de red: ' + e.message;
+                showRagBanner('err', 'Error de red: ' + e.message);
             } finally {
                 btn.disabled = false;
                 spin.style.display = 'none';
@@ -1360,17 +1644,21 @@ SELECT ..."></textarea>
         let globalProfiles = [];
         let selectedProfileIndex = -1;
 
+        // ── FIX #4 también en loadProfiles ──
         async function loadProfiles() {
             try {
                 const res = await fetch('/api/admin/llm-profiles');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 globalProfiles = await res.json();
 
                 const list = document.getElementById('profileList');
 
                 if (!globalProfiles.length) {
                     list.innerHTML = `<div class="empty-state">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
-                Sin perfiles disponibles</div>`;
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>
+                    </svg>
+                    Sin perfiles disponibles</div>`;
                     return;
                 }
 
@@ -1393,10 +1681,9 @@ SELECT ..."></textarea>
                     const target = document.querySelector(`.profile-item[data-idx="${selectedProfileIndex}"]`);
                     if (target) target.classList.add('selected');
                 }
-
             } catch (e) {
                 document.getElementById('profileList').innerHTML =
-                    `<div class="empty-state">Error al cargar perfiles</div>`;
+                    `<div class="empty-state">Error al cargar perfiles (${e.message})</div>`;
             }
         }
 
@@ -1405,14 +1692,13 @@ SELECT ..."></textarea>
             if (!p) return;
 
             selectedProfileIndex = idx;
-            const id = p.id ?? p.Id;
             const isActive = p.isActive || p.IsActive;
 
             document.querySelectorAll('.profile-item').forEach(el => el.classList.remove('selected'));
             const target = document.querySelector(`.profile-item[data-idx="${idx}"]`);
             if (target) target.classList.add('selected');
 
-            document.getElementById('txtProfileId').value = id;
+            document.getElementById('txtProfileId').value = p.id ?? p.Id;
             document.getElementById('txtProfileName').value = p.name || p.Name;
             document.getElementById('txtGpuLayers').value = p.gpuLayerCount ?? p.GpuLayerCount ?? '';
             document.getElementById('txtContextSize').value = p.contextSize ?? p.ContextSize ?? '';
@@ -1436,7 +1722,6 @@ SELECT ..."></textarea>
             document.getElementById('vramFill').style.width = pct + '%';
         }
 
-        // Función segura para leer números enteros desde el input (evita que el 0 se vuelva nulo)
         function getIntOrNull(elementId) {
             const val = document.getElementById(elementId).value;
             if (val === '') return null;
@@ -1446,7 +1731,6 @@ SELECT ..."></textarea>
 
         async function saveProfileSettings() {
             if (selectedProfileIndex < 0) return;
-
             const profileId = globalProfiles[selectedProfileIndex].id ?? globalProfiles[selectedProfileIndex].Id;
 
             const btn = document.getElementById('btnSaveProfile');
@@ -1482,7 +1766,6 @@ SELECT ..."></textarea>
 
         async function activateSelectedProfile() {
             if (selectedProfileIndex < 0) return;
-
             const profileId = globalProfiles[selectedProfileIndex].id ?? globalProfiles[selectedProfileIndex].Id;
 
             const btn = document.getElementById('btnActivate');
@@ -1491,13 +1774,11 @@ SELECT ..."></textarea>
 
             try {
                 const res = await fetch(`/api/admin/llm-profiles/${profileId}/activate`, { method: 'POST' });
-
                 if (res.ok) {
-                    // Forzamos el mensaje de advertencia visualmente en el HTML para evitar fallas de lectura del JSON
                     showAlert('warn', `
-                        <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; color: #f8fafc;">✓ Perfil activado correctamente</div>
-                        <div style="font-size: 0.75rem; color: #fbbf24; opacity: 0.9;">⚠️ IMPORTANTE: Detén y vuelve a ejecutar la API para que LLamaSharp cargue los nuevos pesos en la VRAM.</div>
-                    `);
+                    <div style="font-size:.85rem;font-weight:600;margin-bottom:4px;color:#f8fafc">✓ Perfil activado correctamente</div>
+                    <div style="font-size:.75rem;color:#fbbf24;opacity:.9">⚠️ IMPORTANTE: Detén y vuelve a ejecutar la API para que LLamaSharp cargue los nuevos pesos en la VRAM.</div>
+                `);
                     await loadProfiles();
                     document.getElementById('btnActivate').disabled = true;
                 } else {

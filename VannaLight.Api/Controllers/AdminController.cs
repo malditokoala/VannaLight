@@ -8,7 +8,11 @@ using VannaLight.Core.UseCases;
 
 namespace VannaLight.Api.Controllers;
 
-public record TrainRequest(string Question, string SqlText);
+public record TrainRequest(
+    string JobId,
+    string Question,
+    string SqlText,
+    string? FeedbackComment);
 
 public record LlmProfileUpdateRequest(
     int? GpuLayerCount,
@@ -33,14 +37,38 @@ public class AdminController(
     [HttpPost("train")]
     public async Task<IActionResult> Train([FromBody] TrainRequest request, CancellationToken ct)
     {
-        if (request is null) return BadRequest(new { Error = "Body inválido." });
+        if (request is null)
+            return BadRequest(new { Error = "Body inválido." });
+
+        if (!Guid.TryParse(request.JobId, out var jobId))
+            return BadRequest(new { Error = "JobId inválido." });
 
         try
         {
             await useCase.TrainAsync(request.Question, request.SqlText, ct);
-            return Ok(new { Message = "Entrenamiento guardado en la memoria RAG exitosamente." });
+
+            var updated = await jobStore.MarkTrainingExampleSavedAsync(
+                jobId,
+                request.SqlText,
+                verificationStatus: "Verified",
+                comment: request.FeedbackComment,
+                ct);
+
+            if (!updated)
+                return NotFound(new { Error = "No se encontró el job a actualizar en runtime." });
+
+            return Ok(new
+            {
+                Message = "Entrenamiento guardado en la memoria RAG y runtime actualizado correctamente.",
+                JobId = request.JobId,
+                VerificationStatus = "Verified",
+                TrainingExampleSaved = true
+            });
         }
-        catch (ArgumentException ex) { return BadRequest(new { Error = ex.Message }); }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
     }
 
     [HttpPost("reindex-wi")]

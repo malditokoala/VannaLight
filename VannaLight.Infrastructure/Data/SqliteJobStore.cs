@@ -156,7 +156,14 @@ public class SqliteJobStore : IJobStore
         using var conn = new SqliteConnection(_connString);
 
         var command = new CommandDefinition(
-            "SELECT JobId, Question, SqlText, Status, ErrorText, VerificationStatus, FeedbackComment, Mode, CreatedUtc FROM QuestionJobs WHERE JobId = @Id",
+            """
+                SELECT 
+                    JobId, UserId, Role, Question, Status, Mode, SqlText, ErrorText, ResultJson,
+                    Attempt, TrainingExampleSaved, VerificationStatus, FeedbackComment,
+                    CreatedUtc, UpdatedUtc
+                FROM QuestionJobs 
+                WHERE JobId = @Id
+            """,
             new { Id = jobId.ToString() },
             cancellationToken: ct);
 
@@ -164,17 +171,25 @@ public class SqliteJobStore : IJobStore
         return raw == null ? null : MapToJob(raw);
     }
 
-    public async Task<IEnumerable<QuestionJob>> GetRecentJobsAsync(int limit = 20, string? mode = null, CancellationToken ct = default)
+    public async Task<IEnumerable<QuestionJob>> GetRecentJobsAsync(
+    int limit = 20,
+    string? mode = null,
+    CancellationToken ct = default)
     {
         using var conn = new SqliteConnection(_connString);
         await conn.OpenAsync(ct);
 
         var command = new CommandDefinition(
-            @"SELECT JobId, Question, SqlText, Status, ErrorText, VerificationStatus, FeedbackComment, Mode, CreatedUtc
-              FROM QuestionJobs
-              WHERE (@Mode IS NULL OR Mode = @Mode)
-              ORDER BY CreatedUtc DESC
-              LIMIT @Limit",
+            """
+                SELECT 
+                    JobId, UserId, Role, Question, Status, Mode, SqlText, ErrorText, ResultJson,
+                    Attempt, TrainingExampleSaved, VerificationStatus, FeedbackComment,
+                    CreatedUtc, UpdatedUtc
+                FROM QuestionJobs
+                WHERE (@Mode IS NULL OR Mode = @Mode)
+                ORDER BY CreatedUtc DESC
+                LIMIT @Limit
+             """,
             new
             {
                 Limit = limit,
@@ -183,8 +198,8 @@ public class SqliteJobStore : IJobStore
             cancellationToken: ct);
 
         var rawJobs = await conn.QueryAsync<QuestionJobRow>(command);
-        var result = new List<QuestionJob>();
 
+        var result = new List<QuestionJob>();
         foreach (var raw in rawJobs)
             result.Add(MapToJob(raw));
 
@@ -218,27 +233,68 @@ public class SqliteJobStore : IJobStore
         return new QuestionJob
         {
             JobId = Guid.TryParse(raw.JobId, out var parsedId) ? parsedId : Guid.Empty,
+            UserId = raw.UserId ?? string.Empty,
+            Role = raw.Role ?? string.Empty,
             Question = raw.Question ?? string.Empty,
-            SqlText = raw.SqlText,
             Status = raw.Status ?? "Unknown",
             Mode = raw.Mode ?? "Data",
+            SqlText = raw.SqlText,
             ErrorText = raw.ErrorText,
+            ResultJson = raw.ResultJson,
+            Attempt = raw.Attempt,
+            TrainingExampleSaved = raw.TrainingExampleSaved,
             VerificationStatus = raw.VerificationStatus ?? "Pending",
             FeedbackComment = raw.FeedbackComment,
-            CreatedUtc = DateTime.TryParse(raw.CreatedUtc, out var parsedDate) ? parsedDate : DateTime.MinValue
+            CreatedUtc = DateTime.TryParse(raw.CreatedUtc, out var created) ? created : DateTime.MinValue,
+            UpdatedUtc = DateTime.TryParse(raw.UpdatedUtc, out var updated) ? updated : DateTime.MinValue
         };
     }
 
+    public async Task<bool> MarkTrainingExampleSavedAsync(
+    Guid jobId,
+    string correctedSql,
+    string verificationStatus,
+    string? comment = null,
+    CancellationToken ct = default)
+    {
+        using var conn = new SqliteConnection(_connString);
+
+        var command = new CommandDefinition(
+            @"UPDATE QuestionJobs
+          SET SqlText = @SqlText,
+              TrainingExampleSaved = 1,
+              VerificationStatus = @VerificationStatus,
+              FeedbackComment = @Comment,
+              UpdatedUtc = DATETIME('now')
+          WHERE JobId = @Id",
+            new
+            {
+                Id = jobId.ToString(),
+                SqlText = correctedSql,
+                VerificationStatus = verificationStatus,
+                Comment = comment
+            },
+            cancellationToken: ct);
+
+        var rows = await conn.ExecuteAsync(command);
+        return rows > 0;
+    }
     private sealed class QuestionJobRow
     {
         public string JobId { get; set; } = string.Empty;
+        public string? UserId { get; set; }
+        public string? Role { get; set; }
         public string? Question { get; set; }
-        public string? SqlText { get; set; }
         public string? Status { get; set; }
+        public string? Mode { get; set; }
+        public string? SqlText { get; set; }
         public string? ErrorText { get; set; }
+        public string? ResultJson { get; set; }
+        public int Attempt { get; set; }
+        public int TrainingExampleSaved { get; set; }
         public string? VerificationStatus { get; set; }
         public string? FeedbackComment { get; set; }
-        public string? Mode { get; set; }
         public string CreatedUtc { get; set; } = string.Empty;
+        public string? UpdatedUtc { get; set; }
     }
 }
