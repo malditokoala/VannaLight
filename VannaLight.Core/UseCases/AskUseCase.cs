@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -40,21 +41,73 @@ public class AskUseCase(
     IPredictionAnswerService humanizer,
     IBusinessRuleStore businessRuleStore,
     IPatternMatcherService patternMatcher,
-    ITemplateSqlBuilder templateSqlBuilder)
+    ITemplateSqlBuilder templateSqlBuilder,
+    IAllowedObjectStore allowedObjectStore)
 {
-    private static readonly HashSet<string> AllowedViews = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "VW_KPIPRODUCTION_V1",
-        "VW_KPISCRAP_V1",
-        "VW_KPIDOWNTIME_V1"
-    };
-
     public async Task<AskResult> ExecuteAsync(
-    string question,
-    string sqlitePath,
-    string sqlServerConnString,
-    CancellationToken ct = default)
+        string question,
+        string memoryDbPath,
+        string runtimeDbPath,
+        string sqlServerConnString,
+        string domain,
+        CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(question))
+        {
+            return new AskResult(
+                false,
+                string.Empty,
+                "La pregunta esta vacia.",
+                false,
+                AskFailureKind.GenerationError);
+        }
+
+        if (string.IsNullOrWhiteSpace(memoryDbPath))
+        {
+            return new AskResult(
+                false,
+                string.Empty,
+                "No se configuro la base de memoria.",
+                false,
+                AskFailureKind.GenerationError);
+        }
+
+        if (string.IsNullOrWhiteSpace(runtimeDbPath))
+        {
+            return new AskResult(
+                false,
+                string.Empty,
+                "No se configuro la base de runtime.",
+                false,
+                AskFailureKind.GenerationError);
+        }
+
+        if (string.IsNullOrWhiteSpace(domain))
+        {
+            return new AskResult(
+                false,
+                string.Empty,
+                "No hay dominio configurado para recuperacion de reglas.",
+                false,
+                AskFailureKind.GenerationError);
+        }
+
+        var normalizedDomain = domain.Trim();
+
+        var allowedObjectNames = await GetAllowedObjectNamesAsync(
+                normalizedDomain,
+                ct);
+
+        if (allowedObjectNames.Count == 0)
+        {
+            return new AskResult(
+                false,
+                string.Empty,
+                $"No hay objetos SQL permitidos configurados para el dominio '{normalizedDomain}'.",
+                false,
+                AskFailureKind.GenerationError);
+        }
+
         var patternMatch = patternMatcher.Match(question);
 
         if (patternMatch.IsMatch)
@@ -66,15 +119,15 @@ public class AskUseCase(
                 return new AskResult(
                     false,
                     string.Empty,
-                    "No se pudo construir SQL desde el patrón detectado.",
+                    "No se pudo construir SQL desde el patron detectado.",
                     false,
                     AskFailureKind.GenerationError);
             }
 
             if (!validator.TryValidate(patternSql, out var patternValidationError))
             {
-                var reviewId = await reviewStore.EnqueueAsync(
-                    sqlitePath,
+                var reviewId = await TryEnqueueReviewAsync(
+                    runtimeDbPath,
                     question,
                     patternSql,
                     patternValidationError,
@@ -84,13 +137,13 @@ public class AskUseCase(
                 return new AskResult(
                     false,
                     patternSql,
-                    $"Validación fallida en patrón: {patternValidationError}",
+                    $"Validacion fallida en patron: {patternValidationError}",
                     false,
                     AskFailureKind.ValidationError,
                     reviewId);
             }
 
-            bool passedPatternDryRun = false;
+            var passedPatternDryRun = false;
 
             if (settings.Security.DryRunEnabledByDefault)
             {
@@ -98,8 +151,8 @@ public class AskUseCase(
 
                 if (!ok)
                 {
-                    var reviewId = await reviewStore.EnqueueAsync(
-                        sqlitePath,
+                    var reviewId = await TryEnqueueReviewAsync(
+                        runtimeDbPath,
                         question,
                         patternSql,
                         error,
@@ -109,7 +162,7 @@ public class AskUseCase(
                     return new AskResult(
                         false,
                         patternSql,
-                        $"Error de compilación en patrón: {error}",
+                        $"Error de compilacion en patron: {error}",
                         false,
                         AskFailureKind.DryRunError,
                         reviewId);
@@ -126,16 +179,16 @@ public class AskUseCase(
                 AskFailureKind.None);
         }
 
-        // SOLO si no hubo pattern, caer al flujo LLM
-        var context = await retriever.RetrieveAsync(sqlitePath, question, ct);
+        // Solo si no hubo pattern, caer al flujo LLM
+        var context = await retriever.RetrieveAsync(memoryDbPath, question, ct);
 
         var rules = await businessRuleStore.GetActiveRulesAsync(
-            sqlitePath,
-            "erp-kpi-pilot",
+            memoryDbPath,
+            normalizedDomain,
             maxRules: 6,
             ct);
 
-        var prompt = BuildPrompt(question, context, rules);
+        var prompt = BuildPrompt(question, context, rules, allowedObjectNames);
 
         var rawSql = await llmClient.GenerateSqlAsync(prompt, ct);
         var cleanSql = CleanLlmOutput(rawSql);
@@ -145,15 +198,15 @@ public class AskUseCase(
             return new AskResult(
                 false,
                 string.Empty,
-                "El modelo no devolvió un SQL utilizable.",
+                "El modelo no devolvio un SQL utilizable.",
                 false,
                 AskFailureKind.GenerationError);
         }
 
         if (!validator.TryValidate(cleanSql, out var validationError))
         {
-            var reviewId = await reviewStore.EnqueueAsync(
-                sqlitePath,
+            var reviewId = await TryEnqueueReviewAsync(
+                runtimeDbPath,
                 question,
                 cleanSql,
                 validationError,
@@ -163,13 +216,13 @@ public class AskUseCase(
             return new AskResult(
                 false,
                 cleanSql,
-                $"Validación fallida: {validationError}",
+                $"Validacion fallida: {validationError}",
                 false,
                 AskFailureKind.ValidationError,
                 reviewId);
         }
 
-        bool passedDryRun = false;
+        var passedDryRun = false;
 
         if (settings.Security.DryRunEnabledByDefault)
         {
@@ -177,8 +230,8 @@ public class AskUseCase(
 
             if (!ok)
             {
-                var reviewId = await reviewStore.EnqueueAsync(
-                    sqlitePath,
+                var reviewId = await TryEnqueueReviewAsync(
+                    runtimeDbPath,
                     question,
                     cleanSql,
                     error,
@@ -188,7 +241,7 @@ public class AskUseCase(
                 return new AskResult(
                     false,
                     cleanSql,
-                    $"Error de compilación: {error}",
+                    $"Error de compilacion: {error}",
                     false,
                     AskFailureKind.DryRunError,
                     reviewId);
@@ -205,7 +258,6 @@ public class AskUseCase(
             AskFailureKind.None);
     }
 
-
     public async Task<AskResult> PredictAsync(string question, CancellationToken ct = default)
     {
         var intent = await predictionRouter.ParseAsync(question, ct);
@@ -215,7 +267,7 @@ public class AskUseCase(
             return new AskResult(
                 false,
                 string.Empty,
-                "No se identificó el número de parte para el pronóstico.",
+                "No se identifico el numero de parte para el pronostico.",
                 false,
                 AskFailureKind.GenerationError);
         }
@@ -246,12 +298,69 @@ public class AskUseCase(
             predictionJson);
     }
 
-    private string BuildPrompt(string question, RetrievalContext context, IReadOnlyList<BusinessRule> rules)
+    private async Task<IReadOnlyList<string>> GetAllowedObjectNamesAsync(
+    string domain,
+    CancellationToken ct)
+    {
+        var allowedObjects = await allowedObjectStore.GetActiveObjectsAsync(
+            domain,
+            ct);
+
+        return allowedObjects
+            .Where(x => x != null && !string.IsNullOrWhiteSpace(x.ObjectName))
+            .Select(x =>
+                string.IsNullOrWhiteSpace(x.SchemaName)
+                    ? x.ObjectName.Trim()
+                    : $"{x.SchemaName.Trim()}.{x.ObjectName.Trim()}")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private async Task<long?> TryEnqueueReviewAsync(
+        string runtimeDbPath,
+        string question,
+        string generatedSql,
+        string? errorMessage,
+        string reason,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await reviewStore.EnqueueAsync(
+                runtimeDbPath,
+                question,
+                generatedSql,
+                errorMessage,
+                reason,
+                ct);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string BuildPrompt(
+        string question,
+        RetrievalContext context,
+        IReadOnlyList<BusinessRule> rules,
+        IReadOnlyList<string> allowedObjectNames)
     {
         const int MaxPromptChars = 9000;
         const int MaxRulesChars = 1800;
         const int MaxSchemasChars = 1800;
         const int MaxExamplesChars = 4200;
+
+        var normalizedAllowedObjects = allowedObjectNames
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(NormalizeObjectName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var allowedObjectsText = string.Join(
+            "\n",
+            allowedObjectNames.Select(x => $"- {x}"));
 
         var activeRules = (rules ?? Array.Empty<BusinessRule>())
             .Where(r => r != null && !string.IsNullOrWhiteSpace(r.RuleText) && r.IsActive)
@@ -266,7 +375,7 @@ public class AskUseCase(
 
         var schemaLines = (context?.SchemaDocs ?? Enumerable.Empty<RetrievedSchemaDoc>())
             .Where(s => s?.Doc != null)
-            .Where(s => AllowedViews.Contains(NormalizeViewName(s.Doc!.Table)))
+            .Where(s => normalizedAllowedObjects.Contains(NormalizeObjectName(s.Doc!.Table)))
             .Select(s => s.Doc!.DocText?.Trim())
             .Where(t => !string.IsNullOrWhiteSpace(t))
             .Distinct()
@@ -275,18 +384,14 @@ public class AskUseCase(
 
         var schemasText = schemaLines.Any()
             ? TrimToMax(string.Join("\n", schemaLines), MaxSchemasChars)
-            : TrimToMax(
-                @"Tabla: dbo.vw_KpiProduction_v1. Columnas clave: OperationDate, YearNumber, MonthNumber, YearMonth, WeekOfYear, Shift, ShiftId, PressId, PressName, MoldId, MoldName, PartId, PartNumber, PartName, CustomerId, CustomerName, TargetQty, ProducedQty, ScrapQty, ProductionValue, EfficiencyPct.
-Tabla: dbo.vw_KpiScrap_v1. Columnas clave: OperationDate, YearNumber, MonthNumber, YearMonth, WeekOfYear, Shift, ShiftId, PressId, PressName, MoldId, MoldName, PartId, PartNumber, PartName, CustomerId, CustomerName, ScrapReason, ScrapQty, ScrapCost.
-Tabla: dbo.vw_KpiDownTime_v1. Columnas clave: OperationDate, YearNumber, MonthNumber, YearMonth, WeekOfYear, Shift, ShiftId, PressId, PressName, MoldId, MoldName, PartId, PartNumber, PartName, CustomerId, CustomerName, DepartmentName, FailureName, DownTimeMinutes, DownTimeHours, IsOpen, DownTimeCost.",
-                MaxSchemasChars);
+            : string.Empty;
 
         var exampleLines = (context?.Examples ?? Enumerable.Empty<RetrievedExample>())
             .Where(e => e?.Example != null)
             .Where(e =>
                 !string.IsNullOrWhiteSpace(e.Example.Question) &&
                 !string.IsNullOrWhiteSpace(e.Example.Sql) &&
-                MentionsAllowedView(e.Example.Sql))
+                MentionsAllowedObject(e.Example.Sql, normalizedAllowedObjects))
             .Take(2)
             .Select(e => $"Pregunta: {e.Example!.Question.Trim()}\nSQL:\n{e.Example.Sql.Trim()}")
             .ToList();
@@ -299,22 +404,22 @@ Tabla: dbo.vw_KpiDownTime_v1. Columnas clave: OperationDate, YearNumber, MonthNu
 
         sb.AppendLine("<|im_start|>system");
         sb.AppendLine("Eres un desarrollador experto en T-SQL para SQL Server.");
-        sb.AppendLine("Tu tarea es generar SOLO código SQL válido para consultar vistas KPI industriales.");
-        sb.AppendLine("Debes basarte estrictamente en las vistas, reglas y ejemplos proporcionados.");
+        sb.AppendLine("Tu tarea es generar SOLO codigo SQL valido para SQL Server.");
+        sb.AppendLine("Debes basarte estrictamente en los objetos SQL permitidos, reglas, esquemas y ejemplos proporcionados.");
         sb.AppendLine();
-        sb.AppendLine("REGLAS CRÍTICAS DE SINTAXIS T-SQL:");
-        sb.AppendLine("1. ESTÁ ESTRICTAMENTE PROHIBIDO USAR 'LIMIT'. Para limitar resultados en SQL Server, usa SIEMPRE 'SELECT TOP (N)'.");
-        sb.AppendLine("2. Usa EXACTAMENTE los nombres de columnas que aparecen en las vistas relevantes.");
+        sb.AppendLine("REGLAS CRITICAS DE SINTAXIS T-SQL:");
+        sb.AppendLine("1. ESTA ESTRICTAMENTE PROHIBIDO USAR 'LIMIT'. Para limitar resultados en SQL Server, usa SIEMPRE 'SELECT TOP (N)'.");
+        sb.AppendLine("2. Usa EXACTAMENTE los nombres de columnas que aparezcan en los esquemas recuperados y ejemplos validos.");
         sb.AppendLine("3. NUNCA compares un valor de texto contra una columna ID.");
-        sb.AppendLine("4. Si necesitas cruzar vistas, prefiere joins por IDs y OperationDate.");
+        sb.AppendLine("4. Si necesitas cruzar objetos SQL permitidos, prefiere joins por IDs y OperationDate.");
         sb.AppendLine("5. Devuelve SOLO el SQL, sin comentarios y sin bloques markdown.");
         sb.AppendLine();
-        sb.AppendLine("REGLAS DE TIEMPO E INTERPRETACIÓN:");
+        sb.AppendLine("REGLAS DE TIEMPO E INTERPRETACION:");
         sb.AppendLine("- Hoy: CAST(OperationDate AS date) = CAST(GETDATE() AS date)");
         sb.AppendLine("- Ayer: CAST(OperationDate AS date) = DATEADD(DAY, -1, CAST(GETDATE() AS date))");
         sb.AppendLine("- Mes actual: YearMonth = CONVERT(char(7), GETDATE(), 120)");
         sb.AppendLine("- Semana actual: YearNumber = YEAR(GETDATE()) AND WeekOfYear = DATEPART(ISO_WEEK, GETDATE())");
-        sb.AppendLine("- Cuando el usuario diga 'turno actual' o 'del turno', filtra explícitamente por un único ShiftId calculado como el más reciente del día dentro de la vista consultada.");
+        sb.AppendLine("- Cuando el usuario diga 'turno actual' o 'del turno', filtra explicitamente por un unico ShiftId calculado como el mas reciente del dia dentro de la vista consultada.");
         sb.AppendLine();
 
         if (!string.IsNullOrWhiteSpace(rulesText))
@@ -324,9 +429,16 @@ Tabla: dbo.vw_KpiDownTime_v1. Columnas clave: OperationDate, YearNumber, MonthNu
             sb.AppendLine();
         }
 
-        sb.AppendLine("VISTAS RELEVANTES:");
-        sb.AppendLine(schemasText);
+        sb.AppendLine("OBJETOS SQL PERMITIDOS:");
+        sb.AppendLine(allowedObjectsText);
         sb.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(schemasText))
+        {
+            sb.AppendLine("ESQUEMAS RELEVANTES RECUPERADOS:");
+            sb.AppendLine(schemasText);
+            sb.AppendLine();
+        }
 
         if (!string.IsNullOrWhiteSpace(examplesText))
         {
@@ -345,7 +457,7 @@ Tabla: dbo.vw_KpiDownTime_v1. Columnas clave: OperationDate, YearNumber, MonthNu
         return TrimToMax(sb.ToString(), MaxPromptChars);
     }
 
-    private static string NormalizeViewName(string? name)
+    private static string NormalizeObjectName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
             return string.Empty;
@@ -360,13 +472,19 @@ Tabla: dbo.vw_KpiDownTime_v1. Columnas clave: OperationDate, YearNumber, MonthNu
         return cleaned.ToUpperInvariant();
     }
 
-    private static bool MentionsAllowedView(string sql)
+    private static bool MentionsAllowedObject(
+        string sql,
+        IReadOnlyCollection<string> normalizedAllowedObjects)
     {
-        if (string.IsNullOrWhiteSpace(sql))
+        if (string.IsNullOrWhiteSpace(sql) || normalizedAllowedObjects.Count == 0)
             return false;
 
-        var upperSql = sql.ToUpperInvariant();
-        return AllowedViews.Any(v => upperSql.Contains(v, StringComparison.OrdinalIgnoreCase));
+        var normalizedSql = sql.ToUpperInvariant()
+            .Replace("[", string.Empty)
+            .Replace("]", string.Empty);
+
+        return normalizedAllowedObjects.Any(obj =>
+            normalizedSql.Contains(obj, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string TrimToMax(string text, int maxChars)
@@ -393,7 +511,6 @@ Tabla: dbo.vw_KpiDownTime_v1. Columnas clave: OperationDate, YearNumber, MonthNu
         var clean = output.Trim();
 
         clean = Regex.Replace(clean, @"```sql|```", string.Empty, RegexOptions.IgnoreCase);
-
         clean = Regex.Replace(clean, @"<\|im_end\|>.*$", string.Empty, RegexOptions.Singleline);
 
         var sqlMatch = Regex.Match(clean, @"(?is)\b(WITH|SELECT)\b[\s\S]*");

@@ -1,6 +1,7 @@
 using Dapper;
 using LLama.Native;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Options;
 using VannaLight.Api.Hubs;
 using VannaLight.Api.Services;
 using VannaLight.Api.Services.Predictions;
@@ -13,7 +14,7 @@ using VannaLight.Infrastructure.Retrieval;
 using VannaLight.Infrastructure.Security;
 
 // =========================================================
-// CONFIGURACIÓN NATIVA DE LLamaSharp
+// CONFIGURACION NATIVA DE LLamaSharp
 // Debe ir antes de cualquier uso del motor
 // =========================================================
 NativeLibraryConfig.All
@@ -34,7 +35,7 @@ if (builder.Environment.IsDevelopment())
 }
 
 // ---------------------------------------------------------
-// 1. GESTIÓN DE RUTAS Y DIRECTORIOS (ContentRoot)
+// 1. GESTION DE RUTAS Y DIRECTORIOS (ContentRoot)
 // ---------------------------------------------------------
 var sqliteRel = builder.Configuration["Paths:Sqlite"] ?? "Data/vanna_memory.db";
 var sqlitePath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, sqliteRel));
@@ -56,19 +57,24 @@ Directory.CreateDirectory(Path.GetDirectoryName(runtimePath)!);
 var operationalConn = builder.Configuration.GetConnectionString("OperationalDb")
     ?? throw new InvalidOperationException("Falta ConnectionStrings:OperationalDb.");
 
-builder.Services.AddSingleton(new SqliteOptions(sqlitePath));
-builder.Services.AddSingleton(new RuntimeDbOptions(runtimePath));
-builder.Services.AddSingleton(new OperationalDbOptions(operationalConn));
+var sqliteOptions = new SqliteOptions(sqlitePath);
+var runtimeOptions = new RuntimeDbOptions(runtimePath);
+var operationalOptions = new OperationalDbOptions(operationalConn);
+
+// Registro directo de options concretas
+builder.Services.AddSingleton(sqliteOptions);
+builder.Services.AddSingleton(runtimeOptions);
+builder.Services.AddSingleton(operationalOptions);
+
+// Compatibilidad solo donde si se usa IOptions<T>
+builder.Services.AddSingleton<IOptions<SqliteOptions>>(Options.Create(sqliteOptions));
 
 var settings = AppSettingsFactory.Create(RuntimeProfile.ALTO, modelPath);
 builder.Services.AddSingleton(settings);
 
 // ---------------------------------------------------------
-// 3. IA Y CONFIGURACIÓN DE INFERENCIA
+// 3. IA Y CONFIGURACION DE INFERENCIA
 // ---------------------------------------------------------
-// Nota: el perfil dinámico ya tiene infraestructura y tabla,
-// pero por ahora el LlmClient sigue usando configuración fija
-// validada para esta máquina.
 builder.Services.AddSingleton<ILlmRuntimeProfileProvider, SqliteLlmProfileProvider>();
 builder.Services.AddSingleton<ILlmProfileStore, SqliteLlmProfileStore>();
 builder.Services.AddSingleton<ILlmClient, LlmClient>();
@@ -93,13 +99,14 @@ builder.Services.AddSingleton<IReviewStore, SqliteReviewStore>();
 builder.Services.AddSingleton<IDocChunkRepository, SqliteDocChunkRepository>();
 builder.Services.AddTransient<IJobStore, SqliteJobStore>();
 builder.Services.AddSingleton<IBusinessRuleStore, SqliteBusinessRuleStore>();
+builder.Services.AddSingleton<IAllowedObjectStore, SqliteAllowedObjectStore>();
 builder.Services.AddSingleton<ISqlCacheService, SqlCacheService>();
 
 // Pattern-first
 builder.Services.AddSingleton<IPatternMatcherService, PatternMatcherService>();
 builder.Services.AddSingleton<ITemplateSqlBuilder, TemplateSqlBuilder>();
 
-// Retrieval, seguridad y ejecución
+// Retrieval, seguridad y ejecucion
 builder.Services.AddSingleton<IRetriever, LocalRetriever>();
 builder.Services.AddSingleton<ISqlValidator, StaticSqlValidator>();
 builder.Services.AddSingleton<ISqlDryRunner, SqlServerDryRunner>();
@@ -125,7 +132,7 @@ builder.Services.AddHostedService<InferenceWorker>();
 var app = builder.Build();
 
 // ---------------------------------------------------------
-// 7. INICIALIZACIÓN DE BASES DE DATOS LOCALES
+// 7. INICIALIZACION DE BASES DE DATOS LOCALES
 // ---------------------------------------------------------
 await EnsureRuntimeDatabaseSetupAsync(app.Services);
 
@@ -144,7 +151,7 @@ app.MapHub<AssistantHub>("/hub/assistant");
 app.Run();
 
 // =========================================================
-// PREPARACIÓN DEL ENTORNO DE RUNTIME (SQLite)
+// PREPARACION DEL ENTORNO DE RUNTIME (SQLite)
 // =========================================================
 static async Task EnsureRuntimeDatabaseSetupAsync(IServiceProvider services)
 {
@@ -179,9 +186,23 @@ static async Task EnsureRuntimeDatabaseSetupAsync(IServiceProvider services)
             ON QuestionJobs(UserId, CreatedUtc DESC);
 
         -- =====================================================
+        -- ReviewQueue: cola de revision humana
+        -- =====================================================
+        CREATE TABLE IF NOT EXISTS ReviewQueue (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Question TEXT NOT NULL,
+            GeneratedSql TEXT NOT NULL,
+            ErrorMessage TEXT,
+            Status TEXT NOT NULL,
+            Reason TEXT NOT NULL,
+            CreatedUtc DATETIME NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_ReviewQueue_Status_CreatedUtc
+            ON ReviewQueue(Status, CreatedUtc ASC);
+
+        -- =====================================================
         -- LlmRuntimeProfile: perfiles de inferencia
-        -- Nota: la infraestructura ya existe, pero aún no se
-        -- conecta dinámicamente al LlmClient en runtime.
         -- =====================================================
         CREATE TABLE IF NOT EXISTS LlmRuntimeProfile (
             Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -198,20 +219,6 @@ static async Task EnsureRuntimeDatabaseSetupAsync(IServiceProvider services)
             NoKqvOffload INTEGER DEFAULT 0,
             OpOffload INTEGER DEFAULT 1,
             UpdatedUtc TEXT NOT NULL
-        );
-
-        -- =====================================================
-        -- QueryPatterns: preparado para pattern-first
-        -- =====================================================
-        CREATE TABLE IF NOT EXISTS QueryPatterns (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            PatternKey TEXT NOT NULL,
-            IntentName TEXT NOT NULL,
-            Description TEXT NULL,
-            Tags TEXT NULL,
-            Priority INTEGER NOT NULL DEFAULT 100,
-            IsActive INTEGER NOT NULL DEFAULT 1,
-            CreatedUtc TEXT NOT NULL
         );
 
         -- =====================================================

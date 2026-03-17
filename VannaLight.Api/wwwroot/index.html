@@ -922,6 +922,23 @@
                 padding: 12px
             }
         }
+        .chart-wrap {
+            display: none;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px;
+        }
+
+        .chart-inner {
+            position: relative;
+            height: 320px;
+        }
+
+        .docs-card {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
     </style>
 </head>
 <body>
@@ -991,6 +1008,7 @@
                 <div class="pred-grid" id="predGrid"></div>
                 <div class="sql-footer" id="sqlFooter">
                     <button class="sql-toggle-btn" onclick="toggleSql()">VER T-SQL</button>
+                    <button class="sql-toggle-btn" id="chartToggleBtn" style="display:none;" onclick="toggleChart()">OCULTAR GRÁFICA</button>
                     <div id="sqlContainer"></div>
                 </div>
             </div>
@@ -1004,7 +1022,11 @@
             pred: { key: 'pred', modeVal: 2, label: 'ML', sub: 'predicción', title: 'MODO PREDICCIÓN — ML.NET', desc: 'Pronósticos de scrap a nivel turno', ph: '¿Cuál es el pronóstico de scrap para el cierre de este turno?', badge: 'PREDICCIÓN · ML', icon: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>' }
         };
 
-        let currentMode = 'sql', myConnectionId = '', currentChart = null;
+        let currentMode = 'sql';
+        let lastRequestMode = 'sql';
+        let myConnectionId = '';
+        let currentChart = null;
+        let chartVisible = true;;
 
         function setMode(m) {
             currentMode = m;
@@ -1026,15 +1048,21 @@
         connection.on('JobStatusUpdated', d => logLine(`⏳ ${d.status}`, 'sys'));
         connection.on('JobFailed', d => { logLine(`❌ ${d.error}`, 'err'); resetUI() });
         connection.on('JobCompleted', payload => {
-            logLine('✅ Completado', 'ok'); resetUI();
-            let data = payload;
-            if (payload.resultJson) { try { data = JSON.parse(payload.resultJson) } catch { } }
+            logLine('Completado', 'ok');
+            resetUI();
 
-            // Lógica de ruteo por tipo de resultado
+            let data = payload;
+            if (payload.resultJson) {
+                try {
+                    data = JSON.parse(payload.resultJson);
+                } catch {
+                }
+            }
+
             if (data?.IsPredictionRequest === true || data?.type === 'prediction') {
                 renderPred(data);
-            } else if (currentMode === 'docs') {
-                renderDocs(data); // <-- ESTA FUNCIÓN FALTABA
+            } else if (lastRequestMode === 'docs') {
+                renderDocs(data);
             } else {
                 renderSql(data);
             }
@@ -1051,18 +1079,43 @@
         startConnection();
 
         async function sendQuestion() {
-            const q = document.getElementById('txtQuestion').value.trim();
+            const txt = document.getElementById('txtQuestion');
+            const q = txt.value.trim();
+
             if (!q || !myConnectionId) return;
+
+            lastRequestMode = currentMode;
+
             document.getElementById('loadingIcon').style.display = 'block';
             document.getElementById('btnSend').disabled = true;
+
             hideResult();
             logLine(`→ ${q}`, 'user');
+
+            txt.value = '';
+            txt.focus();
+
             try {
-                await fetch('/api/assistant/ask', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ question: q, userId: 'user_01', connectionId: myConnectionId, mode: MODES[currentMode].modeVal })
+                const response = await fetch('/api/assistant/ask', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question: q,
+                        userId: 'user_01',
+                        connectionId: myConnectionId,
+                        mode: MODES[currentMode].modeVal
+                    })
                 });
-            } catch (e) { logLine(`Error red: ${e.message}`, 'err'); resetUI() }
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText || 'No se pudo procesar la solicitud.'}`);
+                }
+            } catch (e) {
+                logLine(`Error red: ${e.message}`, 'err');
+                resetUI();
+                txt.value = q;
+            }
         }
 
         function handleKeyPress(e) { if (e.key === 'Enter') sendQuestion() }
@@ -1076,8 +1129,16 @@
             document.getElementById('tableContainer').style.display = 'none';
             document.getElementById('predGrid').style.display = 'none';
             document.getElementById('sqlFooter').style.display = 'none';
-            document.getElementById('docsCard').style.display = 'none'; // <-- AÑADIDO PARA LIMPIAR RAG
-            if (currentChart) currentChart.destroy();
+            document.getElementById('docsCard').style.display = 'none';
+            document.getElementById('sqlContainer').style.display = 'none';
+            document.getElementById('chartToggleBtn').style.display = 'none';
+            document.getElementById('chartToggleBtn').textContent = 'OCULTAR GRÁFICA';
+            chartVisible = true;
+
+            if (currentChart) {
+                currentChart.destroy();
+                currentChart = null;
+            }
         }
 
         // --- NUEVA FUNCIÓN PARA RENDERIZAR RAG (PDF) ---
@@ -1088,11 +1149,15 @@
             const docsCard = document.getElementById('docsCard');
             docsCard.style.display = 'block';
 
-            // Buscamos el texto de respuesta donde sea que lo envíe tu backend
-            const answer = payload.HumanizedMessage || payload.answer || payload.sqlText || payload.data || "Documento analizado correctamente.";
+            const answer =
+                payload?.HumanizedMessage ||
+                payload?.answer ||
+                payload?.text ||
+                payload?.message ||
+                'Documento analizado correctamente.';
 
-            docsCard.innerHTML = answer;
-            speakSummary(answer);
+            docsCard.textContent = String(answer);
+            speakSummary(String(answer));
         }
 
         function renderPred(payload) {
@@ -1132,28 +1197,179 @@
                 grid.innerHTML = `<div style="color:var(--dim); font-family:var(--mono); padding:20px;">No se recibieron datos de predicción válidos.</div>`;
             }
         }
+        function toNumberOrNull(value) {
+            if (typeof value === 'number' && Number.isFinite(value)) return value;
 
+            if (typeof value === 'string') {
+                const cleaned = value.replace(/,/g, '').trim();
+                if (cleaned === '') return null;
+
+                const n = Number(cleaned);
+                if (Number.isFinite(n)) return n;
+            }
+
+            return null;
+        }
+
+        function buildChartModel(rows) {
+            if (!Array.isArray(rows) || rows.length < 2) return null;
+
+            const columns = Object.keys(rows[0] || {});
+            if (columns.length < 2) return null;
+
+            const numericColumns = columns.filter(col =>
+                rows.some(r => toNumberOrNull(r[col]) !== null)
+            );
+
+            if (numericColumns.length === 0) return null;
+
+            const labelColumn =
+                columns.find(col => !numericColumns.includes(col)) || columns[0];
+
+            const valueColumn =
+                numericColumns.find(col => col !== labelColumn) || numericColumns[0];
+
+            if (!labelColumn || !valueColumn) return null;
+
+            const limitedRows = rows.slice(0, 20);
+
+            const labels = limitedRows.map(r => String(r[labelColumn] ?? '—'));
+            const values = limitedRows.map(r => toNumberOrNull(r[valueColumn]) ?? 0);
+
+            if (!values.some(v => v !== 0)) return null;
+
+            return {
+                labelColumn,
+                valueColumn,
+                labels,
+                values
+            };
+        }
+
+        function renderChartFromRows(rows) {
+            const model = buildChartModel(rows);
+            if (!model) return false;
+
+            const chartContainer = document.getElementById('chartContainer');
+            const chartToggleBtn = document.getElementById('chartToggleBtn');
+            const ctx = document.getElementById('liaChart').getContext('2d');
+
+            chartContainer.style.display = 'block';
+            chartToggleBtn.style.display = 'inline-flex';
+
+            if (currentChart) {
+                currentChart.destroy();
+                currentChart = null;
+            }
+
+            currentChart = new Chart(ctx, {
+                type: model.labels.length <= 12 ? 'bar' : 'line',
+                data: {
+                    labels: model.labels,
+                    datasets: [{
+                        label: model.valueColumn,
+                        data: model.values
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: {
+                                color: '#dde4f0'
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#7a8a9e' },
+                            grid: { color: 'rgba(255,255,255,0.06)' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#7a8a9e' },
+                            grid: { color: 'rgba(255,255,255,0.06)' }
+                        }
+                    }
+                }
+            });
+
+            return true;
+        }
+
+        function toggleChart() {
+            const chartContainer = document.getElementById('chartContainer');
+            const chartToggleBtn = document.getElementById('chartToggleBtn');
+
+            chartVisible = !chartVisible;
+            chartContainer.style.display = chartVisible ? 'block' : 'none';
+            chartToggleBtn.textContent = chartVisible ? 'OCULTAR GRÁFICA' : 'VER GRÁFICA';
+        }
         function renderSql(payload) {
             preRender();
             document.getElementById('resultLabel').textContent = 'RESULTADO — DATOS';
             document.getElementById('sqlFooter').style.display = 'block';
             document.getElementById('sqlContainer').textContent = payload.sql || payload.sqlText || '';
-            const data = payload.data;
-            if (!data || data.length === 0) { document.getElementById('kpiContainer').innerHTML = 'Sin datos'; return; }
+
+            const data = Array.isArray(payload.data)
+                ? payload.data
+                : Array.isArray(payload.rows)
+                    ? payload.rows
+                    : [];
+
+            if (!data || data.length === 0) {
+                document.getElementById('kpiContainer').innerHTML = '<div class="kpi-card"><div class="kpi-label">Resultado</div><div class="kpi-value">Sin datos</div></div>';
+                return;
+            }
+
+            const chartRendered = renderChartFromRows(data);
+
             if (data.length === 1) {
-                document.getElementById('kpiContainer').innerHTML = Object.entries(data[0]).map(([k, v]) => `<div class="kpi-card"><div class="kpi-label">${k}</div><div class="kpi-value">${fmtVal(v)}</div></div>`).join('');
+                document.getElementById('kpiContainer').innerHTML = Object.entries(data[0])
+                    .map(([k, v]) =>
+                        `<div class="kpi-card"><div class="kpi-label">${k}</div><div class="kpi-value">${fmtVal(v)}</div></div>`)
+                    .join('');
             } else {
                 document.getElementById('tableContainer').style.display = 'block';
                 const h = Object.keys(data[0]);
-                document.getElementById('tableContainer').innerHTML = `<table class="data-table"><thead><tr>${h.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${data.map(r => `<tr>${h.map(c => `<td>${fmtVal(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+                document.getElementById('tableContainer').innerHTML =
+                    `<table class="data-table">
+                <thead>
+                    <tr>${h.map(c => `<th>${c}</th>`).join('')}</tr>
+                </thead>
+                <tbody>
+                    ${data.map(r => `<tr>${h.map(c => `<td>${fmtVal(r[c])}</td>`).join('')}</tr>`).join('')}
+                </tbody>
+            </table>`;
+            }
+
+            if (!chartRendered) {
+                document.getElementById('chartContainer').style.display = 'none';
+                document.getElementById('chartToggleBtn').style.display = 'none';
             }
         }
 
         function logLine(msg, type = 'ok') {
             const la = document.getElementById('logArea');
-            const div = document.createElement('div'); div.className = 'log-line';
-            div.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span><span class="c-${type}">${msg}</span>`;
-            la.appendChild(div); la.scrollTop = la.scrollHeight;
+            const div = document.createElement('div');
+            div.className = 'log-line';
+
+            const time = document.createElement('span');
+            time.className = 'log-time';
+            time.textContent = new Date().toLocaleTimeString();
+
+            const text = document.createElement('span');
+            text.className = `c-${type}`;
+            text.textContent = msg;
+
+            div.appendChild(time);
+            div.appendChild(text);
+
+            la.appendChild(div);
+            la.scrollTop = la.scrollHeight;
         }
 
         // --- NUEVA FUNCIÓN DE DICTADO POR VOZ ---

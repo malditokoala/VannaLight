@@ -1,19 +1,17 @@
-﻿using System.Text.RegularExpressions;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using VannaLight.Core.Abstractions;
 
 namespace VannaLight.Infrastructure.Security;
 
-public class StaticSqlValidator : ISqlValidator
+public sealed class StaticSqlValidator : ISqlValidator
 {
-    private static readonly HashSet<string> AllowedObjects = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "DBO.VW_KPIPRODUCTION_V1",
-        "DBO.VW_KPISCRAP_V1",
-        "DBO.VW_KPIDOWNTIME_V1",
-        "VW_KPIPRODUCTION_V1",
-        "VW_KPISCRAP_V1",
-        "VW_KPIDOWNTIME_V1"
-    };
+    private const string DefaultSchemaName = "DBO";
 
     private static readonly string[] DangerousKeywords =
     {
@@ -22,9 +20,30 @@ public class StaticSqlValidator : ISqlValidator
         "OPENROWSET", "OPENDATASOURCE", "BULK"
     };
 
+    private readonly IAllowedObjectStore _allowedObjectStore;
+    private readonly ILogger<StaticSqlValidator> _logger;
+    private readonly string _domain;
+
+    public StaticSqlValidator(
+        IAllowedObjectStore allowedObjectStore,
+        IConfiguration configuration,
+        ILogger<StaticSqlValidator> logger)
+    {
+        _allowedObjectStore = allowedObjectStore ?? throw new ArgumentNullException(nameof(allowedObjectStore));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        _domain = configuration["Settings:Retrieval:Domain"]?.Trim() ?? string.Empty;
+    }
+
     public bool TryValidate(string sql, out string error)
     {
         error = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(_domain))
+        {
+            error = "No hay dominio configurado para validación SQL.";
+            return false;
+        }
 
         if (string.IsNullOrWhiteSpace(sql))
         {
@@ -43,21 +62,19 @@ public class StaticSqlValidator : ISqlValidator
 
         var upperSql = normalizedSql.ToUpperInvariant();
 
-        // 1) Solo SELECT o WITH para el MVP actual
-        if (!(upperSql.StartsWith("SELECT") || upperSql.StartsWith("WITH")))
+        if (!(upperSql.StartsWith("SELECT", StringComparison.Ordinal) ||
+              upperSql.StartsWith("WITH", StringComparison.Ordinal)))
         {
             error = "La consulta debe comenzar con SELECT o WITH.";
             return false;
         }
 
-        // 2) No permitir múltiples statements
         if (HasUnexpectedSemicolon(normalizedSql))
         {
             error = "No se permiten múltiples statements en una sola consulta.";
             return false;
         }
 
-        // 3) Bloquear palabras clave peligrosas
         foreach (var keyword in DangerousKeywords)
         {
             if (Regex.IsMatch(upperSql, $@"\b{keyword}\b", RegexOptions.CultureInvariant))
@@ -67,21 +84,18 @@ public class StaticSqlValidator : ISqlValidator
             }
         }
 
-        // 4) Bloquear SELECT INTO
         if (Regex.IsMatch(upperSql, @"\bSELECT\b[\s\S]*\bINTO\b", RegexOptions.CultureInvariant))
         {
             error = "No se permite SELECT INTO.";
             return false;
         }
 
-        // 5) Bloquear tablas temporales
         if (Regex.IsMatch(upperSql, @"(^|[^A-Z0-9_])#\w+", RegexOptions.CultureInvariant))
         {
             error = "No se permiten tablas temporales.";
             return false;
         }
 
-        // 6) Bloquear acceso a metadatos del sistema
         if (Regex.IsMatch(upperSql, @"\bSYS\.", RegexOptions.CultureInvariant) ||
             Regex.IsMatch(upperSql, @"\bINFORMATION_SCHEMA\.", RegexOptions.CultureInvariant))
         {
@@ -89,7 +103,17 @@ public class StaticSqlValidator : ISqlValidator
             return false;
         }
 
-        // 7) Restringir a las vistas permitidas del piloto
+        var allowedObjectKeys = LoadAllowedObjectKeys();
+        if (allowedObjectKeys.Count == 0)
+        {
+            _logger.LogWarning(
+                "Validation blocked because no allowed SQL objects were loaded for domain {Domain}.",
+                _domain);
+
+            error = "No hay objetos permitidos configurados para validar la consulta.";
+            return false;
+        }
+
         var cteNames = ExtractCteNames(upperSql);
 
         var objectMatches = Regex.Matches(
@@ -103,21 +127,66 @@ public class StaticSqlValidator : ISqlValidator
             var normalizedObject = NormalizeObjectName(rawObject);
 
             if (string.IsNullOrWhiteSpace(normalizedObject))
-                continue;
-
-            // Permitir CTEs
-            if (cteNames.Contains(normalizedObject))
-                continue;
-
-            // Todo objeto referenciado en FROM/JOIN debe estar en whitelist
-            if (!AllowedObjects.Contains(normalizedObject))
             {
+                continue;
+            }
+
+            if (cteNames.Contains(normalizedObject))
+            {
+                continue;
+            }
+
+            if (!TryBuildAllowedObjectKey(normalizedObject, out var allowedObjectKey))
+            {
+                error = $"No se pudo interpretar el objeto referenciado: {rawObject}.";
+                return false;
+            }
+
+            if (!allowedObjectKeys.Contains(allowedObjectKey))
+            {
+                _logger.LogWarning(
+                    "Blocked SQL for domain {Domain}. Referenced object: {Object}.",
+                    _domain,
+                    rawObject);
+
                 error = $"La consulta referencia un objeto no permitido: {rawObject}.";
                 return false;
             }
         }
 
         return true;
+    }
+
+    private HashSet<string> LoadAllowedObjectKeys()
+    {
+        try
+        {
+            var rows = _allowedObjectStore
+                .GetActiveObjectsAsync(_domain, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+
+            var allowedKeys = rows
+                .Select(x => BuildAllowedObjectKey(x.SchemaName, x.ObjectName))
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            _logger.LogInformation(
+                "Loaded {Count} allowed SQL object keys for domain {Domain}.",
+                allowedKeys.Count,
+                _domain);
+
+            return allowedKeys;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error loading allowed SQL objects for domain {Domain}.",
+                _domain);
+
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
     }
 
     private static string NormalizeSql(string sql)
@@ -136,7 +205,9 @@ public class StaticSqlValidator : ISqlValidator
         var trimmed = sql.Trim();
 
         if (trimmed.StartsWith(";WITH", StringComparison.OrdinalIgnoreCase))
+        {
             return trimmed[1..].TrimStart();
+        }
 
         return trimmed;
     }
@@ -145,9 +216,10 @@ public class StaticSqlValidator : ISqlValidator
     {
         var trimmed = sql.Trim();
 
-        // Permitimos ; final opcional
-        if (trimmed.EndsWith(";"))
+        if (trimmed.EndsWith(";", StringComparison.Ordinal))
+        {
             trimmed = trimmed[..^1].TrimEnd();
+        }
 
         return trimmed.Contains(';');
     }
@@ -156,8 +228,10 @@ public class StaticSqlValidator : ISqlValidator
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (!upperSql.StartsWith("WITH"))
+        if (!upperSql.StartsWith("WITH", StringComparison.Ordinal))
+        {
             return result;
+        }
 
         var matches = Regex.Matches(
             upperSql,
@@ -168,10 +242,56 @@ public class StaticSqlValidator : ISqlValidator
         {
             var cteName = NormalizeObjectName(match.Groups[1].Value);
             if (!string.IsNullOrWhiteSpace(cteName))
+            {
                 result.Add(cteName);
+            }
         }
 
         return result;
+    }
+
+    private static bool TryBuildAllowedObjectKey(string normalizedObjectName, out string allowedObjectKey)
+    {
+        allowedObjectKey = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(normalizedObjectName))
+        {
+            return false;
+        }
+
+        var parts = normalizedObjectName
+            .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (parts.Length == 1)
+        {
+            allowedObjectKey = BuildAllowedObjectKey(DefaultSchemaName, parts[0]);
+            return true;
+        }
+
+        if (parts.Length >= 2)
+        {
+            var schemaName = parts[^2];
+            var objectName = parts[^1];
+
+            allowedObjectKey = BuildAllowedObjectKey(schemaName, objectName);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string BuildAllowedObjectKey(string schemaName, string objectName)
+    {
+        var normalizedSchema = NormalizeObjectName(schemaName);
+        var normalizedObject = NormalizeObjectName(objectName);
+
+        if (string.IsNullOrWhiteSpace(normalizedSchema) ||
+            string.IsNullOrWhiteSpace(normalizedObject))
+        {
+            return string.Empty;
+        }
+
+        return $"{normalizedSchema}.{normalizedObject}";
     }
 
     private static string NormalizeObjectName(string objectName)

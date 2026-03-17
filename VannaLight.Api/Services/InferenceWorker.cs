@@ -1,11 +1,10 @@
 ﻿using Dapper;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Data.SqlClient;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using VannaLight.Api.Hubs;
 using VannaLight.Core.Abstractions;
+using VannaLight.Core.Settings;
 using VannaLight.Core.UseCases;
 
 namespace VannaLight.Api.Services;
@@ -15,7 +14,9 @@ public class InferenceWorker(
     IServiceScopeFactory scopeFactory,
     IHubContext<AssistantHub> hubContext,
     ILogger<InferenceWorker> logger,
-    IConfiguration configuration) : BackgroundService
+    IConfiguration configuration,
+    SqliteOptions sqliteOptions,
+    RuntimeDbOptions runtimeDbOptions) : BackgroundService
 {
     private const int SqlExecutionTimeoutSeconds = 8;
 
@@ -23,8 +24,11 @@ public class InferenceWorker(
     {
         logger.LogInformation("InferenceWorker iniciado. Esperando trabajos (SQL, Docs, Predict)...");
 
-        string sqlitePath = configuration["Paths:Sqlite"] ?? "Data/vanna_memory.db";
-        string sqlServerConnString = configuration.GetConnectionString("OperationalDb")
+        var memoryDbPath = sqliteOptions.DbPath;
+        var runtimeDbPath = runtimeDbOptions.DbPath;
+        var domain = configuration["Settings:Retrieval:Domain"]?.Trim() ?? string.Empty;
+
+        var sqlServerConnString = configuration.GetConnectionString("OperationalDb")
             ?? throw new InvalidOperationException("Falta la cadena de conexión OperationalDb.");
 
         while (!ct.IsCancellationRequested)
@@ -137,7 +141,13 @@ public class InferenceWorker(
                 logger.LogInformation("[Worker] Ejecutando Text-to-SQL para Job {Id}", jobId);
 
                 var sqlUseCase = scope.ServiceProvider.GetRequiredService<AskUseCase>();
-                var sqlResult = await sqlUseCase.ExecuteAsync(question, sqlitePath, sqlServerConnString, ct);
+                var sqlResult = await sqlUseCase.ExecuteAsync(
+                    question,
+                    memoryDbPath,
+                    runtimeDbPath,
+                    sqlServerConnString,
+                    domain,
+                    ct);
 
                 if (!sqlResult.Success)
                 {
