@@ -250,7 +250,7 @@ public class SqliteJobStore : IJobStore
         };
     }
 
-    public async Task<bool> MarkTrainingExampleSavedAsync(
+    public async Task<bool> UpdateJobReviewAsync(
     Guid jobId,
     string correctedSql,
     string verificationStatus,

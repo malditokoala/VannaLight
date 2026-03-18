@@ -21,12 +21,23 @@ public record LlmProfileUpdateRequest(
     int? UBatchSize,
     int? Threads
 );
+public record AllowedObjectUpsertRequest(
+    string Domain,
+    string SchemaName,
+    string ObjectName,
+    string ObjectType,
+    bool IsActive,
+    string? Notes);
+
+public record AllowedObjectStatusRequest(
+    bool IsActive);
 
 [ApiController]
 [Route("api/[controller]")]
 public class AdminController(
-    IJobStore jobStore,            // <-- Capa de datos para historial inyectada
-    ILlmProfileStore profileStore, // <-- Capa de datos para perfiles de IA inyectada
+    IJobStore jobStore,
+    IAllowedObjectStore allowedObjectStore,
+    ILlmProfileStore profileStore,
     WiDocIngestor wiIngestor,
     TrainExampleUseCase useCase) : ControllerBase
 {
@@ -47,7 +58,7 @@ public class AdminController(
         {
             await useCase.TrainAsync(request.Question, request.SqlText, ct);
 
-            var updated = await jobStore.MarkTrainingExampleSavedAsync(
+            var updated = await jobStore.UpdateJobReviewAsync(
                 jobId,
                 request.SqlText,
                 verificationStatus: "Verified",
@@ -129,5 +140,67 @@ public class AdminController(
 
         if (!success) return NotFound(new { Error = "Perfil no encontrado." });
         return Ok(new { Message = "Ajustes del perfil guardados exitosamente." });
+    }
+
+    [HttpGet("allowed-objects")]
+    public async Task<IActionResult> GetAllowedObjects([FromQuery] string domain, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(domain))
+            return BadRequest(new { Error = "El parámetro domain es requerido." });
+
+        var items = await allowedObjectStore.GetAllObjectsAsync(domain, ct);
+        return Ok(items);
+    }
+    [HttpPost("allowed-objects")]
+    public async Task<IActionResult> UpsertAllowedObject([FromBody] AllowedObjectUpsertRequest request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { Error = "Body inválido." });
+
+        if (string.IsNullOrWhiteSpace(request.Domain))
+            return BadRequest(new { Error = "Domain es requerido." });
+
+        if (string.IsNullOrWhiteSpace(request.SchemaName))
+            return BadRequest(new { Error = "SchemaName es requerido." });
+
+        if (string.IsNullOrWhiteSpace(request.ObjectName))
+            return BadRequest(new { Error = "ObjectName es requerido." });
+
+        var id = await allowedObjectStore.UpsertAsync(
+            new VannaLight.Core.Models.AllowedObject
+            {
+                Domain = request.Domain,
+                SchemaName = request.SchemaName,
+                ObjectName = request.ObjectName,
+                ObjectType = request.ObjectType,
+                IsActive = request.IsActive,
+                Notes = request.Notes
+            },
+            ct);
+
+        return Ok(new
+        {
+            Message = "AllowedObject guardado correctamente.",
+            Id = id
+        });
+    }
+
+    [HttpPatch("allowed-objects/{id:long}/status")]
+    public async Task<IActionResult> SetAllowedObjectStatus(long id, [FromBody] AllowedObjectStatusRequest request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { Error = "Body inválido." });
+
+        var updated = await allowedObjectStore.SetIsActiveAsync(id, request.IsActive, ct);
+
+        if (!updated)
+            return NotFound(new { Error = "AllowedObject no encontrado." });
+
+        return Ok(new
+        {
+            Message = "Estatus actualizado correctamente.",
+            Id = id,
+            IsActive = request.IsActive
+        });
     }
 }

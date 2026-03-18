@@ -1115,7 +1115,6 @@
 
         <input type="hidden" id="txtJobId" />
 
-        <!-- ── TOPBAR ── -->
         <header class="topbar">
             <div class="tb-left">
                 <div class="tb-logo">
@@ -1139,10 +1138,8 @@
             </div>
         </header>
 
-        <!-- ── MAIN ── -->
         <div class="main-area">
 
-            <!-- Tab rail -->
             <div class="tab-rail">
                 <button class="tab-btn active-rag" id="tab-rag" onclick="switchTab('rag')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1168,13 +1165,19 @@
                     </svg>
                     Hardware LLM
                 </button>
+                <button class="tab-btn" id="tab-allowed" onclick="switchTab('allowed')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
+                        <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>
+                        <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
+                    </svg>
+                    Allowed Objects
+                </button>
             </div>
 
-            <!-- ══ TAB: RAG ══ -->
             <div class="tab-content active" id="pane-rag">
                 <div class="rag-layout" style="width:100%">
 
-                    <!-- LEFT: History -->
                     <div class="panel-left">
                         <div class="panel-header">
                             <div class="panel-title">
@@ -1187,7 +1190,6 @@
                             <span class="panel-count" id="ragCount">—</span>
                         </div>
 
-                        <!-- FILTER BAR — nuevo -->
                         <div class="filter-bar">
                             <button class="filter-btn active-all" id="filter-all" onclick="setFilter('all')">Todos</button>
                             <button class="filter-btn" id="filter-pending" onclick="setFilter('pending')">Pendientes</button>
@@ -1206,7 +1208,6 @@
                         </div>
                     </div>
 
-                    <!-- RIGHT: Editor -->
                     <div class="panel-right">
                         <div class="editor-wrap">
                             <div class="section-header">
@@ -1222,7 +1223,6 @@
                                 </div>
                             </div>
 
-                            <!-- Question field -->
                             <div class="field-group">
                                 <label class="field-label">
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1231,7 +1231,6 @@
                                         <line x1="12" y1="17" x2="12.01" y2="17" />
                                     </svg>
                                     Pregunta original del usuario
-                                    <!-- Verification badge (reemplaza el badge de Status) -->
                                     <span class="status-badge warn" id="ragVerifyBadge" style="display:none;margin-left:auto"></span>
                                 </label>
                                 <input type="text" id="txtQuestion" class="field-input"
@@ -1244,7 +1243,6 @@
                                           placeholder="Ej. Se corrigió el join y se validó el agregado mensual."></textarea>
                             </div>
 
-                            <!-- SQL editor -->
                             <div class="field-group" style="flex:1">
                                 <label class="field-label">
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1257,13 +1255,10 @@
                                           placeholder="-- El SQL generado aparecerá aquí&#10;-- Corrige lo necesario antes de guardar en memoria RAG&#10;SELECT ..."></textarea>
                             </div>
 
-                            <!-- RAG banner (ok / err / warn — reemplaza error-banner) -->
                             <div class="rag-banner" id="ragBanner"></div>
                         </div>
 
-                        <!-- Actions bar -->
                         <div class="editor-actions">
-                            <!-- Meta chips: Status · VerificationStatus · TrainingSaved · fecha -->
                             <div class="action-meta" id="ragMeta">
                                 <span style="color:var(--muted)">Ninguna consulta seleccionada</span>
                             </div>
@@ -1280,11 +1275,9 @@
                 </div>
             </div>
 
-            <!-- ══ TAB: LLM ══ -->
             <div class="tab-content" id="pane-llm">
                 <div class="llm-layout" style="width:100%">
 
-                    <!-- LEFT: Profile list -->
                     <div class="panel-left">
                         <div class="panel-header">
                             <div class="panel-title">
@@ -1306,7 +1299,6 @@
                         </div>
                     </div>
 
-                    <!-- RIGHT: Profile editor -->
                     <div class="panel-right">
                         <div class="profile-editor">
 
@@ -1338,7 +1330,6 @@
                                 <input type="text" id="txtProfileName" class="field-input" readonly placeholder="Selecciona un perfil..." />
                             </div>
 
-                            <!-- VRAM meter -->
                             <div class="vram-meter" id="vramMeter" style="display:none">
                                 <div class="vram-header">
                                     <div class="vram-label">
@@ -1354,7 +1345,6 @@
                                 <div class="vram-scale"><span>0</span><span>2 GB</span><span>4 GB</span><span>6 GB</span><span>8 GB</span></div>
                             </div>
 
-                            <!-- Params grid -->
                             <div class="params-grid">
                                 <div class="field-group">
                                     <label class="field-label" style="color:var(--llm-c)">
@@ -1391,7 +1381,6 @@
                             <div class="alert-banner" id="llmAlert"></div>
                         </div>
 
-                        <!-- Actions bar -->
                         <div class="profile-actions">
                             <button class="btn btn-ghost" id="btnActivate" onclick="activateSelectedProfile()" disabled>
                                 <div class="btn-spinner" id="activateSpinner" style="border-top-color:var(--ok-c)"></div>
@@ -1415,10 +1404,126 @@
 
                 </div>
             </div>
+            <div class="tab-content" id="pane-allowed">
+                <div class="rag-layout" style="width:100%">
 
-        </div><!-- /main-area -->
-    </div><!-- /app -->
+                    <div class="panel-left">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
+                                    <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>
+                                    <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
+                                </svg>
+                                Allowed Objects
+                            </div>
+                            <span class="panel-count" id="allowedCount">—</span>
+                        </div>
 
+                        <div class="editor-wrap" style="padding:12px 14px 10px 14px; border-bottom:1px solid var(--border); flex:0 0 auto; gap:10px;">
+                            <div class="field-group">
+                                <label class="field-label">Dominio</label>
+                                <input type="text" id="txtAllowedDomainFilter" class="field-input" value="erp-kpi-pilot" />
+                            </div>
+                            <button class="btn btn-ghost" type="button" onclick="loadAllowedObjects()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                    <polyline points="1 20 1 14 7 14"></polyline>
+                                    <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10"></path>
+                                    <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14"></path>
+                                </svg>
+                                Recargar
+                            </button>
+                        </div>
+
+                        <div class="history-scroll" id="allowedList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
+                                    <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>
+                                    <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
+                                </svg>
+                                Cargando allowed objects...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-right">
+                        <div class="editor-wrap">
+                            <div class="section-header">
+                                <div class="section-header-icon si-rag">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Administración de Allowed Objects</div>
+                                    <div class="sh-sub">Configura objetos SQL permitidos por dominio para runtime y validator</div>
+                                </div>
+                            </div>
+
+                            <input type="hidden" id="txtAllowedId" />
+
+                            <div class="field-group">
+                                <label class="field-label">Domain</label>
+                                <input type="text" id="txtAllowedDomain" class="field-input" value="erp-kpi-pilot" readonly />
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label">Schema Name</label>
+                                <input type="text" id="txtAllowedSchemaName" class="field-input" placeholder="dbo" />
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label">Object Name</label>
+                                <input type="text" id="txtAllowedObjectName" class="field-input" placeholder="vw_KpiProduction_v1" />
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label">Object Type</label>
+                                <input type="text" id="txtAllowedObjectType" class="field-input" placeholder="VIEW" />
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label" style="display:flex;align-items:center;justify-content:space-between;">
+                                    <span>Activo</span>
+                                    <input type="checkbox" id="chkAllowedIsActive" checked />
+                                </label>
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label">Notes</label>
+                                <textarea id="txtAllowedNotes" class="field-input" rows="4" placeholder="Notas opcionales del objeto permitido"></textarea>
+                            </div>
+
+                            <div class="rag-banner" id="allowedBanner"></div>
+                        </div>
+
+                        <div class="editor-actions">
+                            <div class="action-meta" id="allowedMeta">
+                                <span style="color:var(--muted)">Ningún objeto seleccionado</span>
+                            </div>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <button class="btn btn-ghost" type="button" onclick="resetAllowedObjectForm()">
+                                    Nuevo
+                                </button>
+                                <button class="btn btn-danger" type="button" id="btnAllowedToggle" onclick="toggleAllowedObjectStatus()" disabled>
+                                    Activar / Desactivar
+                                </button>
+                                <button class="btn btn-primary" type="button" id="btnAllowedSave" onclick="saveAllowedObject()">
+                                    <div class="btn-spinner" id="allowedSpinner"></div>
+                                    Guardar Allowed Object
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
     <script>
         // ═══════════════════════════════════════════════════════════
         // TAB SWITCHING
@@ -1436,7 +1541,6 @@
         let globalJobs = [];
         let activeFilter = 'all'; // 'all' | 'pending' | 'verified'
 
-        // ── FIX #4: validar response.ok antes de parsear ──
         async function loadHistory() {
             try {
                 const res = await fetch('/api/admin/history');
@@ -1447,15 +1551,14 @@
             } catch (e) {
                 document.getElementById('historyList').innerHTML =
                     `<div class="empty-state">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-                    </svg>
-                    Error al cargar historial</div>`;
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                        </svg>
+                        Error al cargar historial</div>`;
             }
         }
 
-        // ── normaliza el VS a una de las 3 clases CSS conocidas (fix #4) ──
         function normalizeVerificationClass(vs) {
             const key = String(vs || '').toLowerCase();
             if (key === 'verified') return 'verified';
@@ -1475,7 +1578,6 @@
         function renderHistory() {
             const list = document.getElementById('historyList');
 
-            // filtrar — 'pending' = literalmente Pending; 'verified' = Verified; 'all' = todo
             const filtered = globalJobs.filter(job => {
                 const vs = normalizeVerificationClass(job.verificationStatus || job.VerificationStatus);
                 if (activeFilter === 'pending') return vs === 'pending';
@@ -1487,16 +1589,15 @@
 
             if (!filtered.length) {
                 list.innerHTML = `<div class="empty-state">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                Sin resultados para este filtro</div>`;
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    Sin resultados para este filtro</div>`;
                 return;
             }
 
             list.innerHTML = filtered.map((job) => {
-                // índice real en globalJobs para loadEditor
                 const realIdx = globalJobs.indexOf(job);
 
                 const status = job.status || job.Status || 'Unknown';
@@ -1506,29 +1607,28 @@
                 const trained = !!(job.trainingExampleSaved || job.TrainingExampleSaved);
 
                 const opOk = status === 'Completed';
-                const vsKey = normalizeVerificationClass(vs); // siempre 'verified' | 'pending' | 'rejected'
+                const vsKey = normalizeVerificationClass(vs);
 
                 const time = new Date(created).toLocaleTimeString('es-MX',
                     { hour12: false, hour: '2-digit', minute: '2-digit' });
 
                 return `
-            <div class="history-item" id="hi-${realIdx}" onclick="loadEditor(${realIdx})">
-              <div class="hi-top">
-                <div class="hi-question">${escHtml(question)}</div>
-                <div class="hi-time">${time}</div>
-              </div>
-              <div class="hi-badges">
-                <span class="hi-status ${opOk ? 'ok' : 'err'}">
-                  <span class="dot"></span>${status}
-                </span>
-                <span class="hi-verify ${vsKey}">${vs}</span>
-                ${trained ? '<span class="hi-verify verified">RAG ✓</span>' : ''}
-              </div>
-            </div>`;
+                <div class="history-item" id="hi-${realIdx}" onclick="loadEditor(${realIdx})">
+                  <div class="hi-top">
+                    <div class="hi-question">${escHtml(question)}</div>
+                    <div class="hi-time">${time}</div>
+                  </div>
+                  <div class="hi-badges">
+                    <span class="hi-status ${opOk ? 'ok' : 'err'}">
+                      <span class="dot"></span>${status}
+                    </span>
+                    <span class="hi-verify ${vsKey}">${vs}</span>
+                    ${trained ? '<span class="hi-verify verified">RAG ✓</span>' : ''}
+                  </div>
+                </div>`;
             }).join('');
         }
 
-        // ── loadEditor — options.preserveBanner evita que el banner de éxito sea tapado (fix #1) ──
         function loadEditor(i, options = {}) {
             const preserveBanner = options.preserveBanner === true;
             const job = globalJobs[i];
@@ -1546,15 +1646,13 @@
             const status = job.status || job.Status || 'Unknown';
             const vs = job.verificationStatus || job.VerificationStatus || 'Pending';
             const trained = !!(job.trainingExampleSaved || job.TrainingExampleSaved);
-            const vsLow = normalizeVerificationClass(vs); // fix #4: normalizado
+            const vsLow = normalizeVerificationClass(vs);
 
-            // Badge de VerificationStatus en la label de pregunta
             const badge = document.getElementById('ragVerifyBadge');
             badge.style.display = 'inline-flex';
             badge.className = 'status-badge ' + (vsLow === 'verified' ? 'ok' : vsLow === 'rejected' ? 'err' : 'warn');
             badge.textContent = vs;
 
-            // Banner: solo actualizar si no estamos preservando uno de éxito (fix #1)
             if (!preserveBanner) {
                 const error = job.errorText || job.ErrorText;
                 if (error && error !== 'null') {
@@ -1564,35 +1662,33 @@
                 }
             }
 
-            // Meta row: chips de Status + VerificationStatus + TrainingSaved + fecha
             const created = new Date(job.createdUtc || job.CreatedUtc).toLocaleString('es-MX', { hour12: false });
             const opClass = status === 'Completed' ? 'status-ok' : 'status-err';
             const vsClass = vsLow === 'verified' ? 'verify-ok' : vsLow === 'rejected' ? 'verify-err' : 'verify-pending';
             const trClass = trained ? 'training-yes' : 'training-no';
 
             document.getElementById('ragMeta').innerHTML = `
-            <span class="meta-chip ${opClass}">${escHtml(status)}</span>
-            <span class="meta-chip ${vsClass}">Verif: ${escHtml(vs)}</span>
-            <span class="meta-chip ${trClass}">RAG: ${trained ? 'Sí' : 'No'}</span>
-            <span class="meta-time">${created}</span>`;
+                <span class="meta-chip ${opClass}">${escHtml(status)}</span>
+                <span class="meta-chip ${vsClass}">Verif: ${escHtml(vs)}</span>
+                <span class="meta-chip ${trClass}">RAG: ${trained ? 'Sí' : 'No'}</span>
+                <span class="meta-time">${created}</span>`;
 
             document.getElementById('btnSave').disabled = false;
         }
 
-        // ── FIX #2: showRagBanner — helper consistente para ok/err/warn ──
         function showRagBanner(type, message) {
             const el = document.getElementById('ragBanner');
             el.className = 'rag-banner ' + type;
             el.textContent = message;
             el.style.display = 'block';
         }
+
         function hideRagBanner() {
             const el = document.getElementById('ragBanner');
             el.style.display = 'none';
             el.className = 'rag-banner';
         }
 
-        // ── FIX #3: después de guardar, reseleccionar el mismo JobId ──
         async function saveCorrection() {
             const jobId = document.getElementById('txtJobId').value;
             const question = document.getElementById('txtQuestion').value;
@@ -1620,10 +1716,8 @@
 
                 if (res.ok) {
                     showRagBanner('ok', '✓ Guardado correctamente en memoria RAG y runtime actualizado.');
-                    // Fix #3: volver a 'all' para que el job no desaparezca si estaba en filtro 'pending'
                     setFilter('all');
                     await loadHistory();
-                    // Reseleccionar por JobId preservando el banner de éxito (fix #1)
                     const refreshedIdx = globalJobs.findIndex(j => (j.jobId || j.JobId) === jobId);
                     if (refreshedIdx >= 0) loadEditor(refreshedIdx, { preserveBanner: true });
                 } else {
@@ -1639,12 +1733,296 @@
         }
 
         // ═══════════════════════════════════════════════════════════
+        // ALLOWED OBJECTS TAB
+        // ═══════════════════════════════════════════════════════════
+        let globalAllowedObjects = [];
+        let selectedAllowedObjectId = null;
+        const defaultAllowedDomain = 'erp-kpi-pilot';
+
+        async function loadAllowedObjects() {
+            const domainInput = document.getElementById('txtAllowedDomainFilter');
+            const domain = (domainInput?.value || defaultAllowedDomain).trim();
+
+            if (!domain) {
+                showAllowedBanner('warn', 'Debes indicar un dominio para cargar Allowed Objects.');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/admin/allowed-objects?domain=${encodeURIComponent(domain)}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                globalAllowedObjects = await res.json();
+                renderAllowedObjects();
+
+                const editDomain = document.getElementById('txtAllowedDomain');
+                if (editDomain) {
+                    editDomain.value = domain;
+                }
+
+                hideAllowedBanner();
+            } catch (e) {
+                document.getElementById('allowedList').innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
+                            <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>
+                            <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
+                        </svg>
+                        Error al cargar Allowed Objects
+                    </div>`;
+                showAllowedBanner('err', 'Error al cargar Allowed Objects: ' + e.message);
+            }
+        }
+
+        function renderAllowedObjects() {
+            const list = document.getElementById('allowedList');
+            const count = document.getElementById('allowedCount');
+
+            count.textContent = globalAllowedObjects.length;
+
+            if (!globalAllowedObjects.length) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
+                            <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>
+                            <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
+                        </svg>
+                        Sin Allowed Objects para este dominio
+                    </div>`;
+                return;
+            }
+
+            list.innerHTML = globalAllowedObjects.map(item => {
+                const id = item.id ?? item.Id;
+                const schemaName = item.schemaName || item.SchemaName || '';
+                const objectName = item.objectName || item.ObjectName || '';
+                const objectType = item.objectType || item.ObjectType || '';
+                const isActive = !!(item.isActive ?? item.IsActive);
+                const notes = item.notes || item.Notes || '';
+
+                return `
+                    <div class="history-item" id="ao-${id}" onclick="selectAllowedObject(${id})">
+                        <div class="hi-top">
+                            <div class="hi-question">${escHtml(schemaName)}.${escHtml(objectName)}</div>
+                            <div class="hi-time">${escHtml(objectType)}</div>
+                        </div>
+                        <div class="hi-badges">
+                            <span class="hi-verify ${isActive ? 'verified' : 'rejected'}">
+                                ${isActive ? 'Activo' : 'Inactivo'}
+                            </span>
+                            ${notes ? `<span class="hi-status ok" style="color:var(--dim)"><span class="dot" style="background:var(--dim);box-shadow:none"></span>${escHtml(notes)}</span>` : ''}
+                        </div>
+                    </div>`;
+            }).join('');
+
+            if (selectedAllowedObjectId !== null) {
+                const el = document.getElementById('ao-' + selectedAllowedObjectId);
+                if (el) el.classList.add('selected');
+            }
+        }
+
+        function selectAllowedObject(id) {
+            const item = globalAllowedObjects.find(x => (x.id ?? x.Id) === id);
+            if (!item) return;
+
+            selectedAllowedObjectId = id;
+
+            document.querySelectorAll('#allowedList .history-item').forEach(el => el.classList.remove('selected'));
+            const target = document.getElementById('ao-' + id);
+            if (target) target.classList.add('selected');
+
+            const domain = item.domain || item.Domain || '';
+            const schemaName = item.schemaName || item.SchemaName || '';
+            const objectName = item.objectName || item.ObjectName || '';
+            const objectType = item.objectType || item.ObjectType || '';
+            const isActive = !!(item.isActive ?? item.IsActive);
+            const notes = item.notes || item.Notes || '';
+
+            document.getElementById('txtAllowedId').value = id;
+            document.getElementById('txtAllowedDomain').value = domain;
+            document.getElementById('txtAllowedSchemaName').value = schemaName;
+            document.getElementById('txtAllowedObjectName').value = objectName;
+            document.getElementById('txtAllowedObjectType').value = objectType;
+            document.getElementById('chkAllowedIsActive').checked = isActive;
+            document.getElementById('txtAllowedNotes').value = notes;
+
+            document.getElementById('btnAllowedToggle').disabled = false;
+            document.getElementById('btnAllowedToggle').textContent = isActive ? 'Desactivar' : 'Activar';
+
+            document.getElementById('allowedMeta').innerHTML = `
+                <span class="meta-chip ${isActive ? 'verify-ok' : 'verify-err'}">${isActive ? 'Activo' : 'Inactivo'}</span>
+                <span class="meta-chip training-no">Id: ${id}</span>
+                <span class="meta-time">${escHtml(domain)}</span>`;
+
+            document.getElementById('btnAllowedToggle').textContent = isActive ? 'Desactivar' : 'Activar';
+            syncAllowedActionButtons();
+
+            hideAllowedBanner();
+        }
+
+        function resetAllowedObjectForm() {
+            selectedAllowedObjectId = null;
+
+            document.querySelectorAll('#allowedList .history-item').forEach(el => el.classList.remove('selected'));
+
+            document.getElementById('txtAllowedId').value = '';
+            document.getElementById('txtAllowedDomain').value =
+                document.getElementById('txtAllowedDomainFilter').value.trim() || defaultAllowedDomain;
+            document.getElementById('txtAllowedSchemaName').value = '';
+            document.getElementById('txtAllowedObjectName').value = '';
+            document.getElementById('txtAllowedObjectType').value = '';
+            document.getElementById('chkAllowedIsActive').checked = true;
+            document.getElementById('txtAllowedNotes').value = '';
+
+            document.getElementById('btnAllowedToggle').disabled = true;
+            document.getElementById('btnAllowedToggle').textContent = 'Activar / Desactivar';
+
+            document.getElementById('allowedMeta').innerHTML =
+                `<span style="color:var(--muted)">Ningún objeto seleccionado</span>`;
+
+            syncAllowedActionButtons();
+            hideAllowedBanner();
+        }
+
+        function syncAllowedActionButtons() {
+            const hasSelection = !!document.getElementById('txtAllowedId').value;
+            const saveBtn = document.getElementById('btnAllowedSave');
+            const toggleBtn = document.getElementById('btnAllowedToggle');
+
+            saveBtn.innerHTML = `
+                    <div class="btn-spinner" id="allowedSpinner" style="display:none"></div>
+                    ${hasSelection ? 'Actualizar Allowed Object' : 'Crear Allowed Object'}
+                `;
+
+            toggleBtn.disabled = !hasSelection;
+            if (!hasSelection) {
+                toggleBtn.textContent = 'Activar / Desactivar';
+            }
+        }
+
+        async function saveAllowedObject() {
+            const id = document.getElementById('txtAllowedId').value;
+            const domain = document.getElementById('txtAllowedDomain').value.trim();
+            const schemaName = document.getElementById('txtAllowedSchemaName').value.trim();
+            const objectName = document.getElementById('txtAllowedObjectName').value.trim();
+            const objectType = document.getElementById('txtAllowedObjectType').value.trim();
+            const isActive = document.getElementById('chkAllowedIsActive').checked;
+            const notes = document.getElementById('txtAllowedNotes').value.trim();
+
+            if (!domain || !schemaName || !objectName || !objectType) {
+                showAllowedBanner('warn', 'Domain, Schema Name, Object Name y Object Type son requeridos.');
+                return;
+            }
+
+            const btn = document.getElementById('btnAllowedSave');
+            const spin = document.getElementById('allowedSpinner');
+            btn.disabled = true;
+            spin.style.display = 'block';
+
+            try {
+                const res = await fetch('/api/admin/allowed-objects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        Domain: domain,
+                        SchemaName: schemaName,
+                        ObjectName: objectName,
+                        ObjectType: objectType,
+                        IsActive: isActive,
+                        Notes: notes || null
+                    })
+                });
+
+                if (res.ok) {
+                    const body = await res.json().catch(() => null);
+                    showAllowedBanner('ok', body?.Message || 'Allowed Object guardado correctamente.');
+
+                    document.getElementById('txtAllowedDomainFilter').value = domain;
+                    await loadAllowedObjects();
+
+                    const savedId = body?.Id ?? null;
+                    if (savedId !== null) {
+                        selectAllowedObject(savedId);
+                    } else {
+                        resetAllowedObjectForm();
+                        document.getElementById('txtAllowedDomain').value = domain;
+                    }
+                } else {
+                    const body = await res.json().catch(() => null);
+                    showAllowedBanner('err', body?.Error || ('Error al guardar Allowed Object. Código: ' + res.status));
+                }
+            } catch (e) {
+                showAllowedBanner('err', 'Error de red: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                spin.style.display = 'none';
+            }
+        }
+
+        async function toggleAllowedObjectStatus() {
+            const id = document.getElementById('txtAllowedId').value;
+            if (!id) {
+                showAllowedBanner('warn', 'Selecciona un Allowed Object antes de cambiar su estado.');
+                return;
+            }
+
+            const currentItem = globalAllowedObjects.find(x => String(x.id ?? x.Id) === String(id));
+            if (!currentItem) {
+                showAllowedBanner('err', 'No se encontró el Allowed Object seleccionado.');
+                return;
+            }
+
+            const currentIsActive = !!(currentItem.isActive ?? currentItem.IsActive);
+            const nextIsActive = !currentIsActive;
+
+            const btn = document.getElementById('btnAllowedToggle');
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`/api/admin/allowed-objects/${id}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        IsActive: nextIsActive
+                    })
+                });
+
+                if (res.ok) {
+                    showAllowedBanner('ok', `Allowed Object ${nextIsActive ? 'activado' : 'desactivado'} correctamente.`);
+                    await loadAllowedObjects();
+                    selectAllowedObject(Number(id));
+                } else {
+                    const body = await res.json().catch(() => null);
+                    showAllowedBanner('err', body?.Error || ('Error al actualizar estatus. Código: ' + res.status));
+                }
+            } catch (e) {
+                showAllowedBanner('err', 'Error de red: ' + e.message);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function showAllowedBanner(type, message) {
+            const el = document.getElementById('allowedBanner');
+            el.className = 'rag-banner ' + type;
+            el.textContent = message;
+            el.style.display = 'block';
+        }
+
+        function hideAllowedBanner() {
+            const el = document.getElementById('allowedBanner');
+            el.style.display = 'none';
+            el.className = 'rag-banner';
+        }
+
+        // ═══════════════════════════════════════════════════════════
         // LLM TAB
         // ═══════════════════════════════════════════════════════════
         let globalProfiles = [];
         let selectedProfileIndex = -1;
 
-        // ── FIX #4 también en loadProfiles ──
         async function loadProfiles() {
             try {
                 const res = await fetch('/api/admin/llm-profiles');
@@ -1655,10 +2033,10 @@
 
                 if (!globalProfiles.length) {
                     list.innerHTML = `<div class="empty-state">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>
-                    </svg>
-                    Sin perfiles disponibles</div>`;
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>
+                        </svg>
+                        Sin perfiles disponibles</div>`;
                     return;
                 }
 
@@ -1668,13 +2046,13 @@
                     const gpu = p.gpuLayerCount || p.GpuLayerCount || 0;
                     const ctx = p.contextSize || p.ContextSize || 0;
                     return `
-                <div class="profile-item ${isActive ? 'is-active' : ''}" data-idx="${i}" onclick="selectProfile(${i})">
-                  <div class="pi-name">
-                    ${escHtml(name)}
-                    ${isActive ? '<span class="pi-active-pill">ACTIVO</span>' : ''}
-                  </div>
-                  <div class="pi-summary">GPU Layers: ${gpu} · Context: ${ctx.toLocaleString('es-MX')}</div>
-                </div>`;
+                    <div class="profile-item ${isActive ? 'is-active' : ''}" data-idx="${i}" onclick="selectProfile(${i})">
+                      <div class="pi-name">
+                        ${escHtml(name)}
+                        ${isActive ? '<span class="pi-active-pill">ACTIVO</span>' : ''}
+                      </div>
+                      <div class="pi-summary">GPU Layers: ${gpu} · Context: ${ctx.toLocaleString('es-MX')}</div>
+                    </div>`;
                 }).join('');
 
                 if (selectedProfileIndex >= 0 && selectedProfileIndex < globalProfiles.length) {
@@ -1735,7 +2113,8 @@
 
             const btn = document.getElementById('btnSaveProfile');
             const spin = document.getElementById('profileSpinner');
-            btn.disabled = true; spin.style.display = 'block';
+            btn.disabled = true;
+            spin.style.display = 'block';
 
             const body = {
                 GpuLayerCount: getIntOrNull('txtGpuLayers'),
@@ -1760,7 +2139,8 @@
             } catch (e) {
                 showAlert('err', 'Error de red: ' + e.message);
             } finally {
-                btn.disabled = false; spin.style.display = 'none';
+                btn.disabled = false;
+                spin.style.display = 'none';
             }
         }
 
@@ -1770,15 +2150,16 @@
 
             const btn = document.getElementById('btnActivate');
             const spin = document.getElementById('activateSpinner');
-            btn.disabled = true; spin.style.display = 'block';
+            btn.disabled = true;
+            spin.style.display = 'block';
 
             try {
                 const res = await fetch(`/api/admin/llm-profiles/${profileId}/activate`, { method: 'POST' });
                 if (res.ok) {
                     showAlert('warn', `
-                    <div style="font-size:.85rem;font-weight:600;margin-bottom:4px;color:#f8fafc">✓ Perfil activado correctamente</div>
-                    <div style="font-size:.75rem;color:#fbbf24;opacity:.9">⚠️ IMPORTANTE: Detén y vuelve a ejecutar la API para que LLamaSharp cargue los nuevos pesos en la VRAM.</div>
-                `);
+                        <div style="font-size:.85rem;font-weight:600;margin-bottom:4px;color:#f8fafc">✓ Perfil activado correctamente</div>
+                        <div style="font-size:.75rem;color:#fbbf24;opacity:.9">⚠️ IMPORTANTE: Detén y vuelve a ejecutar la API para que LLamaSharp cargue los nuevos pesos en la VRAM.</div>
+                    `);
                     await loadProfiles();
                     document.getElementById('btnActivate').disabled = true;
                 } else {
@@ -1799,6 +2180,7 @@
             el.innerHTML = msg;
             el.style.display = 'block';
         }
+
         function hideAlert() {
             document.getElementById('llmAlert').style.display = 'none';
         }
@@ -1815,9 +2197,11 @@
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
             loadHistory();
+            loadAllowedObjects();
             loadProfiles();
+            resetAllowedObjectForm();
         });
-    </script>
 
+    </script>
 </body>
 </html>
