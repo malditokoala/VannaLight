@@ -12,6 +12,7 @@ using VannaLight.Infrastructure.AI;
 using VannaLight.Infrastructure.Data;
 using VannaLight.Infrastructure.Retrieval;
 using VannaLight.Infrastructure.Security;
+using VannaLight.Infrastructure.SqlServer;
 
 // =========================================================
 // CONFIGURACION NATIVA DE LLamaSharp
@@ -54,8 +55,10 @@ Directory.CreateDirectory(Path.GetDirectoryName(runtimePath)!);
 // ---------------------------------------------------------
 // 2. REGISTRO DE CONFIGURACIONES
 // ---------------------------------------------------------
-var operationalConn = builder.Configuration.GetConnectionString("OperationalDb")
-    ?? throw new InvalidOperationException("Falta ConnectionStrings:OperationalDb.");
+var operationalConn = builder.Configuration.GetConnectionString("OperationalDb");
+
+if (string.IsNullOrWhiteSpace(operationalConn))
+    throw new InvalidOperationException("Falta configurar ConnectionStrings:OperationalDb.");
 
 var sqliteOptions = new SqliteOptions(sqlitePath);
 var runtimeOptions = new RuntimeDbOptions(runtimePath);
@@ -66,8 +69,10 @@ builder.Services.AddSingleton(sqliteOptions);
 builder.Services.AddSingleton(runtimeOptions);
 builder.Services.AddSingleton(operationalOptions);
 
-// Compatibilidad solo donde si se usa IOptions<T>
+// Compatibilidad para servicios que usen IOptions<T>
 builder.Services.AddSingleton<IOptions<SqliteOptions>>(Options.Create(sqliteOptions));
+builder.Services.AddSingleton<IOptions<OperationalDbOptions>>(Options.Create(operationalOptions));
+builder.Services.AddSingleton<IOptions<RuntimeDbOptions>>(Options.Create(runtimeOptions));
 
 var settings = AppSettingsFactory.Create(RuntimeProfile.ALTO, modelPath);
 builder.Services.AddSingleton(settings);
@@ -91,6 +96,7 @@ builder.Services.AddMemoryCache();
 // Casos de uso
 builder.Services.AddTransient<AskUseCase>();
 builder.Services.AddTransient<TrainExampleUseCase>();
+builder.Services.AddSingleton<IngestUseCase>();
 
 // Stores y repositorios
 builder.Services.AddSingleton<ISchemaStore, SqliteSchemaStore>();
@@ -101,6 +107,9 @@ builder.Services.AddTransient<IJobStore, SqliteJobStore>();
 builder.Services.AddSingleton<IBusinessRuleStore, SqliteBusinessRuleStore>();
 builder.Services.AddSingleton<IAllowedObjectStore, SqliteAllowedObjectStore>();
 builder.Services.AddSingleton<ISqlCacheService, SqlCacheService>();
+
+// Ingesta de esquema
+builder.Services.AddSingleton<ISchemaIngestor, SqlServerSchemaIngestor>();
 
 // Pattern-first
 builder.Services.AddSingleton<IPatternMatcherService, PatternMatcherService>();

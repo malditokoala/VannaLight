@@ -6,1115 +6,14 @@
     <title>VannaLight — Administración</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
-    <style>
-        /* ═══════════════════════════════════════════════
-        TOKENS
-        ═══════════════════════════════════════════════ */
-        :root {
-            --bg: #09090c;
-            --surface: #0f1117;
-            --panel: #161b25;
-            --border: #1e2535;
-            --border2: #28304a;
-            --text: #dde4f0;
-            --muted: #4a5568;
-            --dim: #7a8a9e;
-            --sql-c: #22d3ee;
-            --rag-c: #22d3ee;
-            --llm-c: #f59e0b;
-            --ok-c: #4ade80;
-            --err-c: #f87171;
-            --warn-c: #fbbf24;
-            --verify-c: #a78bfa; /* nuevo: color para VerificationStatus */
-            --radius: 6px;
-            --mono: 'IBM Plex Mono', monospace;
-            --sans: 'IBM Plex Sans', sans-serif;
-            --cond: 'IBM Plex Sans Condensed', sans-serif;
-        }
-
-        *, *::before, *::after {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        html {
-            font-size: 15px;
-        }
-
-        body {
-            background: var(--bg);
-            color: var(--text);
-            font-family: var(--sans);
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-            body::before {
-                content: '';
-                position: fixed;
-                inset: 0;
-                background-image: radial-gradient(circle, rgba(255,255,255,.04) 1px, transparent 1px);
-                background-size: 28px 28px;
-                pointer-events: none;
-                z-index: 0;
-            }
-
-        /* ═══════════════════════════════════════════════
-        APP SHELL
-        ═══════════════════════════════════════════════ */
-        .app {
-            position: relative;
-            z-index: 1;
-            display: grid;
-            grid-template-rows: 56px 1fr;
-            min-height: 100vh;
-        }
-
-        /* ── TOPBAR ── */
-        .topbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 20px;
-            border-bottom: 1px solid var(--border);
-            background: var(--surface);
-        }
-
-        .tb-left {
-            display: flex;
-            align-items: center;
-            gap: 0;
-        }
-
-        .tb-logo {
-            width: 56px;
-            height: 56px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-right: 1px solid var(--border);
-            flex-shrink: 0;
-            margin-right: 16px;
-        }
-
-        .logo-mark {
-            width: 28px;
-            height: 28px;
-        }
-
-            .logo-mark svg {
-                width: 100%;
-                height: 100%;
-            }
-
-        .logo-ring {
-            fill: none;
-            stroke: var(--sql-c);
-            stroke-width: 2;
-            stroke-dasharray: 88;
-            animation: spin-ring 6s linear infinite;
-        }
-
-        @keyframes spin-ring {
-            to {
-                stroke-dashoffset: -88;
-            }
-        }
-
-        .logo-dot {
-            fill: var(--sql-c);
-        }
-
-        .tb-wordmark {
-            font-family: var(--cond);
-            font-size: 1.05rem;
-            font-weight: 800;
-            letter-spacing: .06em;
-            display: flex;
-            align-items: baseline;
-            gap: 6px;
-        }
-
-            .tb-wordmark em {
-                font-style: normal;
-                color: var(--sql-c);
-            }
-
-        .tb-admin-tag {
-            font-family: var(--mono);
-            font-size: .56rem;
-            color: var(--muted);
-            letter-spacing: .12em;
-            padding: 2px 8px;
-            border: 1px solid var(--border2);
-            border-radius: 3px;
-            margin-left: 4px;
-        }
-
-        .tb-right {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .btn-back {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 14px;
-            border: 1px solid var(--border2);
-            border-radius: var(--radius);
-            background: transparent;
-            color: var(--dim);
-            font-family: var(--mono);
-            font-size: .62rem;
-            letter-spacing: .06em;
-            cursor: pointer;
-            text-decoration: none;
-            transition: border-color .2s, color .2s;
-        }
-
-            .btn-back:hover {
-                border-color: var(--sql-c);
-                color: var(--sql-c);
-            }
-
-            .btn-back svg {
-                width: 12px;
-                height: 12px;
-            }
-
-        /* ── TAB RAIL ── */
-        .tab-rail {
-            display: flex;
-            gap: 2px;
-            padding: 0 0 0 24px;
-            border-bottom: 1px solid var(--border);
-            background: var(--surface);
-        }
-
-        .tab-btn {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 0 20px;
-            height: 44px;
-            border: none;
-            border-bottom: 2px solid transparent;
-            background: transparent;
-            color: var(--muted);
-            font-family: var(--mono);
-            font-size: .65rem;
-            letter-spacing: .08em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: color .2s, border-color .2s;
-        }
-
-            .tab-btn svg {
-                width: 14px;
-                height: 14px;
-            }
-
-            .tab-btn.active-rag {
-                color: var(--rag-c);
-                border-bottom-color: var(--rag-c);
-            }
-
-            .tab-btn.active-llm {
-                color: var(--llm-c);
-                border-bottom-color: var(--llm-c);
-            }
-
-            .tab-btn:hover:not(.active-rag):not(.active-llm) {
-                color: var(--dim);
-            }
-
-        /* ── MAIN AREA ── */
-        .main-area {
-            display: grid;
-            grid-template-rows: 44px 1fr;
-        }
-
-        .tab-content {
-            display: none;
-            height: 100%;
-        }
-
-            .tab-content.active {
-                display: flex;
-            }
-
-        /* ═══════════════════════════════════════════════
-        RAG TAB LAYOUT
-        ═══════════════════════════════════════════════ */
-        .rag-layout {
-            display: grid;
-            grid-template-columns: 340px 1fr;
-            height: calc(100vh - 100px);
-            overflow: hidden;
-        }
-
-        /* ── LEFT PANEL ── */
-        .panel-left {
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            background: var(--surface);
-        }
-
-        .panel-header {
-            padding: 14px 18px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-shrink: 0;
-            background: var(--panel);
-        }
-
-        .panel-title {
-            font-family: var(--mono);
-            font-size: .62rem;
-            letter-spacing: .12em;
-            color: var(--muted);
-            text-transform: uppercase;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-            .panel-title svg {
-                width: 13px;
-                height: 13px;
-            }
-
-        .panel-count {
-            font-family: var(--mono);
-            font-size: .58rem;
-            padding: 1px 6px;
-            border-radius: 3px;
-            background: var(--border2);
-            color: var(--dim);
-        }
-
-        /* ── FILTER BAR — nuevo ── */
-        .filter-bar {
-            padding: 8px 12px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            gap: 6px;
-            flex-shrink: 0;
-            background: var(--surface);
-        }
-
-        .filter-btn {
-            font-family: var(--mono);
-            font-size: .56rem;
-            letter-spacing: .06em;
-            padding: 3px 9px;
-            border-radius: 3px;
-            border: 1px solid var(--border2);
-            background: transparent;
-            color: var(--muted);
-            cursor: pointer;
-            transition: border-color .15s, color .15s, background .15s;
-        }
-
-            .filter-btn:hover {
-                color: var(--dim);
-                border-color: var(--dim);
-            }
-
-            .filter-btn.active-all {
-                border-color: var(--rag-c);
-                color: var(--rag-c);
-                background: color-mix(in srgb, var(--rag-c) 8%, transparent);
-            }
-
-            .filter-btn.active-pending {
-                border-color: var(--warn-c);
-                color: var(--warn-c);
-                background: color-mix(in srgb, var(--warn-c) 8%, transparent);
-            }
-
-            .filter-btn.active-verified {
-                border-color: var(--ok-c);
-                color: var(--ok-c);
-                background: color-mix(in srgb, var(--ok-c) 8%, transparent);
-            }
-
-        .history-scroll {
-            flex: 1;
-            overflow-y: auto;
-            scrollbar-width: thin;
-            scrollbar-color: var(--border2) transparent;
-        }
-
-            .history-scroll::-webkit-scrollbar {
-                width: 3px;
-            }
-
-            .history-scroll::-webkit-scrollbar-thumb {
-                background: var(--border2);
-                border-radius: 2px;
-            }
-
-        .history-item {
-            padding: 12px 18px;
-            border-bottom: 1px solid var(--border);
-            cursor: pointer;
-            border-left: 3px solid transparent;
-            transition: background .15s, border-color .15s;
-            display: block;
-        }
-
-            .history-item:hover {
-                background: var(--panel);
-                border-left-color: var(--muted);
-            }
-
-            .history-item.selected {
-                background: color-mix(in srgb, var(--rag-c) 6%, var(--panel));
-                border-left-color: var(--rag-c);
-            }
-
-        .hi-top {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 8px;
-            margin-bottom: 5px;
-        }
-
-        .hi-question {
-            font-family: var(--sans);
-            font-size: .82rem;
-            color: var(--text);
-            line-height: 1.35;
-            flex: 1;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-
-        .hi-time {
-            font-family: var(--mono);
-            font-size: .58rem;
-            color: var(--muted);
-            white-space: nowrap;
-            flex-shrink: 0;
-            padding-top: 1px;
-        }
-
-        /* fila de badges en el item */
-        .hi-badges {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-wrap: wrap;
-        }
-
-        .hi-status {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            font-family: var(--mono);
-            font-size: .58rem;
-            letter-spacing: .04em;
-        }
-
-            .hi-status .dot {
-                width: 5px;
-                height: 5px;
-                border-radius: 50%;
-            }
-
-            .hi-status.ok .dot {
-                background: var(--ok-c);
-                box-shadow: 0 0 5px var(--ok-c);
-            }
-
-            .hi-status.err .dot {
-                background: var(--err-c);
-                box-shadow: 0 0 5px var(--err-c);
-            }
-
-            .hi-status.ok {
-                color: var(--ok-c);
-            }
-
-            .hi-status.err {
-                color: var(--err-c);
-            }
-
-        /* badge de verification en la lista */
-        .hi-verify {
-            font-family: var(--mono);
-            font-size: .52rem;
-            letter-spacing: .06em;
-            padding: 1px 6px;
-            border-radius: 3px;
-        }
-
-            .hi-verify.verified {
-                background: color-mix(in srgb, var(--ok-c) 15%, transparent);
-                border: 1px solid color-mix(in srgb, var(--ok-c) 30%, transparent);
-                color: var(--ok-c);
-            }
-
-            .hi-verify.pending {
-                background: color-mix(in srgb, var(--warn-c) 12%, transparent);
-                border: 1px solid color-mix(in srgb, var(--warn-c) 25%, transparent);
-                color: var(--warn-c);
-            }
-
-            .hi-verify.rejected {
-                background: color-mix(in srgb, var(--err-c) 12%, transparent);
-                border: 1px solid color-mix(in srgb, var(--err-c) 25%, transparent);
-                color: var(--err-c);
-            }
-
-        .empty-state {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: var(--muted);
-            font-family: var(--mono);
-            font-size: .7rem;
-            gap: 12px;
-        }
-
-            .empty-state svg {
-                width: 32px;
-                height: 32px;
-                opacity: .3;
-            }
-
-        /* ── RIGHT PANEL: Editor ── */
-        .panel-right {
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .editor-wrap {
-            flex: 1;
-            overflow-y: auto;
-            padding: 24px 28px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .field-group {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .field-label {
-            font-family: var(--mono);
-            font-size: .6rem;
-            letter-spacing: .1em;
-            color: var(--muted);
-            text-transform: uppercase;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .field-input {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            color: var(--text);
-            font-family: var(--sans);
-            font-size: .88rem;
-            padding: 10px 14px;
-            outline: none;
-            transition: border-color .2s, box-shadow .2s;
-            width: 100%;
-        }
-
-            .field-input:focus {
-                border-color: var(--rag-c);
-                box-shadow: 0 0 0 3px color-mix(in srgb, var(--rag-c) 12%, transparent);
-            }
-
-            .field-input[readonly] {
-                color: var(--dim);
-                cursor: default;
-            }
-
-        .sql-editor {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            color: var(--rag-c);
-            font-family: var(--mono);
-            font-size: .8rem;
-            line-height: 1.7;
-            padding: 14px 16px;
-            outline: none;
-            resize: vertical;
-            min-height: 220px;
-            transition: border-color .2s, box-shadow .2s;
-            width: 100%;
-        }
-
-            .sql-editor:focus {
-                border-color: var(--rag-c);
-                box-shadow: 0 0 0 3px color-mix(in srgb, var(--rag-c) 10%, transparent), inset 0 0 20px color-mix(in srgb, var(--rag-c) 3%, transparent);
-            }
-
-        /* ── RAG BANNER — reemplaza error-banner fijo ── */
-        .rag-banner {
-            display: none;
-            padding: 10px 14px;
-            border-radius: var(--radius);
-            font-family: var(--mono);
-            font-size: .72rem;
-            line-height: 1.6;
-            animation: fadeUp .2s ease-out;
-        }
-
-            .rag-banner.ok {
-                border: 1px solid color-mix(in srgb, var(--ok-c) 40%, transparent);
-                background: color-mix(in srgb, var(--ok-c) 8%, transparent);
-                color: var(--ok-c);
-            }
-
-            .rag-banner.err {
-                border: 1px solid color-mix(in srgb, var(--err-c) 40%, transparent);
-                background: color-mix(in srgb, var(--err-c) 8%, transparent);
-                color: var(--err-c);
-            }
-
-            .rag-banner.warn {
-                border: 1px solid color-mix(in srgb, var(--warn-c) 40%, transparent);
-                background: color-mix(in srgb, var(--warn-c) 8%, transparent);
-                color: var(--warn-c);
-            }
-
-        /* action bar */
-        .editor-actions {
-            padding: 14px 28px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: var(--surface);
-            flex-shrink: 0;
-        }
-
-        /* ── META ROW — muestra Status + VerificationStatus + TrainingSaved ── */
-        .action-meta {
-            font-family: var(--mono);
-            font-size: .58rem;
-            color: var(--muted);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-            max-width: 60%;
-        }
-
-        .meta-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 2px 7px;
-            border-radius: 3px;
-            font-size: .54rem;
-            letter-spacing: .05em;
-        }
-
-            .meta-chip.status-ok {
-                background: color-mix(in srgb,var(--ok-c) 10%,transparent);
-                color: var(--ok-c);
-                border: 1px solid color-mix(in srgb,var(--ok-c) 25%,transparent);
-            }
-
-            .meta-chip.status-err {
-                background: color-mix(in srgb,var(--err-c) 10%,transparent);
-                color: var(--err-c);
-                border: 1px solid color-mix(in srgb,var(--err-c) 25%,transparent);
-            }
-
-            .meta-chip.verify-ok {
-                background: color-mix(in srgb,var(--ok-c) 10%,transparent);
-                color: var(--ok-c);
-                border: 1px solid color-mix(in srgb,var(--ok-c) 25%,transparent);
-            }
-
-            .meta-chip.verify-pending {
-                background: color-mix(in srgb,var(--warn-c) 10%,transparent);
-                color: var(--warn-c);
-                border: 1px solid color-mix(in srgb,var(--warn-c) 25%,transparent);
-            }
-
-            .meta-chip.verify-err {
-                background: color-mix(in srgb,var(--err-c) 10%,transparent);
-                color: var(--err-c);
-                border: 1px solid color-mix(in srgb,var(--err-c) 25%,transparent);
-            }
-
-            .meta-chip.training-yes {
-                background: color-mix(in srgb,var(--rag-c) 10%,transparent);
-                color: var(--rag-c);
-                border: 1px solid color-mix(in srgb,var(--rag-c) 25%,transparent);
-            }
-
-            .meta-chip.training-no {
-                background: color-mix(in srgb,var(--muted) 10%,transparent);
-                color: var(--dim);
-                border: 1px solid var(--border2);
-            }
-
-        .meta-time {
-            color: var(--muted);
-            font-size: .54rem;
-        }
-
-        /* status badge (inside field label) */
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            font-family: var(--mono);
-            font-size: .58rem;
-            letter-spacing: .06em;
-            padding: 2px 8px;
-            border-radius: 3px;
-        }
-
-            .status-badge.ok {
-                background: color-mix(in srgb,var(--ok-c) 12%,transparent);
-                color: var(--ok-c);
-                border: 1px solid color-mix(in srgb,var(--ok-c) 30%,transparent);
-            }
-
-            .status-badge.err {
-                background: color-mix(in srgb,var(--err-c) 12%,transparent);
-                color: var(--err-c);
-                border: 1px solid color-mix(in srgb,var(--err-c) 30%,transparent);
-            }
-
-            .status-badge.warn {
-                background: color-mix(in srgb,var(--warn-c) 12%,transparent);
-                color: var(--warn-c);
-                border: 1px solid color-mix(in srgb,var(--warn-c) 30%,transparent);
-            }
-
-        /* ═══════════════════════════════════════════════
-        LLM TAB LAYOUT
-        ═══════════════════════════════════════════════ */
-        .llm-layout {
-            display: grid;
-            grid-template-columns: 300px 1fr;
-            height: calc(100vh - 100px);
-            overflow: hidden;
-        }
-
-        .profile-item {
-            padding: 13px 18px;
-            border-bottom: 1px solid var(--border);
-            cursor: pointer;
-            border-left: 3px solid transparent;
-            transition: background .15s, border-color .15s;
-        }
-
-            .profile-item:hover {
-                background: var(--panel);
-                border-left-color: var(--muted);
-            }
-
-            .profile-item.is-active {
-                border-left-color: var(--ok-c);
-            }
-
-            .profile-item.selected,
-            .profile-item.selected.is-active {
-                background: color-mix(in srgb, var(--llm-c) 8%, var(--panel));
-                border-left-color: var(--llm-c);
-                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--llm-c) 20%, transparent);
-            }
-
-        .pi-name {
-            font-family: var(--sans);
-            font-size: .85rem;
-            font-weight: 600;
-            color: var(--text);
-            margin-bottom: 4px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .pi-active-pill {
-            font-family: var(--mono);
-            font-size: .52rem;
-            padding: 1px 6px;
-            border-radius: 3px;
-            background: color-mix(in srgb, var(--ok-c) 15%, transparent);
-            border: 1px solid color-mix(in srgb, var(--ok-c) 30%, transparent);
-            color: var(--ok-c);
-            letter-spacing: .06em;
-        }
-
-        .pi-summary {
-            font-family: var(--mono);
-            font-size: .6rem;
-            color: var(--muted);
-        }
-
-        .profile-editor {
-            flex: 1;
-            overflow-y: auto;
-            padding: 24px 28px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .params-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 14px;
-        }
-
-            .params-grid .full {
-                grid-column: 1 / -1;
-            }
-
-        .field-hint {
-            font-family: var(--mono);
-            font-size: .56rem;
-            color: var(--muted);
-            margin-top: 4px;
-            letter-spacing: .04em;
-        }
-
-        .field-num {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            color: var(--text);
-            font-family: var(--mono);
-            font-size: .88rem;
-            padding: 9px 14px;
-            outline: none;
-            width: 100%;
-            transition: border-color .2s, box-shadow .2s;
-        }
-
-            .field-num:focus {
-                border-color: var(--llm-c);
-                box-shadow: 0 0 0 3px color-mix(in srgb, var(--llm-c) 12%, transparent);
-            }
-
-            .field-num[readonly] {
-                color: var(--dim);
-            }
-
-            .field-num.key-param {
-                color: var(--llm-c);
-            }
-
-                .field-num.key-param:focus {
-                    border-color: var(--llm-c);
-                }
-
-        .alert-banner {
-            display: none;
-            padding: 10px 16px;
-            border-radius: var(--radius);
-            font-family: var(--mono);
-            font-size: .72rem;
-            line-height: 1.6;
-            animation: fadeUp .2s ease-out;
-        }
-
-            .alert-banner.ok {
-                border: 1px solid color-mix(in srgb,var(--ok-c) 40%,transparent);
-                background: color-mix(in srgb,var(--ok-c) 8%,transparent);
-                color: var(--ok-c);
-            }
-
-            .alert-banner.warn {
-                border: 1px solid color-mix(in srgb,var(--warn-c) 40%,transparent);
-                background: color-mix(in srgb,var(--warn-c) 8%,transparent);
-                color: var(--warn-c);
-            }
-
-            .alert-banner.err {
-                border: 1px solid color-mix(in srgb,var(--err-c) 40%,transparent);
-                background: color-mix(in srgb,var(--err-c) 8%,transparent);
-                color: var(--err-c);
-            }
-
-        @keyframes fadeUp {
-            from {
-                opacity: 0;
-                transform: translateY(6px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* ═══════════════════════════════════════════════
-        BUTTONS
-        ═══════════════════════════════════════════════ */
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            padding: 8px 18px;
-            border-radius: var(--radius);
-            border: none;
-            font-family: var(--mono);
-            font-size: .68rem;
-            font-weight: 600;
-            letter-spacing: .08em;
-            cursor: pointer;
-            transition: filter .2s, opacity .2s, box-shadow .2s;
-            white-space: nowrap;
-        }
-
-            .btn:disabled {
-                opacity: .4;
-                cursor: not-allowed;
-            }
-
-            .btn:not(:disabled):hover {
-                filter: brightness(1.15);
-            }
-
-            .btn svg {
-                width: 13px;
-                height: 13px;
-                flex-shrink: 0;
-            }
-
-        .btn-primary {
-            background: var(--rag-c);
-            color: #000;
-        }
-
-        .btn-amber {
-            background: var(--llm-c);
-            color: #000;
-        }
-
-        .btn-ghost {
-            background: var(--panel);
-            border: 1px solid var(--border2);
-            color: var(--dim);
-        }
-
-            .btn-ghost:not(:disabled):hover {
-                border-color: var(--ok-c);
-                color: var(--ok-c);
-            }
-
-        .btn-danger {
-            background: transparent;
-            border: 1px solid color-mix(in srgb,var(--err-c) 40%,transparent);
-            color: var(--err-c);
-        }
-
-        .btn-spinner {
-            width: 11px;
-            height: 11px;
-            border: 2px solid rgba(0,0,0,.25);
-            border-top-color: #000;
-            border-radius: 50%;
-            animation: spin .6s linear infinite;
-            display: none;
-            flex-shrink: 0;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        /* ═══════════════════════════════════════════════
-        VRAM METER
-        ═══════════════════════════════════════════════ */
-        .vram-meter {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 16px 18px;
-        }
-
-        .vram-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 10px;
-        }
-
-        .vram-label {
-            font-family: var(--mono);
-            font-size: .6rem;
-            letter-spacing: .1em;
-            color: var(--muted);
-            text-transform: uppercase;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .vram-val {
-            font-family: var(--cond);
-            font-size: 1.2rem;
-            font-weight: 800;
-            color: var(--llm-c);
-        }
-
-        .vram-bg {
-            height: 6px;
-            background: var(--border2);
-            border-radius: 3px;
-            overflow: hidden;
-        }
-
-        .vram-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--llm-c), color-mix(in srgb, var(--llm-c) 60%, var(--err-c)));
-            border-radius: 3px;
-            transition: width .6s cubic-bezier(.16,1,.3,1);
-        }
-
-        .vram-scale {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 5px;
-            font-family: var(--mono);
-            font-size: .54rem;
-            color: var(--muted);
-        }
-
-        /* ═══════════════════════════════════════════════
-        SECTION HEADER
-        ═══════════════════════════════════════════════ */
-        .section-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .section-header-icon {
-            width: 28px;
-            height: 28px;
-            border-radius: var(--radius);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-
-            .section-header-icon svg {
-                width: 14px;
-                height: 14px;
-            }
-
-        .si-rag {
-            background: color-mix(in srgb, var(--rag-c) 15%, transparent);
-        }
-
-            .si-rag svg {
-                stroke: var(--rag-c);
-            }
-
-        .si-llm {
-            background: color-mix(in srgb, var(--llm-c) 15%, transparent);
-        }
-
-            .si-llm svg {
-                stroke: var(--llm-c);
-            }
-
-        .section-header-text {
-            flex: 1;
-        }
-
-        .sh-title {
-            font-family: var(--cond);
-            font-size: .95rem;
-            font-weight: 700;
-            color: var(--text);
-            letter-spacing: .02em;
-        }
-
-        .sh-sub {
-            font-family: var(--mono);
-            font-size: .58rem;
-            color: var(--muted);
-            margin-top: 1px;
-        }
-
-        /* ═══════════════════════════════════════════════
-        PROFILE ACTIONS
-        ═══════════════════════════════════════════════ */
-        .profile-actions {
-            padding: 14px 28px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            justify-content: flex-end;
-            background: var(--surface);
-            flex-shrink: 0;
-        }
-
-        /* ═══════════════════════════════════════════════
-        RESPONSIVE
-        ═══════════════════════════════════════════════ */
-        @media (max-width: 800px) {
-            .rag-layout, .llm-layout {
-                grid-template-columns: 1fr;
-                grid-template-rows: 280px 1fr;
-            }
-
-            .panel-left, .panel-right {
-                border-right: none;
-                border-bottom: 1px solid var(--border);
-            }
-
-            .params-grid {
-                grid-template-columns: 1fr;
-            }
-
-                .params-grid .full {
-                    grid-column: 1;
-                }
-
-            .action-meta {
-                max-width: 100%;
-            }
-        }
-    </style>
+    <link href="/css/admin.css" rel="stylesheet" />
 </head>
 <body>
     <div class="app">
 
         <input type="hidden" id="txtJobId" />
 
+        <!-- ── TOPBAR ── -->
         <header class="topbar">
             <div class="tb-left">
                 <div class="tb-logo">
@@ -1138,9 +37,12 @@
             </div>
         </header>
 
+        <!-- ── MAIN AREA ── -->
         <div class="main-area">
 
+            <!-- Tab rail -->
             <div class="tab-rail">
+
                 <button class="tab-btn active-rag" id="tab-rag" onclick="switchTab('rag')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 2a8 8 0 0 0-8 8v1a8 8 0 0 0 16 0v-1a8 8 0 0 0-8-8z" />
@@ -1150,6 +52,7 @@
                     </svg>
                     Entrenamiento RAG
                 </button>
+
                 <button class="tab-btn" id="tab-llm" onclick="switchTab('llm')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="4" y="4" width="16" height="16" rx="2" />
@@ -1165,19 +68,33 @@
                     </svg>
                     Hardware LLM
                 </button>
+
                 <button class="tab-btn" id="tab-allowed" onclick="switchTab('allowed')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                        <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
-                        <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>
-                        <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
+                        <ellipse cx="12" cy="5" rx="7" ry="3" />
+                        <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" />
+                        <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
                     </svg>
                     Allowed Objects
                 </button>
+
+                <button class="tab-btn" id="tab-business-rules" onclick="switchTab('business-rules')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="4" y="4" width="16" height="16" rx="2" />
+                        <path d="M8 9h8" />
+                        <path d="M8 13h8" />
+                        <path d="M8 17h5" />
+                    </svg>
+                    Business Rules
+                </button>
+
             </div>
 
+            <!-- ══ TAB: RAG ══ -->
             <div class="tab-content active" id="pane-rag">
-                <div class="rag-layout" style="width:100%">
+                <div class="rag-layout">
 
+                    <!-- LEFT -->
                     <div class="panel-left">
                         <div class="panel-header">
                             <div class="panel-title">
@@ -1189,13 +106,11 @@
                             </div>
                             <span class="panel-count" id="ragCount">—</span>
                         </div>
-
                         <div class="filter-bar">
                             <button class="filter-btn active-all" id="filter-all" onclick="setFilter('all')">Todos</button>
                             <button class="filter-btn" id="filter-pending" onclick="setFilter('pending')">Pendientes</button>
                             <button class="filter-btn" id="filter-verified" onclick="setFilter('verified')">Verificados</button>
                         </div>
-
                         <div class="history-scroll" id="historyList">
                             <div class="empty-state">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1208,6 +123,7 @@
                         </div>
                     </div>
 
+                    <!-- RIGHT -->
                     <div class="panel-right">
                         <div class="editor-wrap">
                             <div class="section-header">
@@ -1256,28 +172,45 @@
                             </div>
 
                             <div class="rag-banner" id="ragBanner"></div>
+                            <div class="rag-banner" id="schemaBanner"></div>
                         </div>
 
                         <div class="editor-actions">
                             <div class="action-meta" id="ragMeta">
-                                <span style="color:var(--muted)">Ninguna consulta seleccionada</span>
+                                <span class="meta-empty">Ninguna consulta seleccionada</span>
                             </div>
-                            <button class="btn btn-primary" id="btnSave" onclick="saveCorrection()" disabled>
-                                <div class="btn-spinner" id="ragSpinner"></div>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                                </svg>
-                                Guardar en Memoria RAG
-                            </button>
+
+                            <div class="inline-actions">
+                                <button class="btn btn-ghost" id="btnReindexSchema" type="button" onclick="reindexSchema()">
+                                    <div class="btn-spinner" id="schemaSpinner"></div>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="23 4 23 10 17 10" />
+                                        <polyline points="1 20 1 14 7 14" />
+                                        <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
+                                        <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
+                                    </svg>
+                                    Reindex Schema
+                                </button>
+
+                                <button class="btn btn-primary" id="btnSave" onclick="saveCorrection()" disabled>
+                                    <div class="btn-spinner" id="ragSpinner"></div>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                                    </svg>
+                                    Guardar en Memoria RAG
+                                </button>
+                            </div>
                         </div>
                     </div>
 
                 </div>
             </div>
 
+            <!-- ══ TAB: LLM ══ -->
             <div class="tab-content" id="pane-llm">
-                <div class="llm-layout" style="width:100%">
+                <div class="llm-layout">
 
+                    <!-- LEFT -->
                     <div class="panel-left">
                         <div class="panel-header">
                             <div class="panel-title">
@@ -1299,9 +232,9 @@
                         </div>
                     </div>
 
+                    <!-- RIGHT -->
                     <div class="panel-right">
                         <div class="profile-editor">
-
                             <div class="section-header">
                                 <div class="section-header-icon si-llm">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1330,7 +263,7 @@
                                 <input type="text" id="txtProfileName" class="field-input" readonly placeholder="Selecciona un perfil..." />
                             </div>
 
-                            <div class="vram-meter" id="vramMeter" style="display:none">
+                            <div class="vram-meter hidden" id="vramMeter">
                                 <div class="vram-header">
                                     <div class="vram-label">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1341,7 +274,7 @@
                                     </div>
                                     <div class="vram-val" id="vramVal">— GB</div>
                                 </div>
-                                <div class="vram-bg"><div class="vram-fill" id="vramFill" style="width:0%"></div></div>
+                                <div class="vram-bg"><div class="vram-fill" id="vramFill"></div></div>
                                 <div class="vram-scale"><span>0</span><span>2 GB</span><span>4 GB</span><span>6 GB</span><span>8 GB</span></div>
                             </div>
 
@@ -1373,7 +306,7 @@
                                     <input type="number" id="txtUBatchSize" class="field-num" placeholder="—" />
                                 </div>
                                 <div class="field-group full">
-                                    <label class="field-label">CPU Threads <span style="margin-left:4px;font-size:.54rem;color:var(--muted)">(vacío = auto)</span></label>
+                                    <label class="field-label">CPU Threads <span class="field-label-hint">(vacío = auto)</span></label>
                                     <input type="number" id="txtThreads" class="field-num" placeholder="Auto" />
                                 </div>
                             </div>
@@ -1383,7 +316,7 @@
 
                         <div class="profile-actions">
                             <button class="btn btn-ghost" id="btnActivate" onclick="activateSelectedProfile()" disabled>
-                                <div class="btn-spinner" id="activateSpinner" style="border-top-color:var(--ok-c)"></div>
+                                <div class="btn-spinner spinner-ok" id="activateSpinner"></div>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <circle cx="12" cy="12" r="10" />
                                     <polyline points="10 15 15 12 10 9 10 15" />
@@ -1404,62 +337,64 @@
 
                 </div>
             </div>
-            <div class="tab-content" id="pane-allowed">
-                <div class="rag-layout" style="width:100%">
 
+            <!-- ══ TAB: ALLOWED OBJECTS ══ -->
+            <div class="tab-content" id="pane-allowed">
+                <div class="rag-layout">
+
+                    <!-- LEFT -->
                     <div class="panel-left">
                         <div class="panel-header">
                             <div class="panel-title">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                    <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
-                                    <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>
-                                    <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
+                                    <ellipse cx="12" cy="5" rx="7" ry="3" />
+                                    <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" />
+                                    <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
                                 </svg>
                                 Allowed Objects
                             </div>
                             <span class="panel-count" id="allowedCount">—</span>
                         </div>
-
-                        <div class="editor-wrap" style="padding:12px 14px 10px 14px; border-bottom:1px solid var(--border); flex:0 0 auto; gap:10px;">
+                        <div class="editor-wrap-compact">
                             <div class="field-group">
                                 <label class="field-label">Dominio</label>
                                 <input type="text" id="txtAllowedDomainFilter" class="field-input" value="erp-kpi-pilot" />
                             </div>
                             <button class="btn btn-ghost" type="button" onclick="loadAllowedObjects()">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="23 4 23 10 17 10"></polyline>
-                                    <polyline points="1 20 1 14 7 14"></polyline>
-                                    <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10"></path>
-                                    <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14"></path>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+                                    <polyline points="23 4 23 10 17 10" />
+                                    <polyline points="1 20 1 14 7 14" />
+                                    <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
+                                    <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
                                 </svg>
                                 Recargar
                             </button>
                         </div>
-
                         <div class="history-scroll" id="allowedList">
                             <div class="empty-state">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                    <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
-                                    <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>
-                                    <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
+                                    <ellipse cx="12" cy="5" rx="7" ry="3" />
+                                    <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" />
+                                    <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
                                 </svg>
                                 Cargando allowed objects...
                             </div>
                         </div>
                     </div>
 
+                    <!-- RIGHT -->
                     <div class="panel-right">
                         <div class="editor-wrap">
                             <div class="section-header">
-                                <div class="section-header-icon si-rag">
+                                <div class="section-header-icon si-ok">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M12 20h9"></path>
-                                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                                        <path d="M12 20h9" />
+                                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                                     </svg>
                                 </div>
                                 <div class="section-header-text">
-                                    <div class="sh-title">Administración de Allowed Objects</div>
-                                    <div class="sh-sub">Configura objetos SQL permitidos por dominio para runtime y validator</div>
+                                    <div class="sh-title">Allowed Objects</div>
+                                    <div class="sh-sub">Objetos SQL permitidos por dominio para runtime y validación</div>
                                 </div>
                             </div>
 
@@ -1469,32 +404,26 @@
                                 <label class="field-label">Domain</label>
                                 <input type="text" id="txtAllowedDomain" class="field-input" value="erp-kpi-pilot" readonly />
                             </div>
-
                             <div class="field-group">
                                 <label class="field-label">Schema Name</label>
                                 <input type="text" id="txtAllowedSchemaName" class="field-input" placeholder="dbo" />
                             </div>
-
                             <div class="field-group">
                                 <label class="field-label">Object Name</label>
                                 <input type="text" id="txtAllowedObjectName" class="field-input" placeholder="vw_KpiProduction_v1" />
                             </div>
-
                             <div class="field-group">
                                 <label class="field-label">Object Type</label>
                                 <input type="text" id="txtAllowedObjectType" class="field-input" placeholder="VIEW" />
                             </div>
-
                             <div class="field-group">
-                                <label class="field-label" style="display:flex;align-items:center;justify-content:space-between;">
-                                    <span>Activo</span>
-                                    <input type="checkbox" id="chkAllowedIsActive" checked />
-                                </label>
+                                <label class="field-label">Activo</label>
+                                <input type="checkbox" id="chkAllowedIsActive" checked />
                             </div>
-
                             <div class="field-group">
                                 <label class="field-label">Notes</label>
-                                <textarea id="txtAllowedNotes" class="field-input" rows="4" placeholder="Notas opcionales del objeto permitido"></textarea>
+                                <textarea id="txtAllowedNotes" class="field-input" rows="3"
+                                          placeholder="Notas opcionales sobre este objeto permitido"></textarea>
                             </div>
 
                             <div class="rag-banner" id="allowedBanner"></div>
@@ -1502,13 +431,12 @@
 
                         <div class="editor-actions">
                             <div class="action-meta" id="allowedMeta">
-                                <span style="color:var(--muted)">Ningún objeto seleccionado</span>
+                                <span class="meta-empty">Ningún objeto seleccionado</span>
                             </div>
-                            <div style="display:flex; gap:10px; align-items:center;">
-                                <button class="btn btn-ghost" type="button" onclick="resetAllowedObjectForm()">
-                                    Nuevo
-                                </button>
-                                <button class="btn btn-danger" type="button" id="btnAllowedToggle" onclick="toggleAllowedObjectStatus()" disabled>
+                            <div class="inline-actions">
+                                <button class="btn btn-ghost" type="button" onclick="resetAllowedObjectForm()">Nuevo</button>
+                                <button class="btn btn-danger" type="button" id="btnAllowedToggle"
+                                        onclick="toggleAllowedObjectStatus()" disabled>
                                     Activar / Desactivar
                                 </button>
                                 <button class="btn btn-primary" type="button" id="btnAllowedSave" onclick="saveAllowedObject()">
@@ -1522,686 +450,122 @@
                 </div>
             </div>
 
-        </div>
-    </div>
-    <script>
-        // ═══════════════════════════════════════════════════════════
-        // TAB SWITCHING
-        // ═══════════════════════════════════════════════════════════
-        function switchTab(t) {
-            document.querySelectorAll('.tab-btn').forEach(b => b.className = 'tab-btn');
-            document.querySelectorAll('.tab-content').forEach(p => p.classList.remove('active'));
-            document.getElementById('tab-' + t).className = 'tab-btn active-' + t;
-            document.getElementById('pane-' + t).classList.add('active');
-        }
+            <!-- ══ TAB: BUSINESS RULES ══ -->
+            <div class="tab-content" id="pane-business-rules">
+                <div class="rag-layout">
 
-        // ═══════════════════════════════════════════════════════════
-        // RAG TAB
-        // ═══════════════════════════════════════════════════════════
-        let globalJobs = [];
-        let activeFilter = 'all'; // 'all' | 'pending' | 'verified'
-
-        async function loadHistory() {
-            try {
-                const res = await fetch('/api/admin/history');
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const jobs = await res.json();
-                globalJobs = jobs;
-                renderHistory();
-            } catch (e) {
-                document.getElementById('historyList').innerHTML =
-                    `<div class="empty-state">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <circle cx="12" cy="12" r="10"/>
-                            <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-                        </svg>
-                        Error al cargar historial</div>`;
-            }
-        }
-
-        function normalizeVerificationClass(vs) {
-            const key = String(vs || '').toLowerCase();
-            if (key === 'verified') return 'verified';
-            if (key === 'rejected') return 'rejected';
-            return 'pending';
-        }
-
-        function setFilter(f) {
-            activeFilter = f;
-            ['all', 'pending', 'verified'].forEach(id => {
-                const btn = document.getElementById('filter-' + id);
-                btn.className = 'filter-btn' + (id === f ? ' active-' + id : '');
-            });
-            renderHistory();
-        }
-
-        function renderHistory() {
-            const list = document.getElementById('historyList');
-
-            const filtered = globalJobs.filter(job => {
-                const vs = normalizeVerificationClass(job.verificationStatus || job.VerificationStatus);
-                if (activeFilter === 'pending') return vs === 'pending';
-                if (activeFilter === 'verified') return vs === 'verified';
-                return true;
-            });
-
-            document.getElementById('ragCount').textContent = filtered.length;
-
-            if (!filtered.length) {
-                list.innerHTML = `<div class="empty-state">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                    </svg>
-                    Sin resultados para este filtro</div>`;
-                return;
-            }
-
-            list.innerHTML = filtered.map((job) => {
-                const realIdx = globalJobs.indexOf(job);
-
-                const status = job.status || job.Status || 'Unknown';
-                const vs = job.verificationStatus || job.VerificationStatus || 'Pending';
-                const question = job.question || job.Question || '';
-                const created = job.createdUtc || job.CreatedUtc;
-                const trained = !!(job.trainingExampleSaved || job.TrainingExampleSaved);
-
-                const opOk = status === 'Completed';
-                const vsKey = normalizeVerificationClass(vs);
-
-                const time = new Date(created).toLocaleTimeString('es-MX',
-                    { hour12: false, hour: '2-digit', minute: '2-digit' });
-
-                return `
-                <div class="history-item" id="hi-${realIdx}" onclick="loadEditor(${realIdx})">
-                  <div class="hi-top">
-                    <div class="hi-question">${escHtml(question)}</div>
-                    <div class="hi-time">${time}</div>
-                  </div>
-                  <div class="hi-badges">
-                    <span class="hi-status ${opOk ? 'ok' : 'err'}">
-                      <span class="dot"></span>${status}
-                    </span>
-                    <span class="hi-verify ${vsKey}">${vs}</span>
-                    ${trained ? '<span class="hi-verify verified">RAG ✓</span>' : ''}
-                  </div>
-                </div>`;
-            }).join('');
-        }
-
-        function loadEditor(i, options = {}) {
-            const preserveBanner = options.preserveBanner === true;
-            const job = globalJobs[i];
-            if (!job) return;
-
-            document.querySelectorAll('.history-item').forEach(el => el.classList.remove('selected'));
-            const el = document.getElementById('hi-' + i);
-            if (el) el.classList.add('selected');
-
-            document.getElementById('txtJobId').value = job.jobId || job.JobId || '';
-            document.getElementById('txtFeedbackComment').value = job.feedbackComment || job.FeedbackComment || '';
-            document.getElementById('txtQuestion').value = job.question || job.Question || '';
-            document.getElementById('txtSql').value = job.sqlText || job.SqlText || '';
-
-            const status = job.status || job.Status || 'Unknown';
-            const vs = job.verificationStatus || job.VerificationStatus || 'Pending';
-            const trained = !!(job.trainingExampleSaved || job.TrainingExampleSaved);
-            const vsLow = normalizeVerificationClass(vs);
-
-            const badge = document.getElementById('ragVerifyBadge');
-            badge.style.display = 'inline-flex';
-            badge.className = 'status-badge ' + (vsLow === 'verified' ? 'ok' : vsLow === 'rejected' ? 'err' : 'warn');
-            badge.textContent = vs;
-
-            if (!preserveBanner) {
-                const error = job.errorText || job.ErrorText;
-                if (error && error !== 'null') {
-                    showRagBanner('warn', `⚠ Error reportado: ${error}`);
-                } else {
-                    hideRagBanner();
-                }
-            }
-
-            const created = new Date(job.createdUtc || job.CreatedUtc).toLocaleString('es-MX', { hour12: false });
-            const opClass = status === 'Completed' ? 'status-ok' : 'status-err';
-            const vsClass = vsLow === 'verified' ? 'verify-ok' : vsLow === 'rejected' ? 'verify-err' : 'verify-pending';
-            const trClass = trained ? 'training-yes' : 'training-no';
-
-            document.getElementById('ragMeta').innerHTML = `
-                <span class="meta-chip ${opClass}">${escHtml(status)}</span>
-                <span class="meta-chip ${vsClass}">Verif: ${escHtml(vs)}</span>
-                <span class="meta-chip ${trClass}">RAG: ${trained ? 'Sí' : 'No'}</span>
-                <span class="meta-time">${created}</span>`;
-
-            document.getElementById('btnSave').disabled = false;
-        }
-
-        function showRagBanner(type, message) {
-            const el = document.getElementById('ragBanner');
-            el.className = 'rag-banner ' + type;
-            el.textContent = message;
-            el.style.display = 'block';
-        }
-
-        function hideRagBanner() {
-            const el = document.getElementById('ragBanner');
-            el.style.display = 'none';
-            el.className = 'rag-banner';
-        }
-
-        async function saveCorrection() {
-            const jobId = document.getElementById('txtJobId').value;
-            const question = document.getElementById('txtQuestion').value;
-            const sql = document.getElementById('txtSql').value;
-            const feedbackComment = document.getElementById('txtFeedbackComment').value;
-
-            if (!jobId || !question || !sql) return;
-
-            const btn = document.getElementById('btnSave');
-            const spin = document.getElementById('ragSpinner');
-            btn.disabled = true;
-            spin.style.display = 'block';
-
-            try {
-                const res = await fetch('/api/admin/train', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        JobId: jobId,
-                        Question: question,
-                        SqlText: sql,
-                        FeedbackComment: feedbackComment || null
-                    })
-                });
-
-                if (res.ok) {
-                    showRagBanner('ok', '✓ Guardado correctamente en memoria RAG y runtime actualizado.');
-                    setFilter('all');
-                    await loadHistory();
-                    const refreshedIdx = globalJobs.findIndex(j => (j.jobId || j.JobId) === jobId);
-                    if (refreshedIdx >= 0) loadEditor(refreshedIdx, { preserveBanner: true });
-                } else {
-                    const body = await res.json().catch(() => null);
-                    showRagBanner('err', body?.Error || ('Error al guardar. Código: ' + res.status));
-                }
-            } catch (e) {
-                showRagBanner('err', 'Error de red: ' + e.message);
-            } finally {
-                btn.disabled = false;
-                spin.style.display = 'none';
-            }
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        // ALLOWED OBJECTS TAB
-        // ═══════════════════════════════════════════════════════════
-        let globalAllowedObjects = [];
-        let selectedAllowedObjectId = null;
-        const defaultAllowedDomain = 'erp-kpi-pilot';
-
-        async function loadAllowedObjects() {
-            const domainInput = document.getElementById('txtAllowedDomainFilter');
-            const domain = (domainInput?.value || defaultAllowedDomain).trim();
-
-            if (!domain) {
-                showAllowedBanner('warn', 'Debes indicar un dominio para cargar Allowed Objects.');
-                return;
-            }
-
-            try {
-                const res = await fetch(`/api/admin/allowed-objects?domain=${encodeURIComponent(domain)}`);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-                globalAllowedObjects = await res.json();
-                renderAllowedObjects();
-
-                const editDomain = document.getElementById('txtAllowedDomain');
-                if (editDomain) {
-                    editDomain.value = domain;
-                }
-
-                hideAllowedBanner();
-            } catch (e) {
-                document.getElementById('allowedList').innerHTML = `
-                    <div class="empty-state">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
-                            <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>
-                            <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
-                        </svg>
-                        Error al cargar Allowed Objects
-                    </div>`;
-                showAllowedBanner('err', 'Error al cargar Allowed Objects: ' + e.message);
-            }
-        }
-
-        function renderAllowedObjects() {
-            const list = document.getElementById('allowedList');
-            const count = document.getElementById('allowedCount');
-
-            count.textContent = globalAllowedObjects.length;
-
-            if (!globalAllowedObjects.length) {
-                list.innerHTML = `
-                    <div class="empty-state">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
-                            <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>
-                            <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
-                        </svg>
-                        Sin Allowed Objects para este dominio
-                    </div>`;
-                return;
-            }
-
-            list.innerHTML = globalAllowedObjects.map(item => {
-                const id = item.id ?? item.Id;
-                const schemaName = item.schemaName || item.SchemaName || '';
-                const objectName = item.objectName || item.ObjectName || '';
-                const objectType = item.objectType || item.ObjectType || '';
-                const isActive = !!(item.isActive ?? item.IsActive);
-                const notes = item.notes || item.Notes || '';
-
-                return `
-                    <div class="history-item" id="ao-${id}" onclick="selectAllowedObject(${id})">
-                        <div class="hi-top">
-                            <div class="hi-question">${escHtml(schemaName)}.${escHtml(objectName)}</div>
-                            <div class="hi-time">${escHtml(objectType)}</div>
+                    <!-- LEFT -->
+                    <div class="panel-left">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                                    <path d="M8 9h8" />
+                                    <path d="M8 13h8" />
+                                    <path d="M8 17h5" />
+                                </svg>
+                                Business Rules
+                            </div>
+                            <span class="panel-count" id="businessRuleCount">—</span>
                         </div>
-                        <div class="hi-badges">
-                            <span class="hi-verify ${isActive ? 'verified' : 'rejected'}">
-                                ${isActive ? 'Activo' : 'Inactivo'}
-                            </span>
-                            ${notes ? `<span class="hi-status ok" style="color:var(--dim)"><span class="dot" style="background:var(--dim);box-shadow:none"></span>${escHtml(notes)}</span>` : ''}
+                        <div class="editor-wrap-compact">
+                            <div class="field-group">
+                                <label class="field-label">Dominio</label>
+                                <input type="text" id="txtBusinessRuleDomainFilter" class="field-input" value="erp-kpi-pilot" />
+                            </div>
+                            <button class="btn btn-ghost" type="button" onclick="loadBusinessRules()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+                                    <polyline points="23 4 23 10 17 10" />
+                                    <polyline points="1 20 1 14 7 14" />
+                                    <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
+                                    <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
+                                </svg>
+                                Recargar
+                            </button>
                         </div>
-                    </div>`;
-            }).join('');
+                        <div class="history-scroll" id="businessRuleList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                                    <path d="M8 9h8" />
+                                    <path d="M8 13h8" />
+                                    <path d="M8 17h5" />
+                                </svg>
+                                Cargando business rules...
+                            </div>
+                        </div>
+                    </div>
 
-            if (selectedAllowedObjectId !== null) {
-                const el = document.getElementById('ao-' + selectedAllowedObjectId);
-                if (el) el.classList.add('selected');
-            }
-        }
+                    <!-- RIGHT -->
+                    <div class="panel-right">
+                        <div class="editor-wrap">
+                            <div class="section-header">
+                                <div class="section-header-icon si-warn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 20h9" />
+                                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Business Rules</div>
+                                    <div class="sh-sub">Reglas de negocio activas por dominio para orientar generación y validación SQL</div>
+                                </div>
+                            </div>
 
-        function selectAllowedObject(id) {
-            const item = globalAllowedObjects.find(x => (x.id ?? x.Id) === id);
-            if (!item) return;
+                            <input type="hidden" id="txtBusinessRuleId" />
 
-            selectedAllowedObjectId = id;
+                            <div class="field-group">
+                                <label class="field-label">Domain</label>
+                                <input type="text" id="txtBusinessRuleDomain" class="field-input" value="erp-kpi-pilot" readonly />
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Rule Key</label>
+                                <input type="text" id="txtBusinessRuleKey" class="field-input" placeholder="kpi_monthly_totals" />
+                                <div class="field-hint">Clave corta y estable para identificar la regla.</div>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Rule Text</label>
+                                <textarea id="txtBusinessRuleText" class="field-input" rows="6"
+                                          placeholder="Ej. Para comparativos mensuales usar YearMonth y evitar agrupar por fecha completa."></textarea>
+                                <div class="field-hint">Describe la intención funcional, no la implementación técnica.</div>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Priority</label>
+                                <input type="number" id="txtBusinessRulePriority" class="field-num" min="0" step="1" value="0" />
+                                <div class="field-hint">Menor número = mayor prioridad.</div>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Activa</label>
+                                <input type="checkbox" id="chkBusinessRuleIsActive" checked />
+                            </div>
 
-            document.querySelectorAll('#allowedList .history-item').forEach(el => el.classList.remove('selected'));
-            const target = document.getElementById('ao-' + id);
-            if (target) target.classList.add('selected');
+                            <div class="rag-banner" id="businessRuleBanner"></div>
+                        </div>
 
-            const domain = item.domain || item.Domain || '';
-            const schemaName = item.schemaName || item.SchemaName || '';
-            const objectName = item.objectName || item.ObjectName || '';
-            const objectType = item.objectType || item.ObjectType || '';
-            const isActive = !!(item.isActive ?? item.IsActive);
-            const notes = item.notes || item.Notes || '';
+                        <div class="editor-actions">
+                            <div class="action-meta" id="businessRuleMeta">
+                                <span class="meta-empty">Ninguna regla seleccionada</span>
+                            </div>
+                            <div class="inline-actions">
+                                <button class="btn btn-ghost" type="button" onclick="resetBusinessRuleForm()">Nueva</button>
+                                <button class="btn btn-danger" type="button" id="btnBusinessRuleToggle"
+                                        onclick="toggleBusinessRuleStatus()" disabled>
+                                    Activar / Desactivar
+                                </button>
+                                <button class="btn btn-primary" type="button" id="btnBusinessRuleSave" onclick="saveBusinessRule()">
+                                    <div class="btn-spinner" id="businessRuleSpinner"></div>
+                                    Guardar Business Rule
+                                </button>
+                            </div>
+                        </div>
+                    </div>
 
-            document.getElementById('txtAllowedId').value = id;
-            document.getElementById('txtAllowedDomain').value = domain;
-            document.getElementById('txtAllowedSchemaName').value = schemaName;
-            document.getElementById('txtAllowedObjectName').value = objectName;
-            document.getElementById('txtAllowedObjectType').value = objectType;
-            document.getElementById('chkAllowedIsActive').checked = isActive;
-            document.getElementById('txtAllowedNotes').value = notes;
+                </div>
+            </div>
 
-            document.getElementById('btnAllowedToggle').disabled = false;
-            document.getElementById('btnAllowedToggle').textContent = isActive ? 'Desactivar' : 'Activar';
+        </div><!-- /main-area -->
+    </div><!-- /app -->
 
-            document.getElementById('allowedMeta').innerHTML = `
-                <span class="meta-chip ${isActive ? 'verify-ok' : 'verify-err'}">${isActive ? 'Activo' : 'Inactivo'}</span>
-                <span class="meta-chip training-no">Id: ${id}</span>
-                <span class="meta-time">${escHtml(domain)}</span>`;
-
-            document.getElementById('btnAllowedToggle').textContent = isActive ? 'Desactivar' : 'Activar';
-            syncAllowedActionButtons();
-
-            hideAllowedBanner();
-        }
-
-        function resetAllowedObjectForm() {
-            selectedAllowedObjectId = null;
-
-            document.querySelectorAll('#allowedList .history-item').forEach(el => el.classList.remove('selected'));
-
-            document.getElementById('txtAllowedId').value = '';
-            document.getElementById('txtAllowedDomain').value =
-                document.getElementById('txtAllowedDomainFilter').value.trim() || defaultAllowedDomain;
-            document.getElementById('txtAllowedSchemaName').value = '';
-            document.getElementById('txtAllowedObjectName').value = '';
-            document.getElementById('txtAllowedObjectType').value = '';
-            document.getElementById('chkAllowedIsActive').checked = true;
-            document.getElementById('txtAllowedNotes').value = '';
-
-            document.getElementById('btnAllowedToggle').disabled = true;
-            document.getElementById('btnAllowedToggle').textContent = 'Activar / Desactivar';
-
-            document.getElementById('allowedMeta').innerHTML =
-                `<span style="color:var(--muted)">Ningún objeto seleccionado</span>`;
-
-            syncAllowedActionButtons();
-            hideAllowedBanner();
-        }
-
-        function syncAllowedActionButtons() {
-            const hasSelection = !!document.getElementById('txtAllowedId').value;
-            const saveBtn = document.getElementById('btnAllowedSave');
-            const toggleBtn = document.getElementById('btnAllowedToggle');
-
-            saveBtn.innerHTML = `
-                    <div class="btn-spinner" id="allowedSpinner" style="display:none"></div>
-                    ${hasSelection ? 'Actualizar Allowed Object' : 'Crear Allowed Object'}
-                `;
-
-            toggleBtn.disabled = !hasSelection;
-            if (!hasSelection) {
-                toggleBtn.textContent = 'Activar / Desactivar';
-            }
-        }
-
-        async function saveAllowedObject() {
-            const id = document.getElementById('txtAllowedId').value;
-            const domain = document.getElementById('txtAllowedDomain').value.trim();
-            const schemaName = document.getElementById('txtAllowedSchemaName').value.trim();
-            const objectName = document.getElementById('txtAllowedObjectName').value.trim();
-            const objectType = document.getElementById('txtAllowedObjectType').value.trim();
-            const isActive = document.getElementById('chkAllowedIsActive').checked;
-            const notes = document.getElementById('txtAllowedNotes').value.trim();
-
-            if (!domain || !schemaName || !objectName || !objectType) {
-                showAllowedBanner('warn', 'Domain, Schema Name, Object Name y Object Type son requeridos.');
-                return;
-            }
-
-            const btn = document.getElementById('btnAllowedSave');
-            const spin = document.getElementById('allowedSpinner');
-            btn.disabled = true;
-            spin.style.display = 'block';
-
-            try {
-                const res = await fetch('/api/admin/allowed-objects', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        Domain: domain,
-                        SchemaName: schemaName,
-                        ObjectName: objectName,
-                        ObjectType: objectType,
-                        IsActive: isActive,
-                        Notes: notes || null
-                    })
-                });
-
-                if (res.ok) {
-                    const body = await res.json().catch(() => null);
-                    showAllowedBanner('ok', body?.Message || 'Allowed Object guardado correctamente.');
-
-                    document.getElementById('txtAllowedDomainFilter').value = domain;
-                    await loadAllowedObjects();
-
-                    const savedId = body?.Id ?? null;
-                    if (savedId !== null) {
-                        selectAllowedObject(savedId);
-                    } else {
-                        resetAllowedObjectForm();
-                        document.getElementById('txtAllowedDomain').value = domain;
-                    }
-                } else {
-                    const body = await res.json().catch(() => null);
-                    showAllowedBanner('err', body?.Error || ('Error al guardar Allowed Object. Código: ' + res.status));
-                }
-            } catch (e) {
-                showAllowedBanner('err', 'Error de red: ' + e.message);
-            } finally {
-                btn.disabled = false;
-                spin.style.display = 'none';
-            }
-        }
-
-        async function toggleAllowedObjectStatus() {
-            const id = document.getElementById('txtAllowedId').value;
-            if (!id) {
-                showAllowedBanner('warn', 'Selecciona un Allowed Object antes de cambiar su estado.');
-                return;
-            }
-
-            const currentItem = globalAllowedObjects.find(x => String(x.id ?? x.Id) === String(id));
-            if (!currentItem) {
-                showAllowedBanner('err', 'No se encontró el Allowed Object seleccionado.');
-                return;
-            }
-
-            const currentIsActive = !!(currentItem.isActive ?? currentItem.IsActive);
-            const nextIsActive = !currentIsActive;
-
-            const btn = document.getElementById('btnAllowedToggle');
-            btn.disabled = true;
-
-            try {
-                const res = await fetch(`/api/admin/allowed-objects/${id}/status`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        IsActive: nextIsActive
-                    })
-                });
-
-                if (res.ok) {
-                    showAllowedBanner('ok', `Allowed Object ${nextIsActive ? 'activado' : 'desactivado'} correctamente.`);
-                    await loadAllowedObjects();
-                    selectAllowedObject(Number(id));
-                } else {
-                    const body = await res.json().catch(() => null);
-                    showAllowedBanner('err', body?.Error || ('Error al actualizar estatus. Código: ' + res.status));
-                }
-            } catch (e) {
-                showAllowedBanner('err', 'Error de red: ' + e.message);
-            } finally {
-                btn.disabled = false;
-            }
-        }
-
-        function showAllowedBanner(type, message) {
-            const el = document.getElementById('allowedBanner');
-            el.className = 'rag-banner ' + type;
-            el.textContent = message;
-            el.style.display = 'block';
-        }
-
-        function hideAllowedBanner() {
-            const el = document.getElementById('allowedBanner');
-            el.style.display = 'none';
-            el.className = 'rag-banner';
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        // LLM TAB
-        // ═══════════════════════════════════════════════════════════
-        let globalProfiles = [];
-        let selectedProfileIndex = -1;
-
-        async function loadProfiles() {
-            try {
-                const res = await fetch('/api/admin/llm-profiles');
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                globalProfiles = await res.json();
-
-                const list = document.getElementById('profileList');
-
-                if (!globalProfiles.length) {
-                    list.innerHTML = `<div class="empty-state">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>
-                        </svg>
-                        Sin perfiles disponibles</div>`;
-                    return;
-                }
-
-                list.innerHTML = globalProfiles.map((p, i) => {
-                    const name = p.name || p.Name;
-                    const isActive = p.isActive || p.IsActive;
-                    const gpu = p.gpuLayerCount || p.GpuLayerCount || 0;
-                    const ctx = p.contextSize || p.ContextSize || 0;
-                    return `
-                    <div class="profile-item ${isActive ? 'is-active' : ''}" data-idx="${i}" onclick="selectProfile(${i})">
-                      <div class="pi-name">
-                        ${escHtml(name)}
-                        ${isActive ? '<span class="pi-active-pill">ACTIVO</span>' : ''}
-                      </div>
-                      <div class="pi-summary">GPU Layers: ${gpu} · Context: ${ctx.toLocaleString('es-MX')}</div>
-                    </div>`;
-                }).join('');
-
-                if (selectedProfileIndex >= 0 && selectedProfileIndex < globalProfiles.length) {
-                    const target = document.querySelector(`.profile-item[data-idx="${selectedProfileIndex}"]`);
-                    if (target) target.classList.add('selected');
-                }
-            } catch (e) {
-                document.getElementById('profileList').innerHTML =
-                    `<div class="empty-state">Error al cargar perfiles (${e.message})</div>`;
-            }
-        }
-
-        function selectProfile(idx) {
-            const p = globalProfiles[idx];
-            if (!p) return;
-
-            selectedProfileIndex = idx;
-            const isActive = p.isActive || p.IsActive;
-
-            document.querySelectorAll('.profile-item').forEach(el => el.classList.remove('selected'));
-            const target = document.querySelector(`.profile-item[data-idx="${idx}"]`);
-            if (target) target.classList.add('selected');
-
-            document.getElementById('txtProfileId').value = p.id ?? p.Id;
-            document.getElementById('txtProfileName').value = p.name || p.Name;
-            document.getElementById('txtGpuLayers').value = p.gpuLayerCount ?? p.GpuLayerCount ?? '';
-            document.getElementById('txtContextSize').value = p.contextSize ?? p.ContextSize ?? '';
-            document.getElementById('txtBatchSize').value = p.batchSize ?? p.BatchSize ?? '';
-            document.getElementById('txtUBatchSize').value = p.uBatchSize ?? p.UBatchSize ?? '';
-            document.getElementById('txtThreads').value = p.threads ?? p.Threads ?? '';
-
-            document.getElementById('btnSaveProfile').disabled = false;
-            document.getElementById('btnActivate').disabled = isActive;
-            document.getElementById('vramMeter').style.display = 'block';
-
-            hideAlert();
-            updateVram();
-        }
-
-        function updateVram() {
-            const layers = parseInt(document.getElementById('txtGpuLayers').value) || 0;
-            const gb = (layers * 0.18 + 0.5).toFixed(1);
-            const pct = Math.min((parseFloat(gb) / 8) * 100, 100);
-            document.getElementById('vramVal').textContent = gb + ' GB';
-            document.getElementById('vramFill').style.width = pct + '%';
-        }
-
-        function getIntOrNull(elementId) {
-            const val = document.getElementById(elementId).value;
-            if (val === '') return null;
-            const parsed = parseInt(val, 10);
-            return isNaN(parsed) ? null : parsed;
-        }
-
-        async function saveProfileSettings() {
-            if (selectedProfileIndex < 0) return;
-            const profileId = globalProfiles[selectedProfileIndex].id ?? globalProfiles[selectedProfileIndex].Id;
-
-            const btn = document.getElementById('btnSaveProfile');
-            const spin = document.getElementById('profileSpinner');
-            btn.disabled = true;
-            spin.style.display = 'block';
-
-            const body = {
-                GpuLayerCount: getIntOrNull('txtGpuLayers'),
-                ContextSize: getIntOrNull('txtContextSize'),
-                BatchSize: getIntOrNull('txtBatchSize'),
-                UBatchSize: getIntOrNull('txtUBatchSize'),
-                Threads: getIntOrNull('txtThreads')
-            };
-
-            try {
-                const res = await fetch(`/api/admin/llm-profiles/${profileId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                if (res.ok) {
-                    showAlert('ok', '✓ Ajustes guardados correctamente.');
-                    await loadProfiles();
-                } else {
-                    showAlert('err', 'Error al guardar ajustes. Código: ' + res.status);
-                }
-            } catch (e) {
-                showAlert('err', 'Error de red: ' + e.message);
-            } finally {
-                btn.disabled = false;
-                spin.style.display = 'none';
-            }
-        }
-
-        async function activateSelectedProfile() {
-            if (selectedProfileIndex < 0) return;
-            const profileId = globalProfiles[selectedProfileIndex].id ?? globalProfiles[selectedProfileIndex].Id;
-
-            const btn = document.getElementById('btnActivate');
-            const spin = document.getElementById('activateSpinner');
-            btn.disabled = true;
-            spin.style.display = 'block';
-
-            try {
-                const res = await fetch(`/api/admin/llm-profiles/${profileId}/activate`, { method: 'POST' });
-                if (res.ok) {
-                    showAlert('warn', `
-                        <div style="font-size:.85rem;font-weight:600;margin-bottom:4px;color:#f8fafc">✓ Perfil activado correctamente</div>
-                        <div style="font-size:.75rem;color:#fbbf24;opacity:.9">⚠️ IMPORTANTE: Detén y vuelve a ejecutar la API para que LLamaSharp cargue los nuevos pesos en la VRAM.</div>
-                    `);
-                    await loadProfiles();
-                    document.getElementById('btnActivate').disabled = true;
-                } else {
-                    showAlert('err', 'Error al activar perfil.');
-                    btn.disabled = false;
-                }
-            } catch (e) {
-                showAlert('err', 'Error de red: ' + e.message);
-                btn.disabled = false;
-            } finally {
-                spin.style.display = 'none';
-            }
-        }
-
-        function showAlert(type, msg) {
-            const el = document.getElementById('llmAlert');
-            el.className = 'alert-banner ' + type;
-            el.innerHTML = msg;
-            el.style.display = 'block';
-        }
-
-        function hideAlert() {
-            document.getElementById('llmAlert').style.display = 'none';
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        // UTILS
-        // ═══════════════════════════════════════════════════════════
-        function escHtml(s) {
-            return String(s)
-                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        }
-
-        // INIT
-        document.addEventListener('DOMContentLoaded', () => {
-            loadHistory();
-            loadAllowedObjects();
-            loadProfiles();
-            resetAllowedObjectForm();
-        });
-
-    </script>
+    <script src="/js/admin.js"></script>
 </body>
 </html>
