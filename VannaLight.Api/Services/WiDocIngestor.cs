@@ -1,27 +1,32 @@
 ﻿using Dapper;
 using Microsoft.Data.Sqlite;
-using System.Runtime.Intrinsics.Arm;
 using System.Security.Cryptography;
 using System.Text;
 using UglyToad.PdfPig;
 using VannaLight.Api.Contracts;
+using VannaLight.Core.Abstractions;
 using VannaLight.Core.Models;
+using VannaLight.Core.Settings;
 
 namespace VannaLight.Api.Services;
 
 public sealed class WiDocIngestor
 {
-    private readonly IConfiguration _config;
+    private readonly ISystemConfigProvider _systemConfigProvider;
+    private readonly SqliteOptions _sqliteOptions;
 
-    public WiDocIngestor(IConfiguration config)
+    public WiDocIngestor(
+        ISystemConfigProvider systemConfigProvider,
+        SqliteOptions sqliteOptions)
     {
-        _config = config;
+        _systemConfigProvider = systemConfigProvider;
+        _sqliteOptions = sqliteOptions;
     }
 
     public async Task<WiReindexResult> ReindexAsync(CancellationToken ct)
     {
-        string wiRoot = _config["Docs:WiRootPath"] ?? @"C:\VannaLight\WI_DROP";
-        string sqlitePath = _config["Paths:Sqlite"] ?? "Data/vanna_memory.db";
+        string wiRoot = await _systemConfigProvider.GetRequiredValueAsync("Docs", "WiRootPath", ct);
+        string sqlitePath = _sqliteOptions.DbPath;
 
         if (!Directory.Exists(wiRoot))
             throw new DirectoryNotFoundException($"No existe Docs:WiRootPath: {wiRoot}");
@@ -43,7 +48,6 @@ public sealed class WiDocIngestor
                 string sha256 = ComputeSha256Hex(filePath);
                 string fileName = Path.GetFileName(filePath);
 
-                // Si no cambió el archivo, no reindexamos
                 var existingSha = await conn.QueryFirstOrDefaultAsync<string?>(
                     "SELECT Sha256 FROM DocDocuments WHERE FilePath = @FilePath LIMIT 1;",
                     new { FilePath = filePath }
@@ -56,20 +60,17 @@ public sealed class WiDocIngestor
                     continue;
                 }
 
-                // DocId estable por ruta (para que no cambie si el contenido cambia)
-                // Y el Sha256 controla versiones.
                 string docId = ComputeSha256HexFromString(filePath.ToLowerInvariant());
 
-                // 1) upsert DocDocuments
                 await conn.ExecuteAsync(@"
-INSERT INTO DocDocuments (DocId, FileName, FilePath, Domain, Sha256, UpdatedUtc)
-VALUES (@DocId, @FileName, @FilePath, @Domain, @Sha256, @UpdatedUtc)
-ON CONFLICT(DocId) DO UPDATE SET
-  FileName = excluded.FileName,
-  FilePath = excluded.FilePath,
-  Domain = excluded.Domain,
-  Sha256 = excluded.Sha256,
-  UpdatedUtc = excluded.UpdatedUtc;",
+                                        INSERT INTO DocDocuments (DocId, FileName, FilePath, Domain, Sha256, UpdatedUtc)
+                                        VALUES (@DocId, @FileName, @FilePath, @Domain, @Sha256, @UpdatedUtc)
+                                        ON CONFLICT(DocId) DO UPDATE SET
+                                          FileName = excluded.FileName,
+                                          FilePath = excluded.FilePath,
+                                          Domain = excluded.Domain,
+                                          Sha256 = excluded.Sha256,
+                                          UpdatedUtc = excluded.UpdatedUtc;",
                     new
                     {
                         DocId = docId,
@@ -78,25 +79,26 @@ ON CONFLICT(DocId) DO UPDATE SET
                         Domain = "work-instructions",
                         Sha256 = sha256,
                         UpdatedUtc = DateTime.UtcNow.ToString("o")
-                    });
+                    }
+                 );
 
-                // 2) borrar chunks anteriores
-                await conn.ExecuteAsync("DELETE FROM DocChunks WHERE DocId = @DocId", new { DocId = docId });
+                    await conn.ExecuteAsync(
+                    "DELETE FROM DocChunks WHERE DocId = @DocId",
+                    new { DocId = docId });
 
-                // 3) extraer texto por página y guardar
                 var pages = ExtractPdfTextByPage(filePath);
 
                 using var tx = conn.BeginTransaction();
                 int pageNo = 0;
+
                 foreach (var pageText in pages)
                 {
                     pageNo++;
-                    // Normaliza un poquito (pero guardamos texto tal cual razonablemente)
                     var text = Sanitize(pageText);
 
                     await conn.ExecuteAsync(@"
-INSERT INTO DocChunks (ChunkId, DocId, PageNumber, Text, UpdatedUtc)
-VALUES (@ChunkId, @DocId, @PageNumber, @Text, @UpdatedUtc);",
+                                            INSERT INTO DocChunks (ChunkId, DocId, PageNumber, Text, UpdatedUtc)
+                                            VALUES (@ChunkId, @DocId, @PageNumber, @Text, @UpdatedUtc);",
                         new
                         {
                             ChunkId = $"{docId}:{pageNo}",
@@ -104,10 +106,12 @@ VALUES (@ChunkId, @DocId, @PageNumber, @Text, @UpdatedUtc);",
                             PageNumber = pageNo,
                             Text = text,
                             UpdatedUtc = DateTime.UtcNow.ToString("o")
-                        }, tx);
+                        }, tx
+                        
+                    );
                 }
-                tx.Commit();
 
+                tx.Commit();
                 indexed++;
             }
             catch
@@ -121,29 +125,28 @@ VALUES (@ChunkId, @DocId, @PageNumber, @Text, @UpdatedUtc);",
 
     private static async Task EnsureTablesAsync(SqliteConnection conn)
     {
-        // DocDocuments
         await conn.ExecuteAsync(@"
-CREATE TABLE IF NOT EXISTS DocDocuments (
-  DocId TEXT PRIMARY KEY,
-  FileName TEXT NOT NULL,
-  FilePath TEXT NOT NULL,
-  Domain TEXT NOT NULL,
-  Sha256 TEXT NOT NULL,
-  UpdatedUtc TEXT NOT NULL
-);");
+                                CREATE TABLE IF NOT EXISTS DocDocuments (
+                                  DocId TEXT PRIMARY KEY,
+                                  FileName TEXT NOT NULL,
+                                  FilePath TEXT NOT NULL,
+                                  Domain TEXT NOT NULL,
+                                  Sha256 TEXT NOT NULL,
+                                  UpdatedUtc TEXT NOT NULL
+                                );"
+        );
 
-        // DocChunks
         await conn.ExecuteAsync(@"
-CREATE TABLE IF NOT EXISTS DocChunks (
-  ChunkId TEXT PRIMARY KEY,
-  DocId TEXT NOT NULL,
-  PageNumber INTEGER NOT NULL,
-  Text TEXT NOT NULL,
-  UpdatedUtc TEXT NOT NULL,
-  FOREIGN KEY (DocId) REFERENCES DocDocuments(DocId)
-);");
+                                CREATE TABLE IF NOT EXISTS DocChunks (
+                                  ChunkId TEXT PRIMARY KEY,
+                                  DocId TEXT NOT NULL,
+                                  PageNumber INTEGER NOT NULL,
+                                  Text TEXT NOT NULL,
+                                  UpdatedUtc TEXT NOT NULL,
+                                  FOREIGN KEY (DocId) REFERENCES DocDocuments(DocId)
+                                );"
+        );
 
-        // Índices simples para búsqueda
         await conn.ExecuteAsync("CREATE INDEX IF NOT EXISTS IX_DocChunks_DocId ON DocChunks(DocId);");
         await conn.ExecuteAsync("CREATE INDEX IF NOT EXISTS IX_DocChunks_PageNumber ON DocChunks(PageNumber);");
     }
