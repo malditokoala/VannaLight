@@ -26,6 +26,8 @@ public class SqliteJobStore : IJobStore
         conn.Open();
 
         TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN VerificationStatus TEXT DEFAULT 'Pending';");
+        TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN UserFeedback TEXT;");
+        TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN FeedbackUtc TEXT;");
         TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN FeedbackComment TEXT;");
         TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN Mode TEXT DEFAULT 'Data';");
     }
@@ -159,7 +161,7 @@ public class SqliteJobStore : IJobStore
             """
                 SELECT 
                     JobId, UserId, Role, Question, Status, Mode, SqlText, ErrorText, ResultJson,
-                    Attempt, TrainingExampleSaved, VerificationStatus, FeedbackComment,
+                    Attempt, TrainingExampleSaved, VerificationStatus, UserFeedback, FeedbackUtc, FeedbackComment,
                     CreatedUtc, UpdatedUtc
                 FROM QuestionJobs 
                 WHERE JobId = @Id
@@ -183,7 +185,7 @@ public class SqliteJobStore : IJobStore
             """
                 SELECT 
                     JobId, UserId, Role, Question, Status, Mode, SqlText, ErrorText, ResultJson,
-                    Attempt, TrainingExampleSaved, VerificationStatus, FeedbackComment,
+                    Attempt, TrainingExampleSaved, VerificationStatus, UserFeedback, FeedbackUtc, FeedbackComment,
                     CreatedUtc, UpdatedUtc
                 FROM QuestionJobs
                 WHERE (@Mode IS NULL OR Mode = @Mode)
@@ -228,6 +230,27 @@ public class SqliteJobStore : IJobStore
         return rows > 0;
     }
 
+    public async Task<bool> SetUserFeedbackAsync(Guid jobId, string userFeedback, CancellationToken ct = default)
+    {
+        using var conn = new SqliteConnection(_connString);
+
+        var command = new CommandDefinition(
+            @"UPDATE QuestionJobs
+              SET UserFeedback = @UserFeedback,
+                  FeedbackUtc = DATETIME('now'),
+                  UpdatedUtc = DATETIME('now')
+              WHERE JobId = @Id",
+            new
+            {
+                Id = jobId.ToString(),
+                UserFeedback = userFeedback
+            },
+            cancellationToken: ct);
+
+        var rows = await conn.ExecuteAsync(command);
+        return rows > 0;
+    }
+
     private static QuestionJob MapToJob(QuestionJobRow raw)
     {
         return new QuestionJob
@@ -244,6 +267,8 @@ public class SqliteJobStore : IJobStore
             Attempt = raw.Attempt,
             TrainingExampleSaved = raw.TrainingExampleSaved,
             VerificationStatus = raw.VerificationStatus ?? "Pending",
+            UserFeedback = raw.UserFeedback,
+            FeedbackUtc = DateTime.TryParse(raw.FeedbackUtc, out var feedbackUtc) ? feedbackUtc : null,
             FeedbackComment = raw.FeedbackComment,
             CreatedUtc = DateTime.TryParse(raw.CreatedUtc, out var created) ? created : DateTime.MinValue,
             UpdatedUtc = DateTime.TryParse(raw.UpdatedUtc, out var updated) ? updated : DateTime.MinValue
@@ -293,6 +318,8 @@ public class SqliteJobStore : IJobStore
         public int Attempt { get; set; }
         public int TrainingExampleSaved { get; set; }
         public string? VerificationStatus { get; set; }
+        public string? UserFeedback { get; set; }
+        public string? FeedbackUtc { get; set; }
         public string? FeedbackComment { get; set; }
         public string CreatedUtc { get; set; } = string.Empty;
         public string? UpdatedUtc { get; set; }

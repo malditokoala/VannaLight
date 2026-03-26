@@ -19,6 +19,7 @@ public class LocalRetriever : IRetriever
     private readonly ISchemaStore _schemaStore;
     private readonly ITrainingStore _trainingStore;
     private readonly AppSettings _settings;
+    private readonly ISystemConfigProvider _systemConfigProvider;
     private readonly IMemoryCache _cache;
 
     private sealed record DictRow(string Term, string MappedTokens);
@@ -27,27 +28,41 @@ public class LocalRetriever : IRetriever
         ISchemaStore schemaStore,
         ITrainingStore trainingStore,
         AppSettings settings,
+        ISystemConfigProvider systemConfigProvider,
         IMemoryCache cache)
     {
         _schemaStore = schemaStore;
         _trainingStore = trainingStore;
         _settings = settings;
+        _systemConfigProvider = systemConfigProvider;
         _cache = cache;
     }
 
-    public async Task<RetrievalContext> RetrieveAsync(string sqlitePath, string question, CancellationToken ct)
+    public async Task<RetrievalContext> RetrieveAsync(string sqlitePath, string question, string domain, string? intentName, CancellationToken ct)
     {
-        var synonyms = await LoadSynonymsAsync(sqlitePath, ct);
+        var retrievalTopExamples = await _systemConfigProvider.GetIntAsync("Retrieval", "TopExamples", ct)
+            ?? _settings.Retrieval.TopExamples;
+        var retrievalMinExampleScore = await _systemConfigProvider.GetDoubleAsync("Retrieval", "MinExampleScore", ct)
+            ?? _settings.Retrieval.MinExampleScore;
+        var retrievalTopSchemaDocs = await _systemConfigProvider.GetIntAsync("Retrieval", "TopSchemaDocs", ct)
+            ?? _settings.Retrieval.TopSchemaDocs;
+        var retrievalFallbackSchemaDocs = await _systemConfigProvider.GetIntAsync("Retrieval", "FallbackSchemaDocs", ct)
+            ?? _settings.Retrieval.FallbackSchemaDocs;
+        var synonyms = await LoadSynonymsAsync(sqlitePath, domain, ct);
 
         var strictQueryTokens = TokenizeStrict(question);
         var expandedQueryTokens = TokenizeWithSynonyms(strictQueryTokens, synonyms);
 
         var allExamples = await _trainingStore.GetAllTrainingExamplesAsync(sqlitePath, ct);
+        var normalizedDomain = string.IsNullOrWhiteSpace(domain) ? null : domain.Trim();
+        var normalizedIntent = string.IsNullOrWhiteSpace(intentName) ? null : intentName.Trim();
         var rankedExamples = allExamples
-            .Select(ex => new RetrievedExample(ex, CalculateScore(TokenizeStrict(ex.Question), strictQueryTokens)))
-            .Where(r => r.Score > 0)
+            .Where(ex => string.IsNullOrWhiteSpace(ex.Domain) ||
+                         string.Equals(ex.Domain, normalizedDomain, StringComparison.OrdinalIgnoreCase))
+            .Select(ex => new RetrievedExample(ex, CalculateExampleScore(ex, strictQueryTokens, normalizedDomain, normalizedIntent)))
+            .Where(r => r.Score >= retrievalMinExampleScore)
             .OrderByDescending(r => r.Score)
-            .Take(_settings.Retrieval.TopExamples)
+            .Take(retrievalTopExamples)
             .ToList();
 
         var allSchemaDocs = await _schemaStore.GetAllSchemaDocsAsync(sqlitePath, ct);
@@ -58,15 +73,15 @@ public class LocalRetriever : IRetriever
 
         var topSchemaDocs = rankedSchemaDocs
             .Where(r => r.Score > 0)
-            .Take(_settings.Retrieval.TopSchemaDocs)
+            .Take(retrievalTopSchemaDocs)
             .ToList();
 
         // Fallback inteligente
         if (topSchemaDocs.Count == 0)
         {
-            var fallbackN = _settings.Retrieval.FallbackSchemaDocs > 0
-                ? _settings.Retrieval.FallbackSchemaDocs
-                : _settings.Retrieval.TopSchemaDocs;
+            var fallbackN = retrievalFallbackSchemaDocs > 0
+                ? retrievalFallbackSchemaDocs
+                : retrievalTopSchemaDocs;
 
             topSchemaDocs = rankedSchemaDocs.Take(fallbackN).ToList();
         }
@@ -74,11 +89,13 @@ public class LocalRetriever : IRetriever
         return new RetrievalContext(rankedExamples, topSchemaDocs);
     }
 
-    private async Task<Dictionary<string, string[]>> LoadSynonymsAsync(string sqlitePath, CancellationToken ct)
+    private async Task<Dictionary<string, string[]>> LoadSynonymsAsync(string sqlitePath, string domain, CancellationToken ct)
     {
-        // Caché dinámico por BD y Dominio
-        var domain = _settings.Retrieval.Domain ?? "global";
-        var cacheKey = $"BusinessSynonyms::{sqlitePath}::{domain}";
+        var configuredDomain = await _systemConfigProvider.GetValueAsync("Retrieval", "Domain", ct);
+        var effectiveDomain = !string.IsNullOrWhiteSpace(domain)
+            ? domain.Trim()
+            : configuredDomain?.Trim() ?? _settings.Retrieval.Domain ?? "global";
+        var cacheKey = $"BusinessSynonyms::{sqlitePath}::{effectiveDomain}";
 
         if (_cache.TryGetValue(cacheKey, out Dictionary<string, string[]>? cached) && cached != null)
         {
@@ -99,7 +116,7 @@ public class LocalRetriever : IRetriever
                           AND (Domain IS NULL OR Domain = @Domain)";
 
             var rows = await connection.QueryAsync<DictRow>(
-                new CommandDefinition(sql, new { Domain = domain }, cancellationToken: ct));
+                new CommandDefinition(sql, new { Domain = effectiveDomain }, cancellationToken: ct));
 
             foreach (var row in rows)
             {
@@ -128,6 +145,37 @@ public class LocalRetriever : IRetriever
             if (documentTokens.Contains(t)) score++;
         }
         return score;
+    }
+
+    private static double CalculateExampleScore(
+        TrainingExample example,
+        HashSet<string> queryTokens,
+        string? domain,
+        string? intentName)
+    {
+        var total = CalculateScore(TokenizeStrict(example.Question), queryTokens);
+
+        if (example.IsVerified)
+            total += 8;
+
+        if (!string.IsNullOrWhiteSpace(domain) &&
+            !string.IsNullOrWhiteSpace(example.Domain) &&
+            string.Equals(example.Domain, domain, StringComparison.OrdinalIgnoreCase))
+        {
+            total += 6;
+        }
+
+        if (!string.IsNullOrWhiteSpace(intentName) &&
+            !string.IsNullOrWhiteSpace(example.IntentName) &&
+            string.Equals(example.IntentName, intentName, StringComparison.OrdinalIgnoreCase))
+        {
+            total += 10;
+        }
+
+        if (example.Priority > 0)
+            total += Math.Min(example.Priority, 100) / 20.0;
+
+        return total;
     }
 
     private static string RemoveDiacritics(string text)

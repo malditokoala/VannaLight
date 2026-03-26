@@ -5,10 +5,23 @@ public sealed record TrainingExample
     public long Id { get; init; }
     public string Question { get; init; } = string.Empty;
     public string Sql { get; init; } = string.Empty;
+    public string? Domain { get; init; }
+    public string? IntentName { get; init; }
+    public bool IsVerified { get; init; }
+    public int Priority { get; init; }
     public DateTime CreatedUtc { get; init; }
     public DateTime LastUsedUtc { get; init; }
     public long UseCount { get; init; }
 }
+
+public sealed record TrainingExampleUpsert(
+    string Question,
+    string Sql,
+    string? Domain,
+    string? IntentName,
+    bool IsVerified,
+    int Priority
+);
 
 public sealed record RetrievedExample(
     TrainingExample Example,

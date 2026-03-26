@@ -35,6 +35,7 @@ public sealed record PatternMatchResult
     public bool IsMatch { get; init; }
     public string PatternKey { get; init; } = string.Empty;
     public string IntentName { get; init; } = string.Empty;
+    public string SqlTemplate { get; init; } = string.Empty;
     public int TopN { get; init; } = 0;
     public PatternMetric Metric { get; init; } = PatternMetric.Unknown;
     public PatternDimension Dimension { get; init; } = PatternDimension.Unknown;

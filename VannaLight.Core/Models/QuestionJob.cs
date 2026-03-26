@@ -24,5 +24,7 @@ public class QuestionJob
     public DateTime UpdatedUtc { get; set; }
 
     public string VerificationStatus { get; set; } = "Pending";
+    public string? UserFeedback { get; set; }
+    public DateTime? FeedbackUtc { get; set; }
     public string? FeedbackComment { get; set; }
 }

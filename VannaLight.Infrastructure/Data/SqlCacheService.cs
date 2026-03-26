@@ -4,7 +4,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Configuration; // Directiva para IConfiguration
 using Dapper;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.Settings;
@@ -20,13 +19,12 @@ public class SqlCacheService : ISqlCacheService
     private readonly RuntimeDbOptions _runtimeOptions;
     private readonly string _operationalConn;
 
-    public SqlCacheService(RuntimeDbOptions runtimeOptions, IConfiguration config)
+    public SqlCacheService(RuntimeDbOptions runtimeOptions, OperationalDbOptions operationalDbOptions)
     {
         _runtimeOptions = runtimeOptions ?? throw new ArgumentNullException(nameof(runtimeOptions));
-
-        // Obtenemos la cadena de conexión del ERP desde IConfiguration
-        _operationalConn = config.GetConnectionString("OperationalDb")
-            ?? throw new InvalidOperationException("Falta la configuración 'OperationalDb' en ConnectionStrings.");
+        _operationalConn = string.IsNullOrWhiteSpace(operationalDbOptions.ConnectionString)
+            ? throw new InvalidOperationException("OperationalDbOptions.ConnectionString no está configurado.")
+            : operationalDbOptions.ConnectionString;
     }
 
     /// <summary>

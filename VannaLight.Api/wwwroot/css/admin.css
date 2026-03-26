@@ -15,9 +15,11 @@
     --sql-c: #22d3ee;
     --rag-c: #22d3ee;
     --llm-c: #f59e0b;
+    --config-c: #38bdf8;
     --ok-c: #4ade80;
     --err-c: #f87171;
     --warn-c: #fbbf24;
+    --pattern-c: #14b8a6;
     --radius: 6px;
     --mono: 'IBM Plex Mono', monospace;
     --sans: 'IBM Plex Sans', sans-serif;
@@ -235,15 +237,30 @@ body {
         border-bottom-color: var(--llm-c);
     }
 
+    .tab-btn.active-config {
+        color: var(--config-c);
+        border-bottom-color: var(--config-c);
+    }
+
     .tab-btn.active-allowed {
         color: var(--ok-c);
         border-bottom-color: var(--ok-c);
     }
 
-    .tab-btn.active-business-rules {
-        color: var(--warn-c);
-        border-bottom-color: var(--warn-c);
-    }
+.tab-btn.active-business-rules {
+    color: var(--warn-c);
+    border-bottom-color: var(--warn-c);
+}
+
+.tab-btn.active-semantics {
+    color: var(--config-c);
+    border-bottom-color: var(--config-c);
+}
+
+.tab-btn.active-patterns {
+    color: var(--pattern-c);
+    border-bottom-color: var(--pattern-c);
+}
 
     .tab-btn:hover:not([class*="active"]) {
         color: var(--dim);
@@ -367,6 +384,12 @@ body {
         background: color-mix(in srgb, var(--ok-c) 8%, transparent);
     }
 
+    .filter-btn.active-negative {
+        border-color: var(--err-c);
+        color: var(--err-c);
+        background: color-mix(in srgb, var(--err-c) 8%, transparent);
+    }
+
 /* ── SCROLL LIST ────────────────────────────────────────── */
 .history-scroll {
     flex: 1;
@@ -402,6 +425,10 @@ body {
     .history-item.selected {
         background: color-mix(in srgb, var(--rag-c) 6%, var(--panel));
         border-left-color: var(--rag-c);
+    }
+
+    .history-item.feedback-down {
+        border-left-color: color-mix(in srgb, var(--err-c) 60%, transparent);
     }
 
 .hi-top {
@@ -495,6 +522,26 @@ body {
     }
 
     .hi-verify.rejected {
+        background: color-mix(in srgb, var(--err-c) 12%, transparent);
+        border: 1px solid color-mix(in srgb, var(--err-c) 25%, transparent);
+        color: var(--err-c);
+    }
+
+.hi-feedback {
+    font-family: var(--mono);
+    font-size: .52rem;
+    letter-spacing: .06em;
+    padding: 1px 6px;
+    border-radius: 3px;
+}
+
+    .hi-feedback.up {
+        background: color-mix(in srgb, var(--ok-c) 12%, transparent);
+        border: 1px solid color-mix(in srgb, var(--ok-c) 25%, transparent);
+        color: var(--ok-c);
+    }
+
+    .hi-feedback.down {
         background: color-mix(in srgb, var(--err-c) 12%, transparent);
         border: 1px solid color-mix(in srgb, var(--err-c) 25%, transparent);
         color: var(--err-c);
@@ -758,6 +805,18 @@ input[type="checkbox"] {
         border: 1px solid var(--border2);
     }
 
+    .meta-chip.feedback-up {
+        background: color-mix(in srgb,var(--ok-c) 10%,transparent);
+        color: var(--ok-c);
+        border: 1px solid color-mix(in srgb,var(--ok-c) 25%,transparent);
+    }
+
+    .meta-chip.feedback-down {
+        background: color-mix(in srgb,var(--err-c) 10%,transparent);
+        color: var(--err-c);
+        border: 1px solid color-mix(in srgb,var(--err-c) 25%,transparent);
+    }
+
 .meta-time {
     color: var(--muted);
     font-size: .54rem;
@@ -841,6 +900,14 @@ input[type="checkbox"] {
         stroke: var(--llm-c);
     }
 
+.si-config {
+    background: color-mix(in srgb, var(--config-c) 15%, transparent);
+}
+
+    .si-config svg {
+        stroke: var(--config-c);
+    }
+
 .si-ok {
     background: color-mix(in srgb, var(--ok-c) 15%, transparent);
 }
@@ -855,6 +922,22 @@ input[type="checkbox"] {
 
     .si-warn svg {
         stroke: var(--warn-c);
+    }
+
+.si-semantic {
+    background: color-mix(in srgb, var(--config-c) 15%, transparent);
+}
+
+    .si-semantic svg {
+        stroke: var(--config-c);
+    }
+
+.si-patterns {
+    background: color-mix(in srgb, var(--pattern-c) 15%, transparent);
+}
+
+    .si-patterns svg {
+        stroke: var(--pattern-c);
     }
 
 .section-header-text {
@@ -1040,6 +1123,46 @@ input[type="checkbox"] {
         grid-column: 1 / -1;
     }
 
+.form-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.split-editor {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    align-items: start;
+}
+
+.subpanel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 280px;
+}
+
+.subpanel-title {
+    font-family: var(--mono);
+    font-size: .6rem;
+    letter-spacing: .1em;
+    color: var(--muted);
+    text-transform: uppercase;
+}
+
+.mini-scroll {
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+}
+
 .field-num {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -1202,6 +1325,11 @@ input[type="checkbox"] {
         .params-grid .full {
             grid-column: 1;
         }
+
+    .form-grid-2,
+    .split-editor {
+        grid-template-columns: 1fr;
+    }
 
     .action-meta {
         max-width: 100%;

@@ -69,6 +69,17 @@
                     Hardware LLM
                 </button>
 
+                <button class="tab-btn" id="tab-config" onclick="switchTab('config')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3v4" />
+                        <path d="M12 17v4" />
+                        <path d="M3 12h4" />
+                        <path d="M17 12h4" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    System Config
+                </button>
+
                 <button class="tab-btn" id="tab-allowed" onclick="switchTab('allowed')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <ellipse cx="12" cy="5" rx="7" ry="3" />
@@ -86,6 +97,27 @@
                         <path d="M8 17h5" />
                     </svg>
                     Business Rules
+                </button>
+
+                <button class="tab-btn" id="tab-semantics" onclick="switchTab('semantics')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="8" cy="8" r="2" />
+                        <circle cx="16" cy="8" r="2" />
+                        <circle cx="12" cy="16" r="2" />
+                        <path d="M10 9.5l1.5 4" />
+                        <path d="M14 9.5l-1.5 4" />
+                    </svg>
+                    Semantic Hints
+                </button>
+
+                <button class="tab-btn" id="tab-patterns" onclick="switchTab('patterns')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 19h16" />
+                        <path d="M4 5h16" />
+                        <path d="M9 9h6" />
+                        <path d="M7 15h10" />
+                    </svg>
+                    Query Patterns
                 </button>
 
             </div>
@@ -108,7 +140,8 @@
                         </div>
                         <div class="filter-bar">
                             <button class="filter-btn active-all" id="filter-all" onclick="setFilter('all')">Todos</button>
-                            <button class="filter-btn" id="filter-pending" onclick="setFilter('pending')">Pendientes</button>
+                            <button class="filter-btn" id="filter-pending" onclick="setFilter('pending')">Pendientes revisión</button>
+                            <button class="filter-btn" id="filter-negative" onclick="setFilter('negative')">Con 👎</button>
                             <button class="filter-btn" id="filter-verified" onclick="setFilter('verified')">Verificados</button>
                         </div>
                         <div class="history-scroll" id="historyList">
@@ -338,6 +371,300 @@
                 </div>
             </div>
 
+            <!-- ══ TAB: SYSTEM CONFIG ══ -->
+            <div class="tab-content" id="pane-config">
+                <div class="rag-layout">
+
+                    <div class="panel-left">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 3v4" />
+                                    <path d="M12 17v4" />
+                                    <path d="M3 12h4" />
+                                    <path d="M17 12h4" />
+                                    <circle cx="12" cy="12" r="3" />
+                                </svg>
+                                System Config
+                            </div>
+                            <span class="panel-count" id="systemConfigCount">—</span>
+                        </div>
+                        <div class="editor-wrap-compact">
+                            <div class="field-group">
+                                <label class="field-label">Filtro por sección</label>
+                                <input type="text" id="txtSystemConfigSectionFilter" class="field-input" value="Prompting" placeholder="Prompting, Retrieval, UiDefaults, Docs..." />
+                            </div>
+                            <button class="btn btn-ghost" type="button" onclick="loadSystemConfig()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+                                    <polyline points="23 4 23 10 17 10" />
+                                    <polyline points="1 20 1 14 7 14" />
+                                    <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
+                                    <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
+                                </svg>
+                                Recargar
+                            </button>
+                        </div>
+                        <div class="history-scroll" id="systemConfigList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M12 3v4" />
+                                    <path d="M12 17v4" />
+                                    <path d="M3 12h4" />
+                                    <path d="M17 12h4" />
+                                    <circle cx="12" cy="12" r="3" />
+                                </svg>
+                                Cargando system config...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-right">
+                        <div class="editor-wrap">
+                            <div class="section-header">
+                                <div class="section-header-icon si-config">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 3v4" />
+                                        <path d="M12 17v4" />
+                                        <path d="M3 12h4" />
+                                        <path d="M17 12h4" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Configuración Operativa Mutable</div>
+                                    <div class="sh-sub">Perfil activo de vanna_memory.db para prompting, retrieval y defaults operativos</div>
+                                </div>
+                            </div>
+
+                            <input type="hidden" id="txtSystemConfigId" />
+
+                            <div class="field-group">
+                                <label class="field-label">Perfil activo</label>
+                                <input type="text" id="txtSystemConfigProfile" class="field-input" readonly placeholder="Development / default" />
+                            </div>
+                            <div class="section-header" style="margin-top:8px">
+                                <div class="section-header-icon si-config">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M4 19h16" />
+                                        <path d="M4 5h16" />
+                                        <path d="M7 12h10" />
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Prompt SQL</div>
+                                    <div class="sh-sub">Editor guiado para el prompt del carril LLM. Los bloques se guardan por clave, pero aquí se editan por contexto.</div>
+                                </div>
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label">System Persona</label>
+                                <textarea id="txtPromptSystemPersona" class="field-input" rows="2" placeholder="Eres un desarrollador experto en T-SQL para SQL Server."></textarea>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Task Instruction</label>
+                                <textarea id="txtPromptTaskInstruction" class="field-input" rows="2" placeholder="Tu tarea es generar SOLO codigo SQL valido para SQL Server."></textarea>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Context Instruction</label>
+                                <textarea id="txtPromptContextInstruction" class="field-input" rows="2" placeholder="Debes basarte estrictamente en los objetos SQL permitidos, reglas, esquemas y ejemplos proporcionados."></textarea>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">SQL Syntax Rules</label>
+                                <textarea id="txtPromptSqlSyntaxRules" class="sql-editor" rows="7" placeholder="Reglas críticas de sintaxis T-SQL"></textarea>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Time Interpretation Rules</label>
+                                <textarea id="txtPromptTimeInterpretationRules" class="sql-editor" rows="7" placeholder="Reglas de interpretación temporal"></textarea>
+                            </div>
+
+                            <div class="form-grid-2">
+                                <div class="field-group">
+                                    <label class="field-label">Header Business Rules</label>
+                                    <input type="text" id="txtPromptBusinessRulesHeader" class="field-input" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Header Semantic Hints</label>
+                                    <input type="text" id="txtPromptSemanticHintsHeader" class="field-input" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Header Allowed Objects</label>
+                                    <input type="text" id="txtPromptAllowedObjectsHeader" class="field-input" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Header Schemas</label>
+                                    <input type="text" id="txtPromptSchemasHeader" class="field-input" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Header Examples</label>
+                                    <input type="text" id="txtPromptExamplesHeader" class="field-input" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Header Question</label>
+                                    <input type="text" id="txtPromptQuestionHeader" class="field-input" />
+                                </div>
+                            </div>
+
+                            <div class="form-grid-2">
+                                <div class="field-group">
+                                    <label class="field-label">Max Prompt Chars</label>
+                                    <input type="number" id="txtPromptMaxPromptChars" class="field-num" min="1" step="1" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Max Rules Chars</label>
+                                    <input type="number" id="txtPromptMaxRulesChars" class="field-num" min="1" step="1" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Max Semantic Hints Chars</label>
+                                    <input type="number" id="txtPromptMaxSemanticHintsChars" class="field-num" min="1" step="1" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Max Schemas Chars</label>
+                                    <input type="number" id="txtPromptMaxSchemasChars" class="field-num" min="1" step="1" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Max Examples Chars</label>
+                                    <input type="number" id="txtPromptMaxExamplesChars" class="field-num" min="1" step="1" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Max Rules</label>
+                                    <input type="number" id="txtPromptMaxRules" class="field-num" min="1" step="1" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Max Semantic Hints</label>
+                                    <input type="number" id="txtPromptMaxSemanticHints" class="field-num" min="1" step="1" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Max Schemas</label>
+                                    <input type="number" id="txtPromptMaxSchemas" class="field-num" min="1" step="1" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Max Examples</label>
+                                    <input type="number" id="txtPromptMaxExamples" class="field-num" min="1" step="1" />
+                                </div>
+                            </div>
+
+                            <div class="inline-actions">
+                                <button class="btn btn-primary" type="button" id="btnSavePromptConfig" onclick="savePromptConfig()">
+                                    <div class="btn-spinner" id="promptConfigSpinner"></div>
+                                    Guardar Prompting
+                                </button>
+                            </div>
+
+                            <div class="section-header" style="margin-top:8px">
+                                <div class="section-header-icon si-config">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M4 19h16" />
+                                        <path d="M8 15h8" />
+                                        <path d="M8 9h8" />
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Retrieval y Defaults</div>
+                                    <div class="sh-sub">Ajustes operativos del retrieval y dominio por defecto de Admin.</div>
+                                </div>
+                            </div>
+
+                            <div class="form-grid-2">
+                                <div class="field-group">
+                                    <label class="field-label">Retrieval Domain</label>
+                                    <input type="text" id="txtRetrievalDomain" class="field-input" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Admin Domain</label>
+                                    <input type="text" id="txtUiAdminDomain" class="field-input" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Top Examples</label>
+                                    <input type="number" id="txtRetrievalTopExamples" class="field-num" min="1" step="1" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Min Example Score</label>
+                                    <input type="number" id="txtRetrievalMinExampleScore" class="field-num" min="0" step="0.1" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Top Schema Docs</label>
+                                    <input type="number" id="txtRetrievalTopSchemaDocs" class="field-num" min="1" step="1" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Fallback Schema Docs</label>
+                                    <input type="number" id="txtRetrievalFallbackSchemaDocs" class="field-num" min="1" step="1" />
+                                </div>
+                            </div>
+
+                            <div class="inline-actions">
+                                <button class="btn btn-ok" type="button" id="btnSaveRetrievalConfig" onclick="saveRetrievalConfig()">
+                                    <div class="btn-spinner" id="retrievalConfigSpinner"></div>
+                                    Guardar Retrieval
+                                </button>
+                            </div>
+
+                            <div class="section-header" style="margin-top:8px">
+                                <div class="section-header-icon si-config">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 3v4" />
+                                        <path d="M12 17v4" />
+                                        <path d="M3 12h4" />
+                                        <path d="M17 12h4" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Modo Avanzado</div>
+                                    <div class="sh-sub">Edición puntual por entry para casos fuera del flujo guiado.</div>
+                                </div>
+                            </div>
+
+                            <div class="form-grid-2">
+                                <div class="field-group">
+                                    <label class="field-label">Section</label>
+                                    <input type="text" id="txtSystemConfigSection" class="field-input" placeholder="Prompting" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Key</label>
+                                    <input type="text" id="txtSystemConfigKey" class="field-input" placeholder="SystemPersona" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Value Type</label>
+                                    <input type="text" id="txtSystemConfigValueType" class="field-input" placeholder="string | int | double | bool" value="string" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Editable en UI</label>
+                                    <input type="checkbox" id="chkSystemConfigIsEditable" checked />
+                                </div>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Description</label>
+                                <textarea id="txtSystemConfigDescription" class="field-input" rows="3" placeholder="Describe el propósito operativo de esta configuración."></textarea>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Validation Rule (opcional)</label>
+                                <input type="text" id="txtSystemConfigValidationRule" class="field-input" placeholder="Ej. int>=1, enum:Prompting|Retrieval" />
+                            </div>
+                            <div class="field-group" style="flex:1">
+                                <label class="field-label">Value</label>
+                                <textarea id="txtSystemConfigValue" class="sql-editor" rows="8" placeholder="Valor editable persistido en vanna_memory.db"></textarea>
+                            </div>
+
+                            <div class="rag-banner" id="systemConfigBanner"></div>
+                        </div>
+
+                        <div class="editor-actions">
+                            <div class="action-meta" id="systemConfigMeta">
+                                <span class="meta-empty">Ninguna entrada seleccionada</span>
+                            </div>
+                            <div class="inline-actions">
+                                <button class="btn btn-ghost" type="button" onclick="resetSystemConfigForm()">Nueva Entrada</button>
+                                <button class="btn btn-primary" type="button" id="btnSystemConfigSave" onclick="saveSystemConfigEntry()">
+                                    <div class="btn-spinner" id="systemConfigSpinner"></div>
+                                    Guardar System Config
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
             <!-- ══ TAB: ALLOWED OBJECTS ══ -->
             <div class="tab-content" id="pane-allowed">
                 <div class="rag-layout">
@@ -358,7 +685,7 @@
                         <div class="editor-wrap-compact">
                             <div class="field-group">
                                 <label class="field-label">Dominio</label>
-                                <input type="text" id="txtAllowedDomainFilter" class="field-input" value="erp-kpi-pilot" />
+                                <input type="text" id="txtAllowedDomainFilter" class="field-input" placeholder="Dominio operativo" />
                             </div>
                             <button class="btn btn-ghost" type="button" onclick="loadAllowedObjects()">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
@@ -402,7 +729,7 @@
 
                             <div class="field-group">
                                 <label class="field-label">Domain</label>
-                                <input type="text" id="txtAllowedDomain" class="field-input" value="erp-kpi-pilot" readonly />
+                                <input type="text" id="txtAllowedDomain" class="field-input" placeholder="Dominio operativo" readonly />
                             </div>
                             <div class="field-group">
                                 <label class="field-label">Schema Name</label>
@@ -471,7 +798,7 @@
                         <div class="editor-wrap-compact">
                             <div class="field-group">
                                 <label class="field-label">Dominio</label>
-                                <input type="text" id="txtBusinessRuleDomainFilter" class="field-input" value="erp-kpi-pilot" />
+                                <input type="text" id="txtBusinessRuleDomainFilter" class="field-input" placeholder="Dominio operativo" />
                             </div>
                             <button class="btn btn-ghost" type="button" onclick="loadBusinessRules()">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
@@ -516,7 +843,7 @@
 
                             <div class="field-group">
                                 <label class="field-label">Domain</label>
-                                <input type="text" id="txtBusinessRuleDomain" class="field-input" value="erp-kpi-pilot" readonly />
+                                <input type="text" id="txtBusinessRuleDomain" class="field-input" placeholder="Dominio operativo" readonly />
                             </div>
                             <div class="field-group">
                                 <label class="field-label">Rule Key</label>
@@ -555,6 +882,376 @@
                                 <button class="btn btn-primary" type="button" id="btnBusinessRuleSave" onclick="saveBusinessRule()">
                                     <div class="btn-spinner" id="businessRuleSpinner"></div>
                                     Guardar Business Rule
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ══ TAB: SEMANTIC HINTS ══ -->
+            <div class="tab-content" id="pane-semantics">
+                <div class="rag-layout">
+
+                    <div class="panel-left">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="8" cy="8" r="2" />
+                                    <circle cx="16" cy="8" r="2" />
+                                    <circle cx="12" cy="16" r="2" />
+                                    <path d="M10 9.5l1.5 4" />
+                                    <path d="M14 9.5l-1.5 4" />
+                                </svg>
+                                Semantic Hints
+                            </div>
+                            <span class="panel-count" id="semanticHintCount">—</span>
+                        </div>
+                        <div class="editor-wrap-compact">
+                            <div class="field-group">
+                                <label class="field-label">Dominio</label>
+                                <input type="text" id="txtSemanticHintDomainFilter" class="field-input" placeholder="Dominio operativo" />
+                            </div>
+                            <button class="btn btn-ghost" type="button" onclick="loadSemanticHints()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+                                    <polyline points="23 4 23 10 17 10" />
+                                    <polyline points="1 20 1 14 7 14" />
+                                    <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
+                                    <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
+                                </svg>
+                                Recargar
+                            </button>
+                        </div>
+                        <div class="history-scroll" id="semanticHintList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <circle cx="8" cy="8" r="2" />
+                                    <circle cx="16" cy="8" r="2" />
+                                    <circle cx="12" cy="16" r="2" />
+                                    <path d="M10 9.5l1.5 4" />
+                                    <path d="M14 9.5l-1.5 4" />
+                                </svg>
+                                Cargando semantic hints...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-right">
+                        <div class="editor-wrap">
+                            <div class="section-header">
+                                <div class="section-header-icon si-semantic">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="8" cy="8" r="2" />
+                                        <circle cx="16" cy="8" r="2" />
+                                        <circle cx="12" cy="16" r="2" />
+                                        <path d="M10 9.5l1.5 4" />
+                                        <path d="M14 9.5l-1.5 4" />
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Semantic Layer</div>
+                                    <div class="sh-sub">Pistas semánticas por dominio para reducir ambigüedad y facilitar onboarding.</div>
+                                </div>
+                            </div>
+
+                            <input type="hidden" id="txtSemanticHintId" />
+
+                            <div class="field-group">
+                                <label class="field-label">Domain</label>
+                                <input type="text" id="txtSemanticHintDomain" class="field-input" placeholder="Dominio operativo" readonly />
+                            </div>
+                            <div class="form-grid-2">
+                                <div class="field-group">
+                                    <label class="field-label">Hint Key</label>
+                                    <input type="text" id="txtSemanticHintKey" class="field-input" placeholder="sales_total_due" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Hint Type</label>
+                                    <input type="text" id="txtSemanticHintType" class="field-input" list="semanticHintTypeOptions" placeholder="measure" />
+                                    <datalist id="semanticHintTypeOptions">
+                                        <option value="entity"></option>
+                                        <option value="measure"></option>
+                                        <option value="dimension"></option>
+                                        <option value="time_field"></option>
+                                        <option value="synonym"></option>
+                                    </datalist>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Display Name</label>
+                                    <input type="text" id="txtSemanticHintDisplayName" class="field-input" placeholder="Total Sales" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Priority</label>
+                                    <input type="number" id="txtSemanticHintPriority" class="field-num" min="0" step="1" value="100" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Object Name</label>
+                                    <input type="text" id="txtSemanticHintObjectName" class="field-input" placeholder="SalesOrderHeader" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Column Name</label>
+                                    <input type="text" id="txtSemanticHintColumnName" class="field-input" placeholder="TotalDue" />
+                                </div>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Hint Text</label>
+                                <textarea id="txtSemanticHintText" class="field-input" rows="6" placeholder="Ej. TotalDue representa el monto total de la orden y debe usarse como importe bruto de venta."></textarea>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Activa</label>
+                                <input type="checkbox" id="chkSemanticHintIsActive" checked />
+                            </div>
+
+                            <div class="rag-banner" id="semanticHintBanner"></div>
+                        </div>
+
+                        <div class="editor-actions">
+                            <div class="action-meta" id="semanticHintMeta">
+                                <span class="meta-empty">Ninguna pista semántica seleccionada</span>
+                            </div>
+                            <div class="inline-actions">
+                                <button class="btn btn-ghost" type="button" onclick="resetSemanticHintForm()">Nueva</button>
+                                <button class="btn btn-danger" type="button" id="btnSemanticHintToggle"
+                                        onclick="toggleSemanticHintStatus()" disabled>
+                                    Activar / Desactivar
+                                </button>
+                                <button class="btn btn-primary" type="button" id="btnSemanticHintSave" onclick="saveSemanticHint()">
+                                    <div class="btn-spinner" id="semanticHintSpinner"></div>
+                                    Guardar Semantic Hint
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ══ TAB: QUERY PATTERNS ══ -->
+            <div class="tab-content" id="pane-patterns">
+                <div class="rag-layout">
+
+                    <div class="panel-left">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 19h16" />
+                                    <path d="M4 5h16" />
+                                    <path d="M9 9h6" />
+                                    <path d="M7 15h10" />
+                                </svg>
+                                Query Patterns
+                            </div>
+                            <span class="panel-count" id="queryPatternCount">—</span>
+                        </div>
+                        <div class="editor-wrap-compact">
+                            <div class="field-group">
+                                <label class="field-label">Dominio</label>
+                                <input type="text" id="txtQueryPatternDomainFilter" class="field-input" placeholder="Dominio operativo" />
+                            </div>
+                            <button class="btn btn-ghost" type="button" onclick="loadQueryPatterns()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+                                    <polyline points="23 4 23 10 17 10" />
+                                    <polyline points="1 20 1 14 7 14" />
+                                    <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
+                                    <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
+                                </svg>
+                                Recargar
+                            </button>
+                        </div>
+                        <div class="history-scroll" id="queryPatternList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M4 19h16" />
+                                    <path d="M4 5h16" />
+                                    <path d="M9 9h6" />
+                                    <path d="M7 15h10" />
+                                </svg>
+                                Cargando query patterns...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-right">
+                        <div class="editor-wrap">
+                            <div class="section-header">
+                                <div class="section-header-icon si-patterns">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M4 19h16" />
+                                        <path d="M4 5h16" />
+                                        <path d="M9 9h6" />
+                                        <path d="M7 15h10" />
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Motor de Patterns</div>
+                                    <div class="sh-sub">Patterns y términos activos en vanna_memory.db por dominio</div>
+                                </div>
+                            </div>
+
+                            <input type="hidden" id="txtQueryPatternId" />
+
+                            <div class="field-group">
+                                <label class="field-label">Domain</label>
+                                <input type="text" id="txtQueryPatternDomain" class="field-input" placeholder="Dominio operativo" readonly />
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Pattern Key</label>
+                                <input type="text" id="txtQueryPatternKey" class="field-input" placeholder="top_scrap_by_press" />
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Intent Name</label>
+                                <input type="text" id="txtQueryPatternIntentName" class="field-input" placeholder="Top scrap por prensa" />
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Description</label>
+                                <textarea id="txtQueryPatternDescription" class="field-input" rows="3"
+                                          placeholder="Describe cuándo debe aplicar el pattern."></textarea>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">Sql Template</label>
+                                <textarea id="txtQueryPatternSqlTemplate" class="sql-editor" rows="8"
+                                          placeholder="SELECT TOP ({TopN}) ..."></textarea>
+                            </div>
+
+                            <div class="form-grid-2">
+                                <div class="field-group">
+                                    <label class="field-label">Default Top N</label>
+                                    <input type="number" id="txtQueryPatternDefaultTopN" class="field-num" min="0" step="1" placeholder="5" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Priority</label>
+                                    <input type="number" id="txtQueryPatternPriority" class="field-num" min="0" step="1" value="100" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Metric Key</label>
+                                    <input type="text" id="txtQueryPatternMetricKey" class="field-input" placeholder="scrap_qty" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Dimension Key</label>
+                                    <input type="text" id="txtQueryPatternDimensionKey" class="field-input" placeholder="press" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Default Time Scope Key</label>
+                                    <input type="text" id="txtQueryPatternDefaultTimeScopeKey" class="field-input" placeholder="current_week" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Activo</label>
+                                    <input type="checkbox" id="chkQueryPatternIsActive" checked />
+                                </div>
+                            </div>
+
+                            <div class="rag-banner" id="queryPatternBanner"></div>
+
+                            <div class="section-header" style="margin-top:8px">
+                                <div class="section-header-icon si-patterns">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <path d="M8 12h8" />
+                                        <path d="M12 8v8" />
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Pattern Terms</div>
+                                    <div class="sh-sub">Términos evaluados por el matcher para el pattern seleccionado</div>
+                                </div>
+                                <span class="panel-count" id="queryPatternTermCount">0</span>
+                            </div>
+
+                            <div class="split-editor">
+                                <div class="subpanel">
+                                    <div class="subpanel-title">Terms cargados</div>
+                                    <div class="mini-scroll" id="queryPatternTermList">
+                                        <div class="empty-state">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                <circle cx="12" cy="12" r="10" />
+                                                <path d="M8 12h8" />
+                                                <path d="M12 8v8" />
+                                            </svg>
+                                            Selecciona un Query Pattern para operar sus terms
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="subpanel">
+                                    <div class="subpanel-title">Edición de term</div>
+
+                                    <input type="hidden" id="txtQueryPatternTermId" />
+                                    <input type="hidden" id="txtQueryPatternTermPatternId" />
+
+                                    <div class="field-group">
+                                        <label class="field-label">Term</label>
+                                        <input type="text" id="txtQueryPatternTerm" class="field-input" placeholder="scrap" />
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Term Group</label>
+                                        <input type="text" id="txtQueryPatternTermGroup" class="field-input" list="queryPatternTermGroupOptions" placeholder="metric" />
+                                        <div class="field-hint">Usa `metric`, `dimension`, `intent`, `qualifier` o `time_scope_today|yesterday|current_week|current_month|current_shift`.</div>
+                                        <datalist id="queryPatternTermGroupOptions">
+                                            <option value="metric"></option>
+                                            <option value="dimension"></option>
+                                            <option value="intent"></option>
+                                            <option value="qualifier"></option>
+                                            <option value="time_scope_today"></option>
+                                            <option value="time_scope_yesterday"></option>
+                                            <option value="time_scope_current_week"></option>
+                                            <option value="time_scope_current_month"></option>
+                                            <option value="time_scope_current_shift"></option>
+                                        </datalist>
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Match Mode</label>
+                                        <select id="txtQueryPatternTermMatchMode" class="field-input">
+                                            <option value="contains">contains</option>
+                                            <option value="exact">exact</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-grid-2">
+                                        <div class="field-group">
+                                            <label class="field-label">Required</label>
+                                            <input type="checkbox" id="chkQueryPatternTermIsRequired" checked />
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">Activo</label>
+                                            <input type="checkbox" id="chkQueryPatternTermIsActive" checked />
+                                        </div>
+                                    </div>
+
+                                    <div class="rag-banner" id="queryPatternTermBanner"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="editor-actions">
+                            <div class="action-meta" id="queryPatternMeta">
+                                <span class="meta-empty">Ningún pattern seleccionado</span>
+                            </div>
+                            <div class="inline-actions">
+                                <button class="btn btn-ghost" type="button" onclick="resetQueryPatternForm()">Nuevo Pattern</button>
+                                <button class="btn btn-danger" type="button" id="btnQueryPatternToggle"
+                                        onclick="toggleQueryPatternStatus()" disabled>
+                                    Activar / Desactivar
+                                </button>
+                                <button class="btn btn-primary" type="button" id="btnQueryPatternSave" onclick="saveQueryPattern()">
+                                    <div class="btn-spinner" id="queryPatternSpinner"></div>
+                                    Guardar Query Pattern
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="editor-actions" style="border-top:none;padding-top:0">
+                            <div class="action-meta" id="queryPatternTermMeta">
+                                <span class="meta-empty">Ningún term seleccionado</span>
+                            </div>
+                            <div class="inline-actions">
+                                <button class="btn btn-ghost" type="button" onclick="resetQueryPatternTermForm()">Nuevo Term</button>
+                                <button class="btn btn-danger" type="button" id="btnQueryPatternTermToggle"
+                                        onclick="toggleQueryPatternTermStatus()" disabled>
+                                    Activar / Desactivar
+                                </button>
+                                <button class="btn btn-ok" type="button" id="btnQueryPatternTermSave" onclick="saveQueryPatternTerm()" disabled>
+                                    <div class="btn-spinner" id="queryPatternTermSpinner"></div>
+                                    Guardar Term
                                 </button>
                             </div>
                         </div>

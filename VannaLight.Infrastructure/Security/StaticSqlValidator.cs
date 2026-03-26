@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using VannaLight.Core.Abstractions;
 
@@ -26,13 +25,17 @@ public sealed class StaticSqlValidator : ISqlValidator
 
     public StaticSqlValidator(
         IAllowedObjectStore allowedObjectStore,
-        IConfiguration configuration,
+        ISystemConfigProvider systemConfigProvider,
         ILogger<StaticSqlValidator> logger)
     {
         _allowedObjectStore = allowedObjectStore ?? throw new ArgumentNullException(nameof(allowedObjectStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        _domain = configuration["Settings:Retrieval:Domain"]?.Trim() ?? string.Empty;
+        _domain = systemConfigProvider.GetRequiredValueAsync("Retrieval", "Domain")
+            .GetAwaiter()
+            .GetResult()
+            ?.Trim()
+            ?? string.Empty;
     }
 
     public bool TryValidate(string sql, out string error)

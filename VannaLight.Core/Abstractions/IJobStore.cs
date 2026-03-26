@@ -17,6 +17,7 @@ public interface IJobStore
 
     // Se añade el filtro 'mode' para la consulta de historial
     Task<IEnumerable<QuestionJob>> GetRecentJobsAsync(int limit = 20, string? mode = null, CancellationToken ct = default);
+    Task<bool> SetUserFeedbackAsync(Guid jobId, string userFeedback, CancellationToken ct = default);
     Task<bool> UpdateFeedbackAsync(Guid jobId, string verificationStatus, string? comment = null, CancellationToken ct = default);
     Task<bool> UpdateJobReviewAsync(
     Guid jobId,

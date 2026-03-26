@@ -39,7 +39,9 @@ public class AskUseCase(
     IPredictionIntentRouter predictionRouter,
     IForecastingService forecaster,
     IPredictionAnswerService humanizer,
+    ISystemConfigProvider systemConfigProvider,
     IBusinessRuleStore businessRuleStore,
+    ISemanticHintStore semanticHintStore,
     IPatternMatcherService patternMatcher,
     ITemplateSqlBuilder templateSqlBuilder,
     IAllowedObjectStore allowedObjectStore)
@@ -108,7 +110,10 @@ public class AskUseCase(
                 AskFailureKind.GenerationError);
         }
 
-        var patternMatch = patternMatcher.Match(question);
+        var patternMatch = await patternMatcher.MatchAsync(question, normalizedDomain, ct);
+        var inferredIntentName = string.IsNullOrWhiteSpace(patternMatch.IntentName)
+            ? null
+            : patternMatch.IntentName;
 
         if (patternMatch.IsMatch)
         {
@@ -180,7 +185,12 @@ public class AskUseCase(
         }
 
         // Solo si no hubo pattern, caer al flujo LLM
-        var context = await retriever.RetrieveAsync(memoryDbPath, question, ct);
+        var context = await retriever.RetrieveAsync(
+            memoryDbPath,
+            question,
+            normalizedDomain,
+            inferredIntentName,
+            ct);
 
         var rules = await businessRuleStore.GetActiveRulesAsync(
             memoryDbPath,
@@ -188,7 +198,13 @@ public class AskUseCase(
             maxRules: 6,
             ct);
 
-        var prompt = BuildPrompt(question, context, rules, allowedObjectNames);
+        var semanticHints = await semanticHintStore.GetActiveHintsAsync(
+            memoryDbPath,
+            normalizedDomain,
+            maxHints: 8,
+            ct);
+
+        var prompt = await BuildPromptAsync(question, context, rules, semanticHints, allowedObjectNames, ct);
 
         var rawSql = await llmClient.GenerateSqlAsync(prompt, ct);
         var cleanSql = CleanLlmOutput(rawSql);
@@ -341,16 +357,52 @@ public class AskUseCase(
         }
     }
 
-    private string BuildPrompt(
+    private async Task<string> BuildPromptAsync(
         string question,
         RetrievalContext context,
         IReadOnlyList<BusinessRule> rules,
-        IReadOnlyList<string> allowedObjectNames)
+        IReadOnlyList<SemanticHint> semanticHints,
+        IReadOnlyList<string> allowedObjectNames,
+        CancellationToken ct)
     {
-        const int MaxPromptChars = 9000;
-        const int MaxRulesChars = 1800;
-        const int MaxSchemasChars = 1800;
-        const int MaxExamplesChars = 4200;
+        var maxPromptChars = await GetPromptIntAsync("MaxPromptChars", 9000, ct);
+        var maxRulesChars = await GetPromptIntAsync("MaxRulesChars", 1800, ct);
+        var maxSemanticHintsChars = await GetPromptIntAsync("MaxSemanticHintsChars", 1400, ct);
+        var maxSchemasChars = await GetPromptIntAsync("MaxSchemasChars", 1800, ct);
+        var maxExamplesChars = await GetPromptIntAsync("MaxExamplesChars", 4200, ct);
+        var maxRules = await GetPromptIntAsync("MaxRules", 6, ct);
+        var maxSemanticHints = await GetPromptIntAsync("MaxSemanticHints", 8, ct);
+        var maxSchemas = await GetPromptIntAsync("MaxSchemas", 3, ct);
+        var maxExamples = await GetPromptIntAsync("MaxExamples", 2, ct);
+        var systemPersona = await GetPromptTextAsync("SystemPersona", "Eres un desarrollador experto en T-SQL para SQL Server.", ct);
+        var taskInstruction = await GetPromptTextAsync("TaskInstruction", "Tu tarea es generar SOLO codigo SQL valido para SQL Server.", ct);
+        var contextInstruction = await GetPromptTextAsync("ContextInstruction", "Debes basarte estrictamente en los objetos SQL permitidos, reglas, esquemas y ejemplos proporcionados.", ct);
+        var sqlSyntaxRules = await GetPromptTextAsync(
+            "SqlSyntaxRules",
+            """
+            1. ESTA ESTRICTAMENTE PROHIBIDO USAR 'LIMIT'. Para limitar resultados en SQL Server, usa SIEMPRE 'SELECT TOP (N)'.
+            2. Usa EXACTAMENTE los nombres de columnas que aparezcan en los esquemas recuperados y ejemplos validos.
+            3. NUNCA compares un valor de texto contra una columna ID.
+            4. Si necesitas cruzar objetos SQL permitidos, prefiere joins por IDs y OperationDate.
+            5. Devuelve SOLO el SQL, sin comentarios y sin bloques markdown.
+            """,
+            ct);
+        var timeInterpretationRules = await GetPromptTextAsync(
+            "TimeInterpretationRules",
+            """
+            - Hoy: CAST(OperationDate AS date) = CAST(GETDATE() AS date)
+            - Ayer: CAST(OperationDate AS date) = DATEADD(DAY, -1, CAST(GETDATE() AS date))
+            - Mes actual: YearMonth = CONVERT(char(7), GETDATE(), 120)
+            - Semana actual: YearNumber = YEAR(GETDATE()) AND WeekOfYear = DATEPART(ISO_WEEK, GETDATE())
+            - Cuando el usuario diga 'turno actual' o 'del turno', filtra explicitamente por un unico ShiftId calculado como el mas reciente del dia dentro de la vista consultada.
+            """,
+            ct);
+        var rulesHeader = await GetPromptTextAsync("BusinessRulesHeader", "REGLAS DE NEGOCIO IMPORTANTES:", ct);
+        var semanticHintsHeader = await GetPromptTextAsync("SemanticHintsHeader", "PISTAS SEMANTICAS DEL DOMINIO:", ct);
+        var allowedObjectsHeader = await GetPromptTextAsync("AllowedObjectsHeader", "OBJETOS SQL PERMITIDOS:", ct);
+        var schemasHeader = await GetPromptTextAsync("SchemasHeader", "ESQUEMAS RELEVANTES RECUPERADOS:", ct);
+        var examplesHeader = await GetPromptTextAsync("ExamplesHeader", "EJEMPLOS RELEVANTES:", ct);
+        var questionHeader = await GetPromptTextAsync("QuestionHeader", "Pregunta actual:", ct);
 
         var normalizedAllowedObjects = allowedObjectNames
             .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -365,12 +417,24 @@ public class AskUseCase(
         var activeRules = (rules ?? Array.Empty<BusinessRule>())
             .Where(r => r != null && !string.IsNullOrWhiteSpace(r.RuleText) && r.IsActive)
             .OrderBy(r => r.Priority)
-            .Take(6)
+            .Take(maxRules)
             .Select(r => $"- {r.RuleText.Trim()}")
             .ToList();
 
         var rulesText = activeRules.Any()
-            ? TrimToMax(string.Join("\n", activeRules), MaxRulesChars)
+            ? TrimToMax(string.Join("\n", activeRules), maxRulesChars)
+            : string.Empty;
+
+        var semanticHintLines = (semanticHints ?? Array.Empty<SemanticHint>())
+            .Where(h => h != null && h.IsActive && !string.IsNullOrWhiteSpace(h.HintText))
+            .Where(h => ShouldIncludeSemanticHint(h, normalizedAllowedObjects))
+            .OrderBy(h => h.Priority)
+            .Take(maxSemanticHints)
+            .Select(FormatSemanticHint)
+            .ToList();
+
+        var semanticHintsText = semanticHintLines.Any()
+            ? TrimToMax(string.Join("\n", semanticHintLines), maxSemanticHintsChars)
             : string.Empty;
 
         var schemaLines = (context?.SchemaDocs ?? Enumerable.Empty<RetrievedSchemaDoc>())
@@ -379,11 +443,11 @@ public class AskUseCase(
             .Select(s => s.Doc!.DocText?.Trim())
             .Where(t => !string.IsNullOrWhiteSpace(t))
             .Distinct()
-            .Take(3)
+            .Take(maxSchemas)
             .ToList();
 
         var schemasText = schemaLines.Any()
-            ? TrimToMax(string.Join("\n", schemaLines), MaxSchemasChars)
+            ? TrimToMax(string.Join("\n", schemaLines), maxSchemasChars)
             : string.Empty;
 
         var exampleLines = (context?.Examples ?? Enumerable.Empty<RetrievedExample>())
@@ -392,69 +456,80 @@ public class AskUseCase(
                 !string.IsNullOrWhiteSpace(e.Example.Question) &&
                 !string.IsNullOrWhiteSpace(e.Example.Sql) &&
                 MentionsAllowedObject(e.Example.Sql, normalizedAllowedObjects))
-            .Take(2)
+            .Take(maxExamples)
             .Select(e => $"Pregunta: {e.Example!.Question.Trim()}\nSQL:\n{e.Example.Sql.Trim()}")
             .ToList();
 
         var examplesText = exampleLines.Any()
-            ? TrimToMax(string.Join("\n\n", exampleLines), MaxExamplesChars)
+            ? TrimToMax(string.Join("\n\n", exampleLines), maxExamplesChars)
             : string.Empty;
 
         var sb = new StringBuilder(4096);
 
         sb.AppendLine("<|im_start|>system");
-        sb.AppendLine("Eres un desarrollador experto en T-SQL para SQL Server.");
-        sb.AppendLine("Tu tarea es generar SOLO codigo SQL valido para SQL Server.");
-        sb.AppendLine("Debes basarte estrictamente en los objetos SQL permitidos, reglas, esquemas y ejemplos proporcionados.");
+        sb.AppendLine(systemPersona);
+        sb.AppendLine(taskInstruction);
+        sb.AppendLine(contextInstruction);
         sb.AppendLine();
         sb.AppendLine("REGLAS CRITICAS DE SINTAXIS T-SQL:");
-        sb.AppendLine("1. ESTA ESTRICTAMENTE PROHIBIDO USAR 'LIMIT'. Para limitar resultados en SQL Server, usa SIEMPRE 'SELECT TOP (N)'.");
-        sb.AppendLine("2. Usa EXACTAMENTE los nombres de columnas que aparezcan en los esquemas recuperados y ejemplos validos.");
-        sb.AppendLine("3. NUNCA compares un valor de texto contra una columna ID.");
-        sb.AppendLine("4. Si necesitas cruzar objetos SQL permitidos, prefiere joins por IDs y OperationDate.");
-        sb.AppendLine("5. Devuelve SOLO el SQL, sin comentarios y sin bloques markdown.");
+        sb.AppendLine(sqlSyntaxRules);
         sb.AppendLine();
         sb.AppendLine("REGLAS DE TIEMPO E INTERPRETACION:");
-        sb.AppendLine("- Hoy: CAST(OperationDate AS date) = CAST(GETDATE() AS date)");
-        sb.AppendLine("- Ayer: CAST(OperationDate AS date) = DATEADD(DAY, -1, CAST(GETDATE() AS date))");
-        sb.AppendLine("- Mes actual: YearMonth = CONVERT(char(7), GETDATE(), 120)");
-        sb.AppendLine("- Semana actual: YearNumber = YEAR(GETDATE()) AND WeekOfYear = DATEPART(ISO_WEEK, GETDATE())");
-        sb.AppendLine("- Cuando el usuario diga 'turno actual' o 'del turno', filtra explicitamente por un unico ShiftId calculado como el mas reciente del dia dentro de la vista consultada.");
+        sb.AppendLine(timeInterpretationRules);
         sb.AppendLine();
 
         if (!string.IsNullOrWhiteSpace(rulesText))
         {
-            sb.AppendLine("REGLAS DE NEGOCIO IMPORTANTES:");
+            sb.AppendLine(rulesHeader);
             sb.AppendLine(rulesText);
             sb.AppendLine();
         }
 
-        sb.AppendLine("OBJETOS SQL PERMITIDOS:");
+        if (!string.IsNullOrWhiteSpace(semanticHintsText))
+        {
+            sb.AppendLine(semanticHintsHeader);
+            sb.AppendLine(semanticHintsText);
+            sb.AppendLine();
+        }
+
+        sb.AppendLine(allowedObjectsHeader);
         sb.AppendLine(allowedObjectsText);
         sb.AppendLine();
 
         if (!string.IsNullOrWhiteSpace(schemasText))
         {
-            sb.AppendLine("ESQUEMAS RELEVANTES RECUPERADOS:");
+            sb.AppendLine(schemasHeader);
             sb.AppendLine(schemasText);
             sb.AppendLine();
         }
 
         if (!string.IsNullOrWhiteSpace(examplesText))
         {
-            sb.AppendLine("EJEMPLOS RELEVANTES:");
+            sb.AppendLine(examplesHeader);
             sb.AppendLine(examplesText);
             sb.AppendLine();
         }
 
         sb.AppendLine("<|im_end|>");
         sb.AppendLine("<|im_start|>user");
-        sb.AppendLine("Pregunta actual:");
+        sb.AppendLine(questionHeader);
         sb.AppendLine(question?.Trim() ?? string.Empty);
         sb.AppendLine("<|im_end|>");
         sb.AppendLine("<|im_start|>assistant");
 
-        return TrimToMax(sb.ToString(), MaxPromptChars);
+        return TrimToMax(sb.ToString(), maxPromptChars);
+    }
+
+    private async Task<int> GetPromptIntAsync(string key, int fallback, CancellationToken ct)
+    {
+        var value = await systemConfigProvider.GetIntAsync("Prompting", key, ct);
+        return value.HasValue && value.Value > 0 ? value.Value : fallback;
+    }
+
+    private async Task<string> GetPromptTextAsync(string key, string fallback, CancellationToken ct)
+    {
+        var value = await systemConfigProvider.GetValueAsync("Prompting", key, ct);
+        return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
     }
 
     private static string NormalizeObjectName(string? name)
@@ -485,6 +560,42 @@ public class AskUseCase(
 
         return normalizedAllowedObjects.Any(obj =>
             normalizedSql.Contains(obj, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool ShouldIncludeSemanticHint(
+        SemanticHint hint,
+        IReadOnlySet<string> normalizedAllowedObjects)
+    {
+        if (hint is null)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(hint.ObjectName))
+            return true;
+
+        return normalizedAllowedObjects.Contains(NormalizeObjectName(hint.ObjectName));
+    }
+
+    private static string FormatSemanticHint(SemanticHint hint)
+    {
+        var label = !string.IsNullOrWhiteSpace(hint.DisplayName)
+            ? hint.DisplayName!.Trim()
+            : hint.HintKey.Trim();
+
+        var targetParts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(hint.ObjectName))
+            targetParts.Add(hint.ObjectName.Trim());
+        if (!string.IsNullOrWhiteSpace(hint.ColumnName))
+            targetParts.Add(hint.ColumnName.Trim());
+
+        var target = targetParts.Count > 0
+            ? $" | Target: {string.Join(".", targetParts)}"
+            : string.Empty;
+
+        var hintType = string.IsNullOrWhiteSpace(hint.HintType)
+            ? "hint"
+            : hint.HintType.Trim().ToLowerInvariant();
+
+        return $"- [{hintType}] {label}: {hint.HintText.Trim()}{target}";
     }
 
     private static string TrimToMax(string text, int maxChars)

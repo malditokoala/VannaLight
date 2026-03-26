@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using System;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using VannaLight.Api.Contracts;
 using VannaLight.Api.Hubs;
@@ -15,6 +17,11 @@ public record AskRequest(
     string? UserId,
     string? ConnectionId,
     AskMode Mode = AskMode.Data
+);
+
+public record FeedbackRequest(
+    Guid JobId,
+    string Feedback
 );
 
 [ApiController]
@@ -43,18 +50,35 @@ public class AssistantController(
 
             if (sql != null)
             {
+                var cachedJobId = await jobStore.CreateJobAsync(userId, "User", cleanQuestion, request.Mode.ToString());
+                var cachedResultJson = JsonSerializer.Serialize(data);
+
+                await jobStore.UpdateJobAsync(
+                    cachedJobId,
+                    "Completed",
+                    sql,
+                    cachedResultJson,
+                    null,
+                    HttpContext.RequestAborted);
+
                 if (!string.IsNullOrEmpty(connectionId))
                 {
                     await hubContext.Clients.Client(connectionId).SendAsync("JobCompleted", new
                     {
-                        JobId = Guid.NewGuid(), // Generamos un ID virtual para la UI
+                        JobId = cachedJobId,
                         Mode = AskMode.Data.ToString(),
                         Sql = sql,
                         Data = data
                     });
                 }
 
-                return Accepted(new { Message = "Respuesta servida desde la caché local." });
+                return Accepted(new
+                {
+                    JobId = cachedJobId,
+                    Status = "Completed",
+                    Mode = request.Mode.ToString(),
+                    Message = "Respuesta servida desde la caché local."
+                });
             }
         }
 
@@ -77,6 +101,28 @@ public class AssistantController(
         return Ok(jobs);
     }
 
+    [HttpPost("feedback")]
+    public async Task<IActionResult> SubmitFeedbackAsync([FromBody] FeedbackRequest request, CancellationToken ct)
+    {
+        if (request.JobId == Guid.Empty)
+            return BadRequest(new { Error = "JobId inválido." });
+
+        var feedback = NormalizeFeedback(request.Feedback);
+        if (feedback is null)
+            return BadRequest(new { Error = "Feedback inválido. Usa 'Up' o 'Down'." });
+
+        var updated = await jobStore.SetUserFeedbackAsync(request.JobId, feedback, ct);
+        if (!updated)
+            return NotFound(new { Error = "Trabajo no encontrado." });
+
+        return Ok(new
+        {
+            JobId = request.JobId,
+            UserFeedback = feedback,
+            FeedbackUtc = DateTime.UtcNow
+        });
+    }
+
     [HttpGet("status/{jobId:guid}")]
     public async Task<IActionResult> GetStatusAsync(Guid jobId)
     {
@@ -90,5 +136,18 @@ public class AssistantController(
             job.SqlText,
             job.ErrorText
         });
+    }
+
+    private static string? NormalizeFeedback(string? feedback)
+    {
+        if (string.IsNullOrWhiteSpace(feedback))
+            return null;
+
+        return feedback.Trim().ToLowerInvariant() switch
+        {
+            "up" => "Up",
+            "down" => "Down",
+            _ => null
+        };
     }
 }

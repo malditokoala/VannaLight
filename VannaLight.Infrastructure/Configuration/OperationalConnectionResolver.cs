@@ -11,6 +11,7 @@ public class OperationalConnectionResolver : IOperationalConnectionResolver
     private readonly ISecretResolver _secretResolver;
     private readonly IConfiguration _configuration;
     private readonly string _environmentName;
+    private readonly string _defaultProfileKey;
 
     public OperationalConnectionResolver(
         IConnectionProfileStore connectionProfileStore,
@@ -20,12 +21,14 @@ public class OperationalConnectionResolver : IOperationalConnectionResolver
         _connectionProfileStore = connectionProfileStore;
         _secretResolver = secretResolver;
         _configuration = configuration;
-        _environmentName = configuration["Bootstrap:EnvironmentName"] ?? "Development";
+        _environmentName = configuration["SystemStartup:EnvironmentName"] ?? "Development";
+        _defaultProfileKey = configuration["SystemStartup:DefaultSystemProfile"] ?? "default";
     }
 
     public async Task<string> ResolveOperationalConnectionStringAsync(CancellationToken ct = default)
     {
-        var profile = await _connectionProfileStore.GetActiveAsync(_environmentName, "OperationalDb", ct);
+        var profile = await _connectionProfileStore.GetActiveAsync(_environmentName, "OperationalDb", ct)
+            ?? await _connectionProfileStore.GetAsync(_environmentName, _defaultProfileKey, "OperationalDb", ct);
         if (profile == null)
         {
             var fallback = _configuration.GetConnectionString("OperationalDb");
@@ -34,8 +37,14 @@ public class OperationalConnectionResolver : IOperationalConnectionResolver
             return fallback;
         }
 
+        if (!string.Equals(profile.ProviderKind, "SqlServer", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Unsupported provider kind: {profile.ProviderKind}");
+
         if (string.Equals(profile.ConnectionMode, "FullStringRef", StringComparison.OrdinalIgnoreCase))
         {
+            if (string.IsNullOrWhiteSpace(profile.SecretRef))
+                throw new InvalidOperationException("OperationalDb FullStringRef requires SecretRef.");
+
             var fullConnection = await _secretResolver.ResolveAsync(profile.SecretRef ?? string.Empty, ct);
             if (string.IsNullOrWhiteSpace(fullConnection))
                 throw new InvalidOperationException("OperationalDb secret reference could not be resolved.");
@@ -45,6 +54,12 @@ public class OperationalConnectionResolver : IOperationalConnectionResolver
 
         if (string.Equals(profile.ConnectionMode, "CompositeSqlServer", StringComparison.OrdinalIgnoreCase))
         {
+            if (string.IsNullOrWhiteSpace(profile.ServerHost))
+                throw new InvalidOperationException("OperationalDb composite profile requires ServerHost.");
+
+            if (string.IsNullOrWhiteSpace(profile.DatabaseName))
+                throw new InvalidOperationException("OperationalDb composite profile requires DatabaseName.");
+
             var builder = new SqlConnectionStringBuilder
             {
                 DataSource = profile.ServerHost,
@@ -56,6 +71,12 @@ public class OperationalConnectionResolver : IOperationalConnectionResolver
 
             if (!profile.IntegratedSecurity)
             {
+                if (string.IsNullOrWhiteSpace(profile.UserName))
+                    throw new InvalidOperationException("OperationalDb composite profile requires UserName when IntegratedSecurity is false.");
+
+                if (string.IsNullOrWhiteSpace(profile.SecretRef))
+                    throw new InvalidOperationException("OperationalDb composite profile requires SecretRef when IntegratedSecurity is false.");
+
                 builder.UserID = profile.UserName;
                 builder.Password = await _secretResolver.ResolveAsync(profile.SecretRef ?? string.Empty, ct)
                     ?? throw new InvalidOperationException("OperationalDb password secret reference could not be resolved.");

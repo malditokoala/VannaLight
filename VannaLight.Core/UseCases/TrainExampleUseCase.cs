@@ -1,24 +1,39 @@
-﻿using VannaLight.Core.Abstractions;
+using VannaLight.Core.Abstractions;
+using VannaLight.Core.Models;
 
 namespace VannaLight.Core.UseCases;
 
 public sealed class TrainExampleUseCase
 {
     private readonly ITrainingStore _training;
+    private readonly IPatternMatcherService _patternMatcher;
 
-    public TrainExampleUseCase(ITrainingStore training)
-        => _training = training;
+    public TrainExampleUseCase(ITrainingStore training, IPatternMatcherService patternMatcher)
+    {
+        _training = training;
+        _patternMatcher = patternMatcher;
+    }
 
-    public async Task TrainAsync(string? question, string? sqlText, CancellationToken ct)
+    public async Task TrainAsync(string? question, string? sqlText, string? domain, bool isVerified, CancellationToken ct)
     {
         var cleanQuestion = CleanText(question);
         var cleanSql = CleanText(sqlText);
+        var cleanDomain = CleanText(domain);
 
         if (string.IsNullOrWhiteSpace(cleanQuestion) || string.IsNullOrWhiteSpace(cleanSql))
             throw new ArgumentException("La pregunta o el SQL están vacíos o corruptos.");
 
-        // Política: Upsert (no duplicar por Question)
-        await _training.UpsertByQuestionAsync(cleanQuestion, cleanSql, ct);
+        var intentName = await _patternMatcher.InferIntentNameAsync(cleanQuestion, cleanDomain, ct);
+
+        await _training.UpsertAsync(
+            new TrainingExampleUpsert(
+                cleanQuestion,
+                cleanSql,
+                string.IsNullOrWhiteSpace(cleanDomain) ? null : cleanDomain,
+                string.IsNullOrWhiteSpace(intentName) ? null : intentName,
+                isVerified,
+                isVerified ? 100 : 0),
+            ct);
     }
 
     private static string CleanText(string? s)

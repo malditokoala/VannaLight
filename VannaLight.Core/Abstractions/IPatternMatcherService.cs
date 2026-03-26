@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using VannaLight.Core.Models;
@@ -7,11 +7,13 @@ namespace VannaLight.Core.Abstractions
 {
     public interface IPatternMatcherService
     {
-        PatternMatchResult Match(string question);
+        Task<PatternMatchResult> MatchAsync(string question, string? domain, CancellationToken ct = default);
+        Task<string?> InferIntentNameAsync(string question, string? domain, CancellationToken ct = default);
     }
 
     public interface ITemplateSqlBuilder
     {
+        bool Supports(string patternKey);
         string BuildSql(PatternMatchResult match);
     }
 }

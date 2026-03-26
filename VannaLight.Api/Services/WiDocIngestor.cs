@@ -13,19 +13,25 @@ namespace VannaLight.Api.Services;
 public sealed class WiDocIngestor
 {
     private readonly ISystemConfigProvider _systemConfigProvider;
+    private readonly IHostEnvironment _environment;
     private readonly SqliteOptions _sqliteOptions;
 
     public WiDocIngestor(
         ISystemConfigProvider systemConfigProvider,
+        IHostEnvironment environment,
         SqliteOptions sqliteOptions)
     {
         _systemConfigProvider = systemConfigProvider;
+        _environment = environment;
         _sqliteOptions = sqliteOptions;
     }
 
     public async Task<WiReindexResult> ReindexAsync(CancellationToken ct)
     {
-        string wiRoot = await _systemConfigProvider.GetRequiredValueAsync("Docs", "WiRootPath", ct);
+        string wiRootSetting = await _systemConfigProvider.GetRequiredValueAsync("Docs", "WiRootPath", ct);
+        string wiRoot = Path.IsPathRooted(wiRootSetting)
+            ? wiRootSetting
+            : Path.GetFullPath(Path.Combine(_environment.ContentRootPath, wiRootSetting));
         string sqlitePath = _sqliteOptions.DbPath;
 
         if (!Directory.Exists(wiRoot))

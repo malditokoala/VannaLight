@@ -791,6 +791,87 @@
             margin-top: 10px
         }
 
+        .feedback-panel {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 14px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+        }
+
+        .feedback-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .feedback-title {
+            font-family: var(--mono);
+            font-size: .62rem;
+            letter-spacing: .12em;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+
+        .feedback-status {
+            font-size: .84rem;
+            color: var(--dim);
+        }
+
+        .feedback-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .feedback-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: .66rem;
+            letter-spacing: .04em;
+            cursor: pointer;
+            transition: border-color .2s, color .2s, transform .2s, background .2s;
+        }
+
+        .feedback-btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+        }
+
+        .feedback-btn:disabled {
+            opacity: .55;
+            cursor: default;
+        }
+
+        .feedback-btn.up:hover:not(:disabled),
+        .feedback-btn.up.active {
+            border-color: var(--ok-c);
+            color: var(--ok-c);
+            background: color-mix(in srgb, var(--ok-c) 10%, var(--panel));
+        }
+
+        .feedback-btn.down:hover:not(:disabled),
+        .feedback-btn.down.active {
+            border-color: var(--err-c);
+            color: var(--err-c);
+            background: color-mix(in srgb, var(--err-c) 10%, var(--panel));
+        }
+
+        .feedback-icon {
+            font-size: .95rem;
+            line-height: 1;
+        }
+
         /* ── CHART TOOLBAR — nuevo ── */
         .chart-toolbar {
             display: none;
@@ -1152,6 +1233,22 @@
                 </div>
                 <div class="table-wrap" id="tableContainer" style="display:none;"></div>
                 <div class="pred-grid" id="predGrid"></div>
+                <div class="feedback-panel" id="feedbackPanel">
+                    <div class="feedback-copy">
+                        <div class="feedback-title">Feedback de respuesta</div>
+                        <div class="feedback-status" id="feedbackStatus">Indica si esta respuesta fue correcta o incorrecta.</div>
+                    </div>
+                    <div class="feedback-actions">
+                        <button class="feedback-btn up" id="feedbackUpBtn" type="button" onclick="submitFeedback('Up')">
+                            <span class="feedback-icon">👍</span>
+                            <span>Correcta</span>
+                        </button>
+                        <button class="feedback-btn down" id="feedbackDownBtn" type="button" onclick="submitFeedback('Down')">
+                            <span class="feedback-icon">👎</span>
+                            <span>Incorrecta</span>
+                        </button>
+                    </div>
+                </div>
 
 
             </div>
@@ -1173,6 +1270,8 @@
         let myConnectionId = '';
         let currentChart = null;
         let chartVisible = true;
+        let lastCompletedJobId = '';
+        let submittedFeedback = null;
 
         // datos del último chart para poder redibujar al cambiar tipo
         let lastChartModel = null;   // { labels, values, labelColumn, valueColumn }
@@ -1196,6 +1295,7 @@
             document.getElementById('txtQuestion').placeholder = c.ph;
             logLine(`Modo → ${c.title}`, 'sys');
             hideResult();
+            resetFeedbackPanel();
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -1205,7 +1305,7 @@
             .withUrl('/hub/assistant').withAutomaticReconnect().build();
 
         connection.on('JobStatusUpdated', d => logLine(`⏳ ${d.status}`, 'sys'));
-        connection.on('JobFailed', d => { logLine(`❌ ${d.error}`, 'err'); resetUI(); });
+        connection.on('JobFailed', d => { logLine(`❌ ${d.error}`, 'err'); resetUI(); resetFeedbackPanel(); });
         connection.on('JobCompleted', payload => {
             logLine('Completado', 'ok');
             resetUI();
@@ -1222,6 +1322,8 @@
             } else {
                 renderSql(data);
             }
+
+            prepareFeedbackPanel(payload?.JobId || payload?.jobId);
         });
 
         async function startConnection() {
@@ -1246,6 +1348,7 @@
             document.getElementById('loadingIcon').style.display = 'block';
             document.getElementById('btnSend').disabled = true;
             hideResult();
+            resetFeedbackPanel();
             logLine(`→ ${q}`, 'user');
             txt.value = '';
             txt.focus();
@@ -1275,6 +1378,91 @@
         function handleKeyPress(e) { if (e.key === 'Enter') sendQuestion(); }
         function resetUI() { document.getElementById('loadingIcon').style.display = 'none'; document.getElementById('btnSend').disabled = false; }
         function hideResult() { document.getElementById('resultArea').style.display = 'none'; }
+
+        function resetFeedbackPanel() {
+            lastCompletedJobId = '';
+            submittedFeedback = null;
+
+            const panel = document.getElementById('feedbackPanel');
+            const status = document.getElementById('feedbackStatus');
+            const upBtn = document.getElementById('feedbackUpBtn');
+            const downBtn = document.getElementById('feedbackDownBtn');
+
+            if (panel) panel.style.display = 'none';
+            if (status) status.textContent = 'Indica si esta respuesta fue correcta o incorrecta.';
+
+            [upBtn, downBtn].forEach(btn => {
+                if (!btn) return;
+                btn.disabled = false;
+                btn.classList.remove('active');
+            });
+        }
+
+        function prepareFeedbackPanel(jobId) {
+            const panel = document.getElementById('feedbackPanel');
+            const status = document.getElementById('feedbackStatus');
+            const upBtn = document.getElementById('feedbackUpBtn');
+            const downBtn = document.getElementById('feedbackDownBtn');
+
+            lastCompletedJobId = typeof jobId === 'string' ? jobId : (jobId ? String(jobId) : '');
+            submittedFeedback = null;
+
+            if (!panel || !status || !upBtn || !downBtn) return;
+
+            if (!lastCompletedJobId) {
+                panel.style.display = 'none';
+                return;
+            }
+
+            panel.style.display = 'flex';
+            status.textContent = 'Indica si esta respuesta fue correcta o incorrecta.';
+            upBtn.disabled = false;
+            downBtn.disabled = false;
+            upBtn.classList.remove('active');
+            downBtn.classList.remove('active');
+        }
+
+        async function submitFeedback(feedback) {
+            if (!lastCompletedJobId || submittedFeedback) return;
+
+            const status = document.getElementById('feedbackStatus');
+            const upBtn = document.getElementById('feedbackUpBtn');
+            const downBtn = document.getElementById('feedbackDownBtn');
+            if (!status || !upBtn || !downBtn) return;
+
+            upBtn.disabled = true;
+            downBtn.disabled = true;
+            status.textContent = 'Guardando feedback...';
+
+            try {
+                const response = await fetch('/api/assistant/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jobId: lastCompletedJobId,
+                        feedback: feedback
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText || 'No se pudo guardar el feedback.'}`);
+                }
+
+                submittedFeedback = feedback;
+                upBtn.classList.toggle('active', feedback === 'Up');
+                downBtn.classList.toggle('active', feedback === 'Down');
+                status.textContent = feedback === 'Up'
+                    ? 'Gracias. Marcaste esta respuesta como correcta.'
+                    : 'Gracias. Marcaste esta respuesta para revisión.';
+                logLine(`Feedback usuario → ${feedback}`, 'sys');
+            } catch (e) {
+                status.textContent = 'No se pudo guardar el feedback. Intenta nuevamente.';
+                upBtn.disabled = false;
+                downBtn.disabled = false;
+                logLine(`Error feedback: ${e.message}`, 'err');
+            }
+        }
 
         // ═══════════════════════════════════════════════════════════
         // PRE-RENDER CLEANUP
@@ -1406,6 +1594,72 @@
             return null;
         }
 
+        function normalizeColumnName(name) {
+            return String(name || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase();
+        }
+
+        function isTechnicalIdColumn(name) {
+            const normalized = normalizeColumnName(name);
+            return normalized === 'id'
+                || normalized.endsWith('id')
+                || normalized.endsWith('_id')
+                || normalized.includes('identifier')
+                || normalized.includes('folio')
+                || normalized.includes('consecutivo')
+                || normalized.includes('codigo')
+                || normalized.includes('code')
+                || normalized.includes('clave')
+                || normalized.includes('key');
+        }
+
+        function scoreNumericColumn(name, rows) {
+            const normalized = normalizeColumnName(name);
+            let score = 0;
+
+            const metricHints = [
+                'total', 'sum', 'qty', 'quantity', 'count', 'avg', 'average', 'mean',
+                'min', 'max', 'amount', 'value', 'metric', 'score', 'rate',
+                'scrap', 'production', 'produccion', 'pieces', 'piezas', 'hours', 'horas'
+            ];
+
+            const groupingHints = ['turno', 'shift', 'fecha', 'date', 'dia', 'day', 'mes', 'month', 'ano', 'year'];
+
+            if (metricHints.some(hint => normalized.includes(hint))) score += 12;
+            if (groupingHints.some(hint => normalized.includes(hint))) score += 3;
+            if (isTechnicalIdColumn(name)) score -= 20;
+
+            const numericValues = rows
+                .map(r => toNumberOrNull(r[name]))
+                .filter(v => v !== null);
+
+            const distinctValues = new Set(numericValues).size;
+            if (distinctValues <= 1) score -= 2;
+            if (distinctValues < numericValues.length) score += 1;
+
+            return score;
+        }
+
+        function scoreLabelColumn(name) {
+            const normalized = normalizeColumnName(name);
+            let score = 0;
+
+            if (!isTechnicalIdColumn(name)) score += 8;
+            if (normalized.includes('name') || normalized.includes('nombre')) score += 6;
+            if (normalized.includes('operator') || normalized.includes('operador')) score += 5;
+            if (normalized.includes('line') || normalized.includes('linea')) score += 4;
+            if (normalized.includes('part') || normalized.includes('parte')) score += 4;
+            if (normalized.includes('shift') || normalized.includes('turno')) score += 3;
+            if (normalized.includes('date') || normalized.includes('fecha')) score += 3;
+            if (normalized.includes('group') || normalized.includes('grupo')) score += 2;
+            if (normalized.includes('type') || normalized.includes('tipo')) score += 2;
+            if (normalized.includes('status') || normalized.includes('estado')) score += 1;
+
+            return score;
+        }
+
         function buildChartModel(rows) {
             if (!Array.isArray(rows) || rows.length < 2) return null;
             const columns = Object.keys(rows[0] || {});
@@ -1414,9 +1668,19 @@
             const numericColumns = columns.filter(col => rows.some(r => toNumberOrNull(r[col]) !== null));
             if (numericColumns.length === 0) return null;
 
-            const labelColumn = columns.find(col => !numericColumns.includes(col)) || columns[0];
-            const valueColumn = numericColumns.find(col => col !== labelColumn) || numericColumns[0];
+            const labelCandidates = columns.filter(col => !numericColumns.includes(col));
+            const labelColumn = (labelCandidates.length > 0
+                ? labelCandidates.slice().sort((a, b) => scoreLabelColumn(b) - scoreLabelColumn(a))[0]
+                : columns.find(col => !isTechnicalIdColumn(col)) || columns[0]);
+
+            const rankedNumericColumns = numericColumns
+                .filter(col => col !== labelColumn)
+                .slice()
+                .sort((a, b) => scoreNumericColumn(b, rows) - scoreNumericColumn(a, rows));
+
+            const valueColumn = rankedNumericColumns[0] || numericColumns[0];
             if (!labelColumn || !valueColumn) return null;
+            if (isTechnicalIdColumn(valueColumn) && rankedNumericColumns.length === 1) return null;
 
             const limitedRows = rows.slice(0, 20);
             const labels = limitedRows.map(r => String(r[labelColumn] ?? '—'));

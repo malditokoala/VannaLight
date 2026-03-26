@@ -23,14 +23,14 @@ public interface ITrainingStore
     Task<long> InsertTrainingExampleAsync(string sqlitePath, string question, string sql, CancellationToken ct);
     Task TouchExampleAsync(string sqlitePath, long id, CancellationToken ct);
     Task<IReadOnlyList<TrainingExample>> GetAllTrainingExamplesAsync(string sqlitePath, CancellationToken ct);
-    Task UpsertByQuestionAsync(string question, string sql, CancellationToken ct);
+    Task UpsertAsync(TrainingExampleUpsert example, CancellationToken ct);
 
 }
 
 // Interfaz para el motor RAG Híbrido
 public interface IRetriever
 {
-    Task<RetrievalContext> RetrieveAsync(string sqlitePath, string question, CancellationToken ct);
+    Task<RetrievalContext> RetrieveAsync(string sqlitePath, string question, string domain, string? intentName, CancellationToken ct);
 }
 
 // Interfaz para el LLM Local (LLamaSharp)
