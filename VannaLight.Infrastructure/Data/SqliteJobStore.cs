@@ -30,6 +30,9 @@ public class SqliteJobStore : IJobStore
         TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN FeedbackUtc TEXT;");
         TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN FeedbackComment TEXT;");
         TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN Mode TEXT DEFAULT 'Data';");
+        TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN TenantKey TEXT DEFAULT 'default';");
+        TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN Domain TEXT;");
+        TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN ConnectionName TEXT DEFAULT 'OperationalDb';");
     }
 
     private static void TryAddColumn(SqliteConnection conn, string sql)
@@ -49,21 +52,26 @@ public class SqliteJobStore : IJobStore
         string role,
         string question,
         string mode = "Data",
+        AskExecutionContext? executionContext = null,
         CancellationToken ct = default)
     {
         using var conn = new SqliteConnection(_connString);
         var jobId = Guid.NewGuid();
+        var context = executionContext ?? new AskExecutionContext();
 
         var command = new CommandDefinition(
             @"INSERT INTO QuestionJobs
-              (JobId, UserId, Role, Question, Status, Mode, CreatedUtc, UpdatedUtc)
+              (JobId, UserId, Role, TenantKey, Domain, ConnectionName, Question, Status, Mode, CreatedUtc, UpdatedUtc)
               VALUES
-              (@Id, @UserId, @Role, @Question, 'Queued', @Mode, DATETIME('now'), DATETIME('now'))",
+              (@Id, @UserId, @Role, @TenantKey, @Domain, @ConnectionName, @Question, 'Queued', @Mode, DATETIME('now'), DATETIME('now'))",
             new
             {
                 Id = jobId.ToString(),
                 UserId = userId,
                 Role = role,
+                TenantKey = context.TenantKey,
+                Domain = context.Domain,
+                ConnectionName = context.ConnectionName,
                 Question = question,
                 Mode = mode
             },
@@ -160,7 +168,7 @@ public class SqliteJobStore : IJobStore
         var command = new CommandDefinition(
             """
                 SELECT 
-                    JobId, UserId, Role, Question, Status, Mode, SqlText, ErrorText, ResultJson,
+                    JobId, UserId, Role, TenantKey, Domain, ConnectionName, Question, Status, Mode, SqlText, ErrorText, ResultJson,
                     Attempt, TrainingExampleSaved, VerificationStatus, UserFeedback, FeedbackUtc, FeedbackComment,
                     CreatedUtc, UpdatedUtc
                 FROM QuestionJobs 
@@ -184,7 +192,7 @@ public class SqliteJobStore : IJobStore
         var command = new CommandDefinition(
             """
                 SELECT 
-                    JobId, UserId, Role, Question, Status, Mode, SqlText, ErrorText, ResultJson,
+                    JobId, UserId, Role, TenantKey, Domain, ConnectionName, Question, Status, Mode, SqlText, ErrorText, ResultJson,
                     Attempt, TrainingExampleSaved, VerificationStatus, UserFeedback, FeedbackUtc, FeedbackComment,
                     CreatedUtc, UpdatedUtc
                 FROM QuestionJobs
@@ -258,6 +266,9 @@ public class SqliteJobStore : IJobStore
             JobId = Guid.TryParse(raw.JobId, out var parsedId) ? parsedId : Guid.Empty,
             UserId = raw.UserId ?? string.Empty,
             Role = raw.Role ?? string.Empty,
+            TenantKey = raw.TenantKey ?? "default",
+            Domain = raw.Domain ?? string.Empty,
+            ConnectionName = raw.ConnectionName ?? "OperationalDb",
             Question = raw.Question ?? string.Empty,
             Status = raw.Status ?? "Unknown",
             Mode = raw.Mode ?? "Data",
@@ -309,6 +320,9 @@ public class SqliteJobStore : IJobStore
         public string JobId { get; set; } = string.Empty;
         public string? UserId { get; set; }
         public string? Role { get; set; }
+        public string? TenantKey { get; set; }
+        public string? Domain { get; set; }
+        public string? ConnectionName { get; set; }
         public string? Question { get; set; }
         public string? Status { get; set; }
         public string? Mode { get; set; }

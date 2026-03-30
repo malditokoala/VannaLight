@@ -2,9 +2,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using VannaLight.Api.Contracts;
 using VannaLight.Api.Services;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.Models;
@@ -106,19 +108,64 @@ public record SystemConfigEntryUpsertRequest(
 public record SystemConfigBulkUpsertRequest(
     IReadOnlyList<SystemConfigEntryUpsertRequest> Entries);
 
+public record TenantUpsertRequest(
+    int Id,
+    string TenantKey,
+    string DisplayName,
+    string? Description,
+    bool IsActive);
+
+public record TenantDomainUpsertRequest(
+    int Id,
+    string TenantKey,
+    string Domain,
+    string ConnectionName,
+    string? SystemProfileKey,
+    bool IsDefault,
+    bool IsActive);
+
+public record OnboardingStep1Request(
+    string TenantKey,
+    string DisplayName,
+    string Domain,
+    string ConnectionName,
+    string? Description,
+    string? SystemProfileKey);
+
+public record OnboardingAllowedObjectItem(
+    string SchemaName,
+    string ObjectName,
+    string ObjectType,
+    bool IsSelected);
+
+public record OnboardingAllowedObjectsRequest(
+    string Domain,
+    IReadOnlyList<OnboardingAllowedObjectItem> Items);
+
+public record OnboardingInitializeRequest(
+    string Domain,
+    string ConnectionName);
+
 [ApiController]
 [Route("api/[controller]")]
 public class AdminController(
     IJobStore jobStore,
     ISystemConfigProvider systemConfigProvider,
     ISystemConfigStore systemConfigStore,
+    IConnectionProfileStore connectionProfileStore,
+    IOperationalConnectionResolver operationalConnectionResolver,
     IAllowedObjectStore allowedObjectStore,
+    ISchemaIngestor schemaIngestor,
+    ISchemaStore schemaStore,
     ILlmProfileStore profileStore,
     WiDocIngestor wiIngestor,
     IBusinessRuleStore businessRuleStore,
     ISemanticHintStore semanticHintStore,
     IQueryPatternStore queryPatternStore,
     IQueryPatternTermStore queryPatternTermStore,
+    ITenantStore tenantStore,
+    ITenantDomainStore tenantDomainStore,
+    ITrainingStore trainingStore,
     SqliteOptions sqliteOptions,
     OperationalDbOptions operationalDbOptions,
     IngestUseCase ingestUseCase,
@@ -277,6 +324,265 @@ public class AdminController(
         });
     }
 
+    [HttpGet("onboarding/bootstrap")]
+    public async Task<IActionResult> GetOnboardingBootstrap(CancellationToken ct)
+    {
+        var environmentName = configuration["SystemStartup:EnvironmentName"] ?? "Development";
+        var defaultSystemProfile = configuration["SystemStartup:DefaultSystemProfile"] ?? "default";
+        var profile = await GetActiveSystemConfigProfileAsync(ct);
+        var connections = await connectionProfileStore.GetAllAsync(environmentName, ct);
+        var tenants = await tenantStore.GetAllAsync(ct);
+
+        var defaultTenantKey = (await systemConfigProvider.GetValueAsync("TenantDefaults", "TenantKey", ct))?.Trim();
+        var defaultConnectionName = (await systemConfigProvider.GetValueAsync("TenantDefaults", "ConnectionName", ct))?.Trim();
+        var defaultDomain = (await systemConfigProvider.GetValueAsync("UiDefaults", "AdminDomain", ct))?.Trim()
+            ?? (await systemConfigProvider.GetValueAsync("Retrieval", "Domain", ct))?.Trim();
+
+        return Ok(new
+        {
+            EnvironmentName = environmentName,
+            Profile = profile,
+            Defaults = new
+            {
+                TenantKey = string.IsNullOrWhiteSpace(defaultTenantKey) ? "default" : defaultTenantKey,
+                Domain = string.IsNullOrWhiteSpace(defaultDomain) ? string.Empty : defaultDomain,
+                ConnectionName = string.IsNullOrWhiteSpace(defaultConnectionName) ? "OperationalDb" : defaultConnectionName,
+                SystemProfileKey = defaultSystemProfile
+            },
+            Tenants = tenants,
+            Connections = connections
+        });
+    }
+
+    [HttpPost("onboarding/step1")]
+    public async Task<IActionResult> SaveOnboardingStep1([FromBody] OnboardingStep1Request request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { Error = "Body inválido." });
+
+        if (string.IsNullOrWhiteSpace(request.TenantKey))
+            return BadRequest(new { Error = "TenantKey es requerido." });
+
+        if (string.IsNullOrWhiteSpace(request.DisplayName))
+            return BadRequest(new { Error = "DisplayName es requerido." });
+
+        if (string.IsNullOrWhiteSpace(request.Domain))
+            return BadRequest(new { Error = "Domain es requerido." });
+
+        if (string.IsNullOrWhiteSpace(request.ConnectionName))
+            return BadRequest(new { Error = "ConnectionName es requerido." });
+
+        var environmentName = configuration["SystemStartup:EnvironmentName"] ?? "Development";
+        var normalizedConnectionName = request.ConnectionName.Trim();
+        var connectionProfile = (await connectionProfileStore.GetAllAsync(environmentName, ct))
+            .FirstOrDefault(x => string.Equals(x.ConnectionName, normalizedConnectionName, StringComparison.OrdinalIgnoreCase));
+
+        if (connectionProfile is null)
+            return NotFound(new { Error = "La conexión seleccionada no existe en ConnectionProfiles." });
+
+        var now = DateTime.UtcNow.ToString("o");
+        var normalizedTenantKey = request.TenantKey.Trim();
+        var existingTenant = await tenantStore.GetByKeyAsync(normalizedTenantKey, ct);
+
+        var tenantId = await tenantStore.UpsertAsync(
+            new Tenant
+            {
+                Id = existingTenant?.Id ?? 0,
+                TenantKey = normalizedTenantKey,
+                DisplayName = request.DisplayName.Trim(),
+                Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+                IsActive = true,
+                CreatedUtc = existingTenant?.CreatedUtc ?? now,
+                UpdatedUtc = now
+            },
+            ct);
+
+        await tenantDomainStore.UpsertAsync(
+            new TenantDomain
+            {
+                Id = 0,
+                TenantId = tenantId,
+                Domain = request.Domain.Trim(),
+                ConnectionName = normalizedConnectionName,
+                SystemProfileKey = string.IsNullOrWhiteSpace(request.SystemProfileKey) ? null : request.SystemProfileKey.Trim(),
+                IsDefault = true,
+                IsActive = true,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            },
+            ct);
+
+        var profile = await GetActiveSystemConfigProfileAsync(ct);
+        if (profile is null)
+            return NotFound(new { Error = "No hay perfil activo de SystemConfig." });
+
+        await UpsertSystemConfigValueAsync(profile.Id, "TenantDefaults", "TenantKey", normalizedTenantKey, "string", "Tenant por defecto del runtime y onboarding inicial.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "TenantDefaults", "ConnectionName", normalizedConnectionName, "string", "Nombre de conexión por defecto para runtime y onboarding inicial.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "UiDefaults", "AdminTenant", normalizedTenantKey, "string", "Tenant por defecto para pantallas administrativas.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "UiDefaults", "AdminDomain", request.Domain.Trim(), "string", "Dominio por defecto para pantallas administrativas.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "Retrieval", "Domain", request.Domain.Trim(), "string", "Dominio operativo para retrieval y validación.", now, ct);
+
+        return Ok(new
+        {
+            Message = "Paso 1 del onboarding guardado correctamente.",
+            TenantKey = normalizedTenantKey,
+            Domain = request.Domain.Trim(),
+            ConnectionName = normalizedConnectionName
+        });
+    }
+
+    [HttpGet("onboarding/schema-candidates")]
+    public async Task<IActionResult> GetOnboardingSchemaCandidates(
+        [FromQuery] string connectionName,
+        [FromQuery] string domain,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(connectionName))
+            return BadRequest(new { Error = "El parámetro connectionName es requerido." });
+
+        if (string.IsNullOrWhiteSpace(domain))
+            return BadRequest(new { Error = "El parámetro domain es requerido." });
+
+        var sqlServerConnString = await operationalConnectionResolver.ResolveConnectionStringAsync(connectionName.Trim(), ct);
+        var schema = await schemaIngestor.ReadSchemaAsync(sqlServerConnString, ct);
+        var existingAllowed = await allowedObjectStore.GetAllObjectsAsync(domain.Trim(), ct);
+
+        var existingLookup = existingAllowed.ToDictionary(
+            x => $"{x.SchemaName}.{x.ObjectName}".ToLowerInvariant(),
+            x => x);
+
+        var candidates = schema
+            .Select(item =>
+            {
+                var key = $"{item.Schema}.{item.Name}".ToLowerInvariant();
+                var hasExisting = existingLookup.TryGetValue(key, out var allowed);
+
+                return new SchemaObjectCandidate
+                {
+                    SchemaName = item.Schema,
+                    ObjectName = item.Name,
+                    ObjectType = InferObjectType(item),
+                    Description = item.Description,
+                    ColumnCount = item.Columns.Count,
+                    PrimaryKeyCount = item.PrimaryKeyColumns.Count,
+                    ForeignKeyCount = item.ForeignKeys.Count,
+                    IsCurrentlyAllowed = hasExisting && (allowed?.IsActive ?? false),
+                    IsSuggested = true
+                };
+            })
+            .OrderByDescending(x => x.IsCurrentlyAllowed)
+            .ThenBy(x => x.SchemaName)
+            .ThenBy(x => x.ObjectName)
+            .ToList();
+
+        return Ok(candidates);
+    }
+
+    [HttpPost("onboarding/allowed-objects")]
+    public async Task<IActionResult> SaveOnboardingAllowedObjects([FromBody] OnboardingAllowedObjectsRequest request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { Error = "Body inválido." });
+
+        if (string.IsNullOrWhiteSpace(request.Domain))
+            return BadRequest(new { Error = "Domain es requerido." });
+
+        if (request.Items is null || request.Items.Count == 0)
+            return BadRequest(new { Error = "Items es requerido." });
+
+        var normalizedDomain = request.Domain.Trim();
+        var existing = await allowedObjectStore.GetAllObjectsAsync(normalizedDomain, ct);
+        var incomingLookup = request.Items.ToDictionary(
+            x => $"{x.SchemaName.Trim().ToLowerInvariant()}.{x.ObjectName.Trim().ToLowerInvariant()}",
+            x => x);
+
+        foreach (var item in request.Items)
+        {
+            if (string.IsNullOrWhiteSpace(item.SchemaName) || string.IsNullOrWhiteSpace(item.ObjectName))
+                continue;
+
+            await allowedObjectStore.UpsertAsync(
+                new AllowedObject
+                {
+                    Domain = normalizedDomain,
+                    SchemaName = item.SchemaName.Trim(),
+                    ObjectName = item.ObjectName.Trim(),
+                    ObjectType = string.IsNullOrWhiteSpace(item.ObjectType) ? string.Empty : item.ObjectType.Trim(),
+                    IsActive = item.IsSelected,
+                    Notes = "Seeded from onboarding wizard step 2."
+                },
+                ct);
+        }
+
+        foreach (var item in existing)
+        {
+            var key = $"{item.SchemaName.ToLowerInvariant()}.{item.ObjectName.ToLowerInvariant()}";
+            if (incomingLookup.ContainsKey(key))
+                continue;
+
+            if (item.IsActive)
+                await allowedObjectStore.SetIsActiveAsync(item.Id, false, ct);
+        }
+
+        return Ok(new
+        {
+            Message = "AllowedObjects del onboarding guardados correctamente.",
+            Domain = normalizedDomain,
+            SelectedCount = request.Items.Count(x => x.IsSelected)
+        });
+    }
+
+    [HttpPost("onboarding/initialize")]
+    public async Task<IActionResult> InitializeOnboardingDomain([FromBody] OnboardingInitializeRequest request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { Error = "Body inválido." });
+
+        if (string.IsNullOrWhiteSpace(request.Domain))
+            return BadRequest(new { Error = "Domain es requerido." });
+
+        if (string.IsNullOrWhiteSpace(request.ConnectionName))
+            return BadRequest(new { Error = "ConnectionName es requerido." });
+
+        var normalizedDomain = request.Domain.Trim();
+        var normalizedConnectionName = request.ConnectionName.Trim();
+        var sqlServerConnString = await operationalConnectionResolver.ResolveConnectionStringAsync(normalizedConnectionName, ct);
+
+        await ingestUseCase.ExecuteAsync(sqlServerConnString, sqliteOptions.DbPath, ct);
+
+        var schema = await schemaIngestor.ReadSchemaAsync(sqlServerConnString, ct);
+        var allowedObjects = await allowedObjectStore.GetActiveObjectsAsync(normalizedDomain, ct);
+        var allowedLookup = allowedObjects
+            .Select(x => $"{x.SchemaName}.{x.ObjectName}".ToLowerInvariant())
+            .ToHashSet();
+
+        var seededHints = await SeedSemanticHintsFromSchemaAsync(normalizedDomain, schema, allowedLookup, ct);
+        var status = await BuildOnboardingStatusAsync(normalizedDomain, normalizedConnectionName, ct);
+
+        return Ok(new
+        {
+            Message = "Dominio inicializado correctamente.",
+            Domain = normalizedDomain,
+            ConnectionName = normalizedConnectionName,
+            SeededSemanticHints = seededHints,
+            Status = status
+        });
+    }
+
+    [HttpGet("onboarding/status")]
+    public async Task<IActionResult> GetOnboardingStatus([FromQuery] string domain, [FromQuery] string? connectionName, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(domain))
+            return BadRequest(new { Error = "El parámetro domain es requerido." });
+
+        var status = await BuildOnboardingStatusAsync(
+            domain.Trim(),
+            string.IsNullOrWhiteSpace(connectionName) ? "OperationalDb" : connectionName.Trim(),
+            ct);
+
+        return Ok(status);
+    }
+
     [HttpPost("system-config")]
     public async Task<IActionResult> UpsertSystemConfigEntry([FromBody] SystemConfigEntryUpsertRequest request, CancellationToken ct)
     {
@@ -387,6 +693,454 @@ public class AdminController(
             ProfileId = profile.Id,
             Saved = savedIds.Count,
             Ids = savedIds
+        });
+    }
+
+    [HttpGet("tenants")]
+    public async Task<IActionResult> GetTenants(CancellationToken ct)
+    {
+        var tenants = await tenantStore.GetAllAsync(ct);
+        return Ok(tenants);
+    }
+
+    [HttpPost("tenants")]
+    public async Task<IActionResult> UpsertTenant([FromBody] TenantUpsertRequest request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { Error = "Body inválido." });
+
+        if (string.IsNullOrWhiteSpace(request.TenantKey))
+            return BadRequest(new { Error = "TenantKey es requerido." });
+
+        if (string.IsNullOrWhiteSpace(request.DisplayName))
+            return BadRequest(new { Error = "DisplayName es requerido." });
+
+        var now = DateTime.UtcNow.ToString("o");
+        var existing = await tenantStore.GetByKeyAsync(request.TenantKey.Trim(), ct);
+
+        var id = await tenantStore.UpsertAsync(
+            new Tenant
+            {
+                Id = existing?.Id ?? request.Id,
+                TenantKey = request.TenantKey.Trim(),
+                DisplayName = request.DisplayName.Trim(),
+                Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+                IsActive = request.IsActive,
+                CreatedUtc = existing?.CreatedUtc ?? now,
+                UpdatedUtc = now
+            },
+            ct);
+
+        return Ok(new
+        {
+            Message = "Tenant guardado correctamente.",
+            Id = id
+        });
+    }
+
+    [HttpGet("tenant-domains")]
+    public async Task<IActionResult> GetTenantDomains([FromQuery] string tenantKey, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(tenantKey))
+            return BadRequest(new { Error = "El parámetro tenantKey es requerido." });
+
+        var mappings = await tenantDomainStore.GetAllByTenantAsync(tenantKey.Trim(), ct);
+        return Ok(mappings);
+    }
+
+    [HttpPost("tenant-domains")]
+    public async Task<IActionResult> UpsertTenantDomain([FromBody] TenantDomainUpsertRequest request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { Error = "Body inválido." });
+
+        if (string.IsNullOrWhiteSpace(request.TenantKey))
+            return BadRequest(new { Error = "TenantKey es requerido." });
+
+        if (string.IsNullOrWhiteSpace(request.Domain))
+            return BadRequest(new { Error = "Domain es requerido." });
+
+        if (string.IsNullOrWhiteSpace(request.ConnectionName))
+            return BadRequest(new { Error = "ConnectionName es requerido." });
+
+        var tenant = await tenantStore.GetByKeyAsync(request.TenantKey.Trim(), ct);
+        if (tenant is null)
+            return NotFound(new { Error = "El Tenant asociado no existe." });
+
+        var now = DateTime.UtcNow.ToString("o");
+        var existing = await tenantDomainStore.GetByTenantAndDomainAsync(tenant.TenantKey, request.Domain.Trim(), ct);
+
+        var id = await tenantDomainStore.UpsertAsync(
+            new TenantDomain
+            {
+                Id = existing?.Id ?? request.Id,
+                TenantId = tenant.Id,
+                Domain = request.Domain.Trim(),
+                ConnectionName = request.ConnectionName.Trim(),
+                SystemProfileKey = string.IsNullOrWhiteSpace(request.SystemProfileKey) ? null : request.SystemProfileKey.Trim(),
+                IsDefault = request.IsDefault,
+                IsActive = request.IsActive,
+                CreatedUtc = existing?.CreatedUtc ?? now,
+                UpdatedUtc = now
+            },
+            ct);
+
+        return Ok(new
+        {
+            Message = "TenantDomain guardado correctamente.",
+            Id = id
+        });
+    }
+
+    [HttpGet("domain-pack/export")]
+    public async Task<IActionResult> ExportDomainPack([FromQuery] string tenantKey, [FromQuery] string domain, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(tenantKey))
+            return BadRequest(new { Error = "El parámetro tenantKey es requerido." });
+
+        if (string.IsNullOrWhiteSpace(domain))
+            return BadRequest(new { Error = "El parámetro domain es requerido." });
+
+        var normalizedTenantKey = tenantKey.Trim();
+        var normalizedDomain = domain.Trim();
+        var tenant = await tenantStore.GetByKeyAsync(normalizedTenantKey, ct);
+        if (tenant is null)
+            return NotFound(new { Error = "El tenant no existe." });
+
+        var mapping = await tenantDomainStore.GetByTenantAndDomainAsync(normalizedTenantKey, normalizedDomain, ct);
+        if (mapping is null)
+            return NotFound(new { Error = "No existe un mapping TenantDomain para ese tenant y domain." });
+
+        var profile = await GetActiveSystemConfigProfileAsync(ct);
+        if (profile is null)
+            return NotFound(new { Error = "No hay perfil activo de SystemConfig." });
+
+        var configEntries = (await systemConfigStore.GetEntriesAsync(profile.Id, ct))
+            .Where(x => ShouldIncludeInDomainPack(x.Section, x.Key))
+            .Select(x => new DomainPackSystemConfigEntryDto(
+                x.Section,
+                x.Key,
+                x.Value,
+                x.ValueType,
+                x.IsEditableInUi,
+                x.ValidationRule,
+                x.Description))
+            .ToList();
+
+        var allowedObjects = (await allowedObjectStore.GetAllObjectsAsync(normalizedDomain, ct))
+            .Select(x => new DomainPackAllowedObjectDto(
+                x.SchemaName,
+                x.ObjectName,
+                x.ObjectType,
+                x.IsActive,
+                x.Notes))
+            .ToList();
+
+        var businessRules = (await businessRuleStore.GetAllRulesAsync(sqliteOptions.DbPath, normalizedDomain, ct))
+            .Select(x => new DomainPackBusinessRuleDto(
+                x.RuleKey,
+                x.RuleText,
+                x.Priority,
+                x.IsActive))
+            .ToList();
+
+        var semanticHints = (await semanticHintStore.GetAllHintsAsync(sqliteOptions.DbPath, normalizedDomain, ct))
+            .Select(x => new DomainPackSemanticHintDto(
+                x.HintKey,
+                x.HintType,
+                x.DisplayName,
+                x.ObjectName,
+                x.ColumnName,
+                x.HintText,
+                x.Priority,
+                x.IsActive))
+            .ToList();
+
+        var patterns = await queryPatternStore.GetAllAsync(normalizedDomain, ct);
+        var patternDtos = new List<DomainPackQueryPatternDto>(patterns.Count);
+        foreach (var pattern in patterns)
+        {
+            var terms = await queryPatternTermStore.GetAllByPatternIdAsync(pattern.Id, ct);
+            patternDtos.Add(new DomainPackQueryPatternDto(
+                pattern.PatternKey,
+                pattern.IntentName,
+                pattern.Description,
+                pattern.SqlTemplate,
+                pattern.DefaultTopN,
+                pattern.MetricKey,
+                pattern.DimensionKey,
+                pattern.DefaultTimeScopeKey,
+                pattern.Priority,
+                pattern.IsActive,
+                terms.Select(term => new DomainPackQueryPatternTermDto(
+                    term.Term,
+                    term.TermGroup,
+                    term.MatchMode,
+                    term.IsRequired,
+                    term.IsActive)).ToList()));
+        }
+
+        var trainingExamples = (await trainingStore.GetAllTrainingExamplesAsync(sqliteOptions.DbPath, ct))
+            .Where(x => string.Equals(x.Domain, normalizedDomain, StringComparison.OrdinalIgnoreCase))
+            .Select(x => new DomainPackTrainingExampleDto(
+                x.Question,
+                x.Sql,
+                x.IntentName,
+                x.IsVerified,
+                x.Priority))
+            .ToList();
+
+        var pack = new DomainPackDto(
+            Version: "1.0",
+            ExportedUtc: DateTime.UtcNow.ToString("o"),
+            TenantKey: tenant.TenantKey,
+            TenantDisplayName: tenant.DisplayName,
+            TenantDescription: tenant.Description,
+            Domain: normalizedDomain,
+            ConnectionName: mapping.ConnectionName,
+            SystemProfileKey: mapping.SystemProfileKey,
+            SystemConfigEntries: configEntries,
+            AllowedObjects: allowedObjects,
+            BusinessRules: businessRules,
+            SemanticHints: semanticHints,
+            QueryPatterns: patternDtos,
+            TrainingExamples: trainingExamples);
+
+        return Ok(pack);
+    }
+
+    [HttpPost("domain-pack/import")]
+    public async Task<IActionResult> ImportDomainPack([FromBody] DomainPackDto pack, CancellationToken ct)
+    {
+        if (pack is null)
+            return BadRequest(new { Error = "Body inválido." });
+
+        if (string.IsNullOrWhiteSpace(pack.TenantKey))
+            return BadRequest(new { Error = "TenantKey es requerido en el pack." });
+
+        if (string.IsNullOrWhiteSpace(pack.TenantDisplayName))
+            return BadRequest(new { Error = "TenantDisplayName es requerido en el pack." });
+
+        if (string.IsNullOrWhiteSpace(pack.Domain))
+            return BadRequest(new { Error = "Domain es requerido en el pack." });
+
+        if (string.IsNullOrWhiteSpace(pack.ConnectionName))
+            return BadRequest(new { Error = "ConnectionName es requerido en el pack." });
+
+        var normalizedTenantKey = pack.TenantKey.Trim();
+        var normalizedDomain = pack.Domain.Trim();
+        var normalizedConnectionName = pack.ConnectionName.Trim();
+        var now = DateTime.UtcNow.ToString("o");
+
+        var existingTenant = await tenantStore.GetByKeyAsync(normalizedTenantKey, ct);
+        var tenantId = await tenantStore.UpsertAsync(
+            new Tenant
+            {
+                Id = existingTenant?.Id ?? 0,
+                TenantKey = normalizedTenantKey,
+                DisplayName = pack.TenantDisplayName.Trim(),
+                Description = string.IsNullOrWhiteSpace(pack.TenantDescription) ? null : pack.TenantDescription.Trim(),
+                IsActive = true,
+                CreatedUtc = existingTenant?.CreatedUtc ?? now,
+                UpdatedUtc = now
+            },
+            ct);
+
+        await tenantDomainStore.UpsertAsync(
+            new TenantDomain
+            {
+                Id = 0,
+                TenantId = tenantId,
+                Domain = normalizedDomain,
+                ConnectionName = normalizedConnectionName,
+                SystemProfileKey = string.IsNullOrWhiteSpace(pack.SystemProfileKey) ? null : pack.SystemProfileKey.Trim(),
+                IsDefault = true,
+                IsActive = true,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            },
+            ct);
+
+        var profile = await GetActiveSystemConfigProfileAsync(ct);
+        if (profile is null)
+            return NotFound(new { Error = "No hay perfil activo de SystemConfig." });
+
+        foreach (var entry in pack.SystemConfigEntries ?? Array.Empty<DomainPackSystemConfigEntryDto>())
+        {
+            if (string.IsNullOrWhiteSpace(entry.Section) || string.IsNullOrWhiteSpace(entry.Key) || string.IsNullOrWhiteSpace(entry.ValueType))
+                continue;
+
+            var section = entry.Section.Trim();
+            var key = entry.Key.Trim();
+            var existing = await systemConfigStore.GetEntryAsync(profile.Id, section, key, ct);
+
+            await systemConfigStore.UpsertEntryAsync(
+                new SystemConfigEntry
+                {
+                    Id = existing?.Id ?? 0,
+                    ProfileId = profile.Id,
+                    Section = section,
+                    Key = key,
+                    Value = entry.Value,
+                    ValueType = entry.ValueType.Trim(),
+                    IsSecret = false,
+                    SecretRef = null,
+                    IsEditableInUi = entry.IsEditableInUi,
+                    ValidationRule = string.IsNullOrWhiteSpace(entry.ValidationRule) ? null : entry.ValidationRule.Trim(),
+                    Description = string.IsNullOrWhiteSpace(entry.Description) ? null : entry.Description.Trim(),
+                    CreatedUtc = existing?.CreatedUtc ?? now,
+                    UpdatedUtc = now
+                },
+                ct);
+        }
+
+        foreach (var item in pack.AllowedObjects ?? Array.Empty<DomainPackAllowedObjectDto>())
+        {
+            if (string.IsNullOrWhiteSpace(item.SchemaName) || string.IsNullOrWhiteSpace(item.ObjectName))
+                continue;
+
+            await allowedObjectStore.UpsertAsync(
+                new AllowedObject
+                {
+                    Domain = normalizedDomain,
+                    SchemaName = item.SchemaName.Trim(),
+                    ObjectName = item.ObjectName.Trim(),
+                    ObjectType = string.IsNullOrWhiteSpace(item.ObjectType) ? string.Empty : item.ObjectType.Trim(),
+                    IsActive = item.IsActive,
+                    Notes = string.IsNullOrWhiteSpace(item.Notes) ? null : item.Notes.Trim()
+                },
+                ct);
+        }
+
+        foreach (var rule in pack.BusinessRules ?? Array.Empty<DomainPackBusinessRuleDto>())
+        {
+            if (string.IsNullOrWhiteSpace(rule.RuleKey) || string.IsNullOrWhiteSpace(rule.RuleText))
+                continue;
+
+            await businessRuleStore.UpsertAsync(
+                sqliteOptions.DbPath,
+                new BusinessRule
+                {
+                    Domain = normalizedDomain,
+                    RuleKey = rule.RuleKey.Trim(),
+                    RuleText = rule.RuleText.Trim(),
+                    Priority = rule.Priority,
+                    IsActive = rule.IsActive
+                },
+                ct);
+        }
+
+        foreach (var hint in pack.SemanticHints ?? Array.Empty<DomainPackSemanticHintDto>())
+        {
+            if (string.IsNullOrWhiteSpace(hint.HintKey) || string.IsNullOrWhiteSpace(hint.HintType) || string.IsNullOrWhiteSpace(hint.HintText))
+                continue;
+
+            await semanticHintStore.UpsertAsync(
+                sqliteOptions.DbPath,
+                new SemanticHint
+                {
+                    Domain = normalizedDomain,
+                    HintKey = hint.HintKey.Trim(),
+                    HintType = hint.HintType.Trim(),
+                    DisplayName = string.IsNullOrWhiteSpace(hint.DisplayName) ? null : hint.DisplayName.Trim(),
+                    ObjectName = string.IsNullOrWhiteSpace(hint.ObjectName) ? null : hint.ObjectName.Trim(),
+                    ColumnName = string.IsNullOrWhiteSpace(hint.ColumnName) ? null : hint.ColumnName.Trim(),
+                    HintText = hint.HintText.Trim(),
+                    Priority = hint.Priority,
+                    IsActive = hint.IsActive
+                },
+                ct);
+        }
+
+        var existingPatterns = await queryPatternStore.GetAllAsync(normalizedDomain, ct);
+        foreach (var pattern in pack.QueryPatterns ?? Array.Empty<DomainPackQueryPatternDto>())
+        {
+            if (string.IsNullOrWhiteSpace(pattern.PatternKey) || string.IsNullOrWhiteSpace(pattern.IntentName) || string.IsNullOrWhiteSpace(pattern.SqlTemplate))
+                continue;
+
+            var patternKey = pattern.PatternKey.Trim();
+            var existingPattern = existingPatterns.FirstOrDefault(x =>
+                string.Equals(x.PatternKey, patternKey, StringComparison.OrdinalIgnoreCase));
+
+            var patternId = await queryPatternStore.UpsertAsync(
+                new QueryPattern
+                {
+                    Id = existingPattern?.Id ?? 0,
+                    Domain = normalizedDomain,
+                    PatternKey = patternKey,
+                    IntentName = pattern.IntentName.Trim(),
+                    Description = string.IsNullOrWhiteSpace(pattern.Description) ? null : pattern.Description.Trim(),
+                    SqlTemplate = pattern.SqlTemplate,
+                    DefaultTopN = pattern.DefaultTopN,
+                    MetricKey = string.IsNullOrWhiteSpace(pattern.MetricKey) ? null : pattern.MetricKey.Trim(),
+                    DimensionKey = string.IsNullOrWhiteSpace(pattern.DimensionKey) ? null : pattern.DimensionKey.Trim(),
+                    DefaultTimeScopeKey = string.IsNullOrWhiteSpace(pattern.DefaultTimeScopeKey) ? null : pattern.DefaultTimeScopeKey.Trim(),
+                    Priority = pattern.Priority,
+                    IsActive = pattern.IsActive,
+                    CreatedUtc = existingPattern?.CreatedUtc ?? DateTime.UtcNow,
+                    UpdatedUtc = DateTime.UtcNow
+                },
+                ct);
+
+            var existingTerms = await queryPatternTermStore.GetAllByPatternIdAsync(patternId, ct);
+            foreach (var term in pattern.Terms ?? Array.Empty<DomainPackQueryPatternTermDto>())
+            {
+                if (string.IsNullOrWhiteSpace(term.Term) || string.IsNullOrWhiteSpace(term.TermGroup) || string.IsNullOrWhiteSpace(term.MatchMode))
+                    continue;
+
+                var existingTerm = existingTerms.FirstOrDefault(x =>
+                    string.Equals(x.Term, term.Term.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(x.TermGroup, term.TermGroup.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(x.MatchMode, term.MatchMode.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                    x.IsRequired == term.IsRequired);
+
+                await queryPatternTermStore.UpsertAsync(
+                    new QueryPatternTerm
+                    {
+                        Id = existingTerm?.Id ?? 0,
+                        PatternId = patternId,
+                        Term = term.Term.Trim(),
+                        TermGroup = term.TermGroup.Trim(),
+                        MatchMode = term.MatchMode.Trim(),
+                        IsRequired = term.IsRequired,
+                        IsActive = term.IsActive,
+                        CreatedUtc = existingTerm?.CreatedUtc ?? DateTime.UtcNow
+                    },
+                    ct);
+            }
+        }
+
+        foreach (var example in pack.TrainingExamples ?? Array.Empty<DomainPackTrainingExampleDto>())
+        {
+            if (string.IsNullOrWhiteSpace(example.Question) || string.IsNullOrWhiteSpace(example.Sql))
+                continue;
+
+            await trainingStore.UpsertAsync(
+                new TrainingExampleUpsert(
+                    example.Question.Trim(),
+                    example.Sql,
+                    normalizedDomain,
+                    string.IsNullOrWhiteSpace(example.IntentName) ? null : example.IntentName.Trim(),
+                    example.IsVerified,
+                    example.Priority),
+                ct);
+        }
+
+        return Ok(new
+        {
+            Message = "Domain pack importado correctamente.",
+            TenantKey = normalizedTenantKey,
+            Domain = normalizedDomain,
+            ConnectionName = normalizedConnectionName,
+            Imported = new
+            {
+                SystemConfigEntries = pack.SystemConfigEntries?.Count ?? 0,
+                AllowedObjects = pack.AllowedObjects?.Count ?? 0,
+                BusinessRules = pack.BusinessRules?.Count ?? 0,
+                SemanticHints = pack.SemanticHints?.Count ?? 0,
+                QueryPatterns = pack.QueryPatterns?.Count ?? 0,
+                TrainingExamples = pack.TrainingExamples?.Count ?? 0
+            }
         });
     }
 
@@ -827,5 +1581,190 @@ public class AdminController(
 
         return await systemConfigStore.GetActiveProfileAsync(environmentName, ct)
             ?? await systemConfigStore.GetProfileAsync(environmentName, defaultProfileKey, ct);
+    }
+
+    private async Task UpsertSystemConfigValueAsync(
+        int profileId,
+        string section,
+        string key,
+        string value,
+        string valueType,
+        string description,
+        string now,
+        CancellationToken ct)
+    {
+        var existing = await systemConfigStore.GetEntryAsync(profileId, section, key, ct);
+
+        await systemConfigStore.UpsertEntryAsync(
+            new SystemConfigEntry
+            {
+                Id = existing?.Id ?? 0,
+                ProfileId = profileId,
+                Section = section,
+                Key = key,
+                Value = value,
+                ValueType = valueType,
+                IsSecret = false,
+                SecretRef = null,
+                IsEditableInUi = true,
+                ValidationRule = null,
+                Description = description,
+                CreatedUtc = existing?.CreatedUtc ?? now,
+                UpdatedUtc = now
+            },
+            ct);
+    }
+
+    private static string InferObjectType(TableSchema schema)
+    {
+        return schema.PrimaryKeyColumns.Count > 0 ? "TABLE" : "VIEW";
+    }
+
+    private static bool ShouldIncludeInDomainPack(string section, string key)
+    {
+        if (string.IsNullOrWhiteSpace(section) || string.IsNullOrWhiteSpace(key))
+            return false;
+
+        if (section.Equals("Prompting", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (section.Equals("Retrieval", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (section.Equals("UiDefaults", StringComparison.OrdinalIgnoreCase))
+            return key.Equals("AdminDomain", StringComparison.OrdinalIgnoreCase)
+                || key.Equals("AdminTenant", StringComparison.OrdinalIgnoreCase);
+
+        if (section.Equals("TenantDefaults", StringComparison.OrdinalIgnoreCase))
+            return key.Equals("TenantKey", StringComparison.OrdinalIgnoreCase)
+                || key.Equals("ConnectionName", StringComparison.OrdinalIgnoreCase);
+
+        return false;
+    }
+
+    private async Task<object> BuildOnboardingStatusAsync(string domain, string connectionName, CancellationToken ct)
+    {
+        var allowedObjects = await allowedObjectStore.GetActiveObjectsAsync(domain, ct);
+        var semanticHints = await semanticHintStore.GetAllHintsAsync(sqliteOptions.DbPath, domain, ct);
+        var schemaDocs = await schemaStore.GetAllSchemaDocsAsync(sqliteOptions.DbPath, ct);
+
+        var allowedLookup = allowedObjects
+            .Select(x => $"{x.SchemaName}.{x.ObjectName}".ToLowerInvariant())
+            .ToHashSet();
+
+        var matchingSchemaDocs = schemaDocs.Count(doc =>
+            allowedLookup.Contains($"{doc.Schema}.{doc.Table}".ToLowerInvariant()));
+
+        return new
+        {
+            Domain = domain,
+            ConnectionName = connectionName,
+            AllowedObjectsCount = allowedObjects.Count,
+            SchemaDocsCount = matchingSchemaDocs,
+            SemanticHintsCount = semanticHints.Count(x => x.IsActive),
+            Health = new
+            {
+                HasAllowedObjects = allowedObjects.Count > 0,
+                HasSchemaDocs = matchingSchemaDocs > 0,
+                HasSemanticHints = semanticHints.Any(x => x.IsActive)
+            }
+        };
+    }
+
+    private async Task<int> SeedSemanticHintsFromSchemaAsync(
+        string domain,
+        IReadOnlyList<TableSchema> schema,
+        IReadOnlySet<string> allowedLookup,
+        CancellationToken ct)
+    {
+        var seeded = 0;
+
+        foreach (var table in schema)
+        {
+            var objectKey = $"{table.Schema}.{table.Name}".ToLowerInvariant();
+            if (!allowedLookup.Contains(objectKey))
+                continue;
+
+            seeded += await UpsertSemanticHintSeedAsync(
+                new SemanticHint
+                {
+                    Domain = domain,
+                    HintKey = $"entity:{table.Schema}.{table.Name}".ToLowerInvariant(),
+                    HintType = "entity",
+                    DisplayName = table.Name,
+                    ObjectName = $"{table.Schema}.{table.Name}",
+                    ColumnName = null,
+                    HintText = $"Entidad principal disponible para consultas sobre {table.Schema}.{table.Name}.",
+                    Priority = 50,
+                    IsActive = true
+                },
+                ct);
+
+            foreach (var column in table.Columns)
+            {
+                var hintType = InferHintType(column);
+                if (hintType is null)
+                    continue;
+
+                seeded += await UpsertSemanticHintSeedAsync(
+                    new SemanticHint
+                    {
+                        Domain = domain,
+                        HintKey = $"{hintType}:{table.Schema}.{table.Name}.{column.Name}".ToLowerInvariant(),
+                        HintType = hintType,
+                        DisplayName = column.Name,
+                        ObjectName = $"{table.Schema}.{table.Name}",
+                        ColumnName = column.Name,
+                        HintText = BuildHintText(hintType, table, column),
+                        Priority = hintType == "time_field" ? 60 : hintType == "measure" ? 70 : 80,
+                        IsActive = true
+                    },
+                    ct);
+            }
+        }
+
+        return seeded;
+    }
+
+    private async Task<int> UpsertSemanticHintSeedAsync(SemanticHint hint, CancellationToken ct)
+    {
+        var id = await semanticHintStore.UpsertAsync(sqliteOptions.DbPath, hint, ct);
+        return id > 0 ? 1 : 0;
+    }
+
+    private static string? InferHintType(ColumnSchema column)
+    {
+        var normalizedName = column.Name.Trim().ToLowerInvariant();
+        var normalizedType = column.SqlType.Trim().ToLowerInvariant();
+
+        if (normalizedName.Contains("date") || normalizedName.Contains("time") || normalizedName.Contains("yearmonth") || normalizedName.Contains("week") || normalizedName.Contains("shift"))
+            return "time_field";
+
+        var isNumeric =
+            normalizedType.Contains("int") ||
+            normalizedType.Contains("decimal") ||
+            normalizedType.Contains("numeric") ||
+            normalizedType.Contains("money") ||
+            normalizedType.Contains("float") ||
+            normalizedType.Contains("real");
+
+        if (isNumeric && (normalizedName.Contains("qty") || normalizedName.Contains("count") || normalizedName.Contains("amount") || normalizedName.Contains("total") || normalizedName.Contains("cost") || normalizedName.Contains("price") || normalizedName.Contains("value") || normalizedName.Contains("minutes") || normalizedName.Contains("hours")))
+            return "measure";
+
+        if (normalizedName.EndsWith("name") || normalizedName.EndsWith("number") || normalizedName.EndsWith("code") || normalizedName.Contains("type") || normalizedName.Contains("status") || normalizedName.Contains("category"))
+            return "dimension";
+
+        return null;
+    }
+
+    private static string BuildHintText(string hintType, TableSchema table, ColumnSchema column)
+    {
+        return hintType switch
+        {
+            "time_field" => $"Campo temporal sugerido para filtros o agrupaciones: {table.Schema}.{table.Name}.{column.Name}.",
+            "measure" => $"Métrica cuantitativa sugerida para agregaciones: {table.Schema}.{table.Name}.{column.Name}.",
+            "dimension" => $"Dimensión o etiqueta descriptiva sugerida para segmentar resultados: {table.Schema}.{table.Name}.{column.Name}.",
+            _ => $"Pista semántica generada para {table.Schema}.{table.Name}.{column.Name}."
+        };
     }
 }

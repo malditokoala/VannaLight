@@ -14,8 +14,7 @@ public class InferenceWorker(
     IServiceScopeFactory scopeFactory,
     IHubContext<AssistantHub> hubContext,
     ILogger<InferenceWorker> logger,
-    ISystemConfigProvider systemConfigProvider,
-    IConfiguration configuration,
+    IOperationalConnectionResolver operationalConnectionResolver,
     SqliteOptions sqliteOptions,
     RuntimeDbOptions runtimeDbOptions) : BackgroundService
 {
@@ -28,9 +27,6 @@ public class InferenceWorker(
         var memoryDbPath = sqliteOptions.DbPath;
         var runtimeDbPath = runtimeDbOptions.DbPath;
 
-        var sqlServerConnString = configuration.GetConnectionString("OperationalDb")
-            ?? throw new InvalidOperationException("Falta la cadena de conexión OperationalDb.");
-
         while (!ct.IsCancellationRequested)
         {
             try
@@ -41,7 +37,11 @@ public class InferenceWorker(
                 string connectionId = workItem.ConnectionId?.ToString() ?? string.Empty;
                 string mode = workItem.Mode.ToString();
                 string question = workItem.Question.ToString();
-                var domain = (await systemConfigProvider.GetRequiredValueAsync("Retrieval", "Domain", ct)).Trim();
+                var domain = workItem.Domain.Trim();
+                var connectionName = string.IsNullOrWhiteSpace(workItem.ConnectionName)
+                    ? "OperationalDb"
+                    : workItem.ConnectionName.Trim();
+                var sqlServerConnString = await operationalConnectionResolver.ResolveConnectionStringAsync(connectionName, ct);
 
                 using var scope = scopeFactory.CreateScope();
                 var jobStore = scope.ServiceProvider.GetRequiredService<IJobStore>();

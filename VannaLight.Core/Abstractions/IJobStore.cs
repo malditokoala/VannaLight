@@ -8,7 +8,7 @@ namespace VannaLight.Core.Abstractions;
 public interface IJobStore
 {
     // Se añade el parámetro 'mode' al crear el Job
-    Task<Guid> CreateJobAsync(string userId, string role, string question, string mode = "Data", CancellationToken ct = default);
+    Task<Guid> CreateJobAsync(string userId, string role, string question, string mode = "Data", AskExecutionContext? executionContext = null, CancellationToken ct = default);
     Task UpdateStatusAsync(Guid jobId, string status, CancellationToken ct = default);
     Task SetResultAsync(Guid jobId, string resultJson, CancellationToken ct = default);
     Task SetErrorAsync(Guid jobId, string errorText, string status = "Failed", CancellationToken ct = default);

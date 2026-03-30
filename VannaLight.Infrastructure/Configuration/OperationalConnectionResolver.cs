@@ -26,14 +26,22 @@ public class OperationalConnectionResolver : IOperationalConnectionResolver
     }
 
     public async Task<string> ResolveOperationalConnectionStringAsync(CancellationToken ct = default)
+        => await ResolveConnectionStringAsync("OperationalDb", ct);
+
+    public async Task<string> ResolveConnectionStringAsync(string connectionName, CancellationToken ct = default)
     {
-        var profile = await _connectionProfileStore.GetActiveAsync(_environmentName, "OperationalDb", ct)
-            ?? await _connectionProfileStore.GetAsync(_environmentName, _defaultProfileKey, "OperationalDb", ct);
+        if (string.IsNullOrWhiteSpace(connectionName))
+            throw new InvalidOperationException("ConnectionName is required.");
+
+        var normalizedConnectionName = connectionName.Trim();
+
+        var profile = await _connectionProfileStore.GetActiveAsync(_environmentName, normalizedConnectionName, ct)
+            ?? await _connectionProfileStore.GetAsync(_environmentName, _defaultProfileKey, normalizedConnectionName, ct);
         if (profile == null)
         {
-            var fallback = _configuration.GetConnectionString("OperationalDb");
+            var fallback = _configuration.GetConnectionString(normalizedConnectionName);
             if (string.IsNullOrWhiteSpace(fallback))
-                throw new InvalidOperationException("OperationalDb connection not configured.");
+                throw new InvalidOperationException($"{normalizedConnectionName} connection not configured.");
             return fallback;
         }
 

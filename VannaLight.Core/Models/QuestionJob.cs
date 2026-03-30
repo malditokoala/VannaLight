@@ -9,6 +9,9 @@ public class QuestionJob
     public Guid JobId { get; set; }
     public string UserId { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;
+    public string TenantKey { get; set; } = "default";
+    public string Domain { get; set; } = string.Empty;
+    public string ConnectionName { get; set; } = "OperationalDb";
     public string Question { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
 

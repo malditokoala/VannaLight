@@ -94,9 +94,12 @@ builder.Services.AddSingleton(settings);
 // ---------------------------------------------------------
 builder.Services.AddSingleton<ISystemConfigStore>(_ => new SqliteSystemConfigStore(sqlitePath));
 builder.Services.AddSingleton<IConnectionProfileStore>(_ => new SqliteConnectionProfileStore(sqlitePath));
+builder.Services.AddSingleton<ITenantStore>(_ => new SqliteTenantStore(sqlitePath));
+builder.Services.AddSingleton<ITenantDomainStore>(_ => new SqliteTenantDomainStore(sqlitePath));
 builder.Services.AddSingleton<ISystemConfigProvider, SystemConfigProvider>();
 builder.Services.AddSingleton<ISecretResolver, CompositeSecretResolver>();
 builder.Services.AddSingleton<IOperationalConnectionResolver, OperationalConnectionResolver>();
+builder.Services.AddSingleton<IExecutionContextResolver, ExecutionContextResolver>();
 
 // ---------------------------------------------------------
 // 5. IA Y CONFIGURACION DE INFERENCIA
@@ -253,6 +256,31 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
             UpdatedUtc TEXT NOT NULL,
             UNIQUE(EnvironmentName, ProfileKey, ConnectionName)
         );
+
+        CREATE TABLE IF NOT EXISTS Tenants (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            TenantKey TEXT NOT NULL,
+            DisplayName TEXT NOT NULL,
+            Description TEXT NULL,
+            IsActive INTEGER NOT NULL DEFAULT 1,
+            CreatedUtc TEXT NOT NULL,
+            UpdatedUtc TEXT NOT NULL,
+            UNIQUE(TenantKey)
+        );
+
+        CREATE TABLE IF NOT EXISTS TenantDomains (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            TenantId INTEGER NOT NULL,
+            Domain TEXT NOT NULL,
+            ConnectionName TEXT NOT NULL,
+            SystemProfileKey TEXT NULL,
+            IsDefault INTEGER NOT NULL DEFAULT 0,
+            IsActive INTEGER NOT NULL DEFAULT 1,
+            CreatedUtc TEXT NOT NULL,
+            UpdatedUtc TEXT NOT NULL,
+            FOREIGN KEY(TenantId) REFERENCES Tenants(Id),
+            UNIQUE(TenantId, Domain)
+        );
     ";
 
     await connection.ExecuteAsync(sql);
@@ -320,7 +348,9 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
         ("Retrieval", "MinExampleScore", "2.5", "double", "Score mínimo para considerar un training example relevante."),
         ("Retrieval", "TopSchemaDocs", configuration["Settings:Retrieval:TopSchemaDocs"] ?? "6", "int", "Cantidad de schema docs relevantes a incluir."),
         ("Retrieval", "FallbackSchemaDocs", configuration["Settings:Retrieval:FallbackSchemaDocs"] ?? "15", "int", "Cantidad de schema docs de fallback cuando no hay match fuerte."),
-        ("Retrieval", "Domain", configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot", "string", "Dominio operativo para retrieval y validación."),
+        ("Retrieval", "Domain", configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot", "string", "Dominio operativo para retrieval y validación."),
+        ("TenantDefaults", "TenantKey", "default", "string", "Tenant por defecto del runtime y onboarding inicial."),
+        ("TenantDefaults", "ConnectionName", "OperationalDb", "string", "Nombre de conexión por defecto para runtime y onboarding inicial."),
         ("Prompting", "MaxPromptChars", "9000", "int", "Presupuesto total del prompt SQL en caracteres."),
         ("Prompting", "MaxRulesChars", "1800", "int", "Presupuesto máximo para reglas de negocio en el prompt SQL."),
         ("Prompting", "MaxSemanticHintsChars", "1400", "int", "Presupuesto máximo para pistas semánticas del dominio en el prompt SQL."),
@@ -336,12 +366,13 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
         ("Prompting", "SqlSyntaxRules", "1. ESTA ESTRICTAMENTE PROHIBIDO USAR 'LIMIT'. Para limitar resultados en SQL Server, usa SIEMPRE 'SELECT TOP (N)'.\n2. Usa EXACTAMENTE los nombres de columnas que aparezcan en los esquemas recuperados y ejemplos validos.\n3. NUNCA compares un valor de texto contra una columna ID.\n4. Si necesitas cruzar objetos SQL permitidos, prefiere joins por IDs y OperationDate.\n5. Devuelve SOLO el SQL, sin comentarios y sin bloques markdown.", "string", "Bloque editable de reglas críticas de sintaxis T-SQL."),
         ("Prompting", "TimeInterpretationRules", "- Hoy: CAST(OperationDate AS date) = CAST(GETDATE() AS date)\n- Ayer: CAST(OperationDate AS date) = DATEADD(DAY, -1, CAST(GETDATE() AS date))\n- Mes actual: YearMonth = CONVERT(char(7), GETDATE(), 120)\n- Semana actual: YearNumber = YEAR(GETDATE()) AND WeekOfYear = DATEPART(ISO_WEEK, GETDATE())\n- Cuando el usuario diga 'turno actual' o 'del turno', filtra explicitamente por un unico ShiftId calculado como el mas reciente del dia dentro de la vista consultada.", "string", "Bloque editable de interpretación temporal para el prompt SQL."),
         ("Prompting", "BusinessRulesHeader", "REGLAS DE NEGOCIO IMPORTANTES:", "string", "Encabezado para el bloque de business rules del prompt SQL."),
-        ("Prompting", "SemanticHintsHeader", "PISTAS SEMANTICAS DEL DOMINIO:", "string", "Encabezado para el bloque de pistas sem�nticas del prompt SQL."),
+        ("Prompting", "SemanticHintsHeader", "PISTAS SEMANTICAS DEL DOMINIO:", "string", "Encabezado para el bloque de pistas sem�nticas del prompt SQL."),
         ("Prompting", "AllowedObjectsHeader", "OBJETOS SQL PERMITIDOS:", "string", "Encabezado para el bloque de objetos permitidos del prompt SQL."),
         ("Prompting", "SchemasHeader", "ESQUEMAS RELEVANTES RECUPERADOS:", "string", "Encabezado para el bloque de schema docs del prompt SQL."),
         ("Prompting", "ExamplesHeader", "EJEMPLOS RELEVANTES:", "string", "Encabezado para el bloque de examples del prompt SQL."),
         ("Prompting", "QuestionHeader", "Pregunta actual:", "string", "Encabezado para la pregunta del usuario en el prompt SQL."),
-        ("UiDefaults", "AdminDomain", configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot", "string", "Dominio por defecto para pantallas administrativas.")
+        ("UiDefaults", "AdminDomain", configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot", "string", "Dominio por defecto para pantallas administrativas."),
+        ("UiDefaults", "AdminTenant", "default", "string", "Tenant por defecto para pantallas administrativas.")
     ];
 
     const string seedEntrySql = @"
@@ -384,6 +415,65 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
             });
     }
 
+    const string seedTenantSql = @"
+        INSERT INTO Tenants
+            (TenantKey, DisplayName, Description, IsActive, CreatedUtc, UpdatedUtc)
+        SELECT
+            @TenantKey,
+            @DisplayName,
+            @Description,
+            1,
+            @CreatedUtc,
+            @CreatedUtc
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM Tenants
+            WHERE TenantKey = @TenantKey
+        );
+
+        SELECT Id
+        FROM Tenants
+        WHERE TenantKey = @TenantKey;";
+
+    var defaultTenantId = await connection.ExecuteScalarAsync<int>(
+        seedTenantSql,
+        new
+        {
+            TenantKey = "default",
+            DisplayName = "Default",
+            Description = "Tenant por defecto para compatibilidad transicional.",
+            CreatedUtc = createdUtc
+        });
+
+    const string seedTenantDomainSql = @"
+        INSERT INTO TenantDomains
+            (TenantId, Domain, ConnectionName, SystemProfileKey, IsDefault, IsActive, CreatedUtc, UpdatedUtc)
+        SELECT
+            @TenantId,
+            @Domain,
+            @ConnectionName,
+            @SystemProfileKey,
+            1,
+            1,
+            @CreatedUtc,
+            @CreatedUtc
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM TenantDomains
+            WHERE TenantId = @TenantId
+              AND Domain = @Domain
+        );";
+
+    await connection.ExecuteAsync(
+        seedTenantDomainSql,
+        new
+        {
+            TenantId = defaultTenantId,
+            Domain = configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot",
+            ConnectionName = "OperationalDb",
+            SystemProfileKey = defaultSystemProfile,
+            CreatedUtc = createdUtc
+        });
     Console.WriteLine($"[DB Setup] System config listo en: {sqlitePath}");
 }
 

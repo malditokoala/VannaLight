@@ -69,6 +69,15 @@
                     Hardware LLM
                 </button>
 
+                <button class="tab-btn" id="tab-onboarding" onclick="switchTab('onboarding')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3v18" />
+                        <path d="M3 12h18" />
+                        <circle cx="12" cy="12" r="9" />
+                    </svg>
+                    Onboarding
+                </button>
+
                 <button class="tab-btn" id="tab-config" onclick="switchTab('config')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 3v4" />
@@ -365,6 +374,347 @@
                                 </svg>
                                 Guardar ajustes
                             </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ══ TAB: ONBOARDING ══ -->
+            <div class="tab-content" id="pane-onboarding">
+                <div class="rag-layout">
+
+                    <div class="panel-left">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 3v18" />
+                                    <path d="M3 12h18" />
+                                    <circle cx="12" cy="12" r="9" />
+                                </svg>
+                                Workspaces
+                            </div>
+                            <span class="panel-count" id="onboardingTenantCount">—</span>
+                        </div>
+                        <div class="editor-wrap-compact">
+                            <button class="btn btn-ghost" type="button" onclick="loadOnboardingBootstrap()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+                                    <polyline points="23 4 23 10 17 10" />
+                                    <polyline points="1 20 1 14 7 14" />
+                                    <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
+                                    <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
+                                </svg>
+                                Recargar bootstrap
+                            </button>
+                        </div>
+                        <div class="history-scroll" id="onboardingTenantList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M12 3v18" />
+                                    <path d="M3 12h18" />
+                                    <circle cx="12" cy="12" r="9" />
+                                </svg>
+                                Cargando workspaces...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-right">
+                        <div class="editor-wrap">
+                            <div class="section-header">
+                                <div class="section-header-icon si-onboarding">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 3v18" />
+                                        <path d="M3 12h18" />
+                                        <circle cx="12" cy="12" r="9" />
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Wizard de Onboarding</div>
+                                    <div class="sh-sub">Paso 1 de 4 · Tenant + Domain + Connection mapping</div>
+                                </div>
+                            </div>
+
+                            <div class="onboarding-stepper">
+                                <div class="step-chip is-active" id="stepChip1">
+                                    <span class="step-index">1</span>
+                                    <span class="step-copy">Workspace</span>
+                                </div>
+                                <div class="step-chip" id="stepChip2">
+                                    <span class="step-index">2</span>
+                                    <span class="step-copy">Allowed Objects</span>
+                                </div>
+                                <div class="step-chip" id="stepChip3">
+                                    <span class="step-index">3</span>
+                                    <span class="step-copy">Inicializar</span>
+                                </div>
+                                <div class="step-chip" id="stepChip4">
+                                    <span class="step-index">4</span>
+                                    <span class="step-copy">Probar</span>
+                                </div>
+                            </div>
+
+                            <div class="onboarding-hero">
+                                <div class="hero-card">
+                                    <div class="hero-kicker">Environment</div>
+                                    <div class="hero-value" id="txtOnboardingEnvironment">—</div>
+                                    <div class="hero-sub">Entorno operativo activo</div>
+                                </div>
+                                <div class="hero-card">
+                                    <div class="hero-kicker">System Profile</div>
+                                    <div class="hero-value" id="txtOnboardingSystemProfile">—</div>
+                                    <div class="hero-sub">Perfil de configuración del wizard</div>
+                                </div>
+                                <div class="hero-card">
+                                    <div class="hero-kicker">Conexiones</div>
+                                    <div class="hero-value" id="txtOnboardingConnectionCount">0</div>
+                                    <div class="hero-sub">Connection profiles disponibles</div>
+                                </div>
+                            </div>
+
+                            <div class="subpanel onboarding-panel" id="onboardingStepPanel1">
+                                <div class="subpanel-title">Paso 1 · Definir workspace</div>
+                                <div class="form-grid-2">
+                                    <div class="field-group">
+                                        <label class="field-label">Tenant Key</label>
+                                        <input type="text" id="txtOnboardingTenantKey" class="field-input" placeholder="acme" />
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Display Name</label>
+                                        <input type="text" id="txtOnboardingDisplayName" class="field-input" placeholder="ACME" />
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Domain</label>
+                                        <input type="text" id="txtOnboardingDomain" class="field-input" placeholder="adventureworks-sales" />
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Connection Name</label>
+                                        <select id="txtOnboardingConnectionName" class="field-input"></select>
+                                    </div>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Description</label>
+                                    <textarea id="txtOnboardingDescription" class="field-input" rows="3" placeholder="Descripción opcional del tenant o workspace."></textarea>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">System Profile Key</label>
+                                    <input type="text" id="txtOnboardingSystemProfileKey" class="field-input" placeholder="default" />
+                                </div>
+                            </div>
+
+                            <div class="subpanel onboarding-panel" id="onboardingStepPanel2">
+                                <div class="subpanel-title">Mappings actuales del tenant</div>
+                                <div class="mini-scroll" id="onboardingTenantDomainList">
+                                    <div class="empty-state">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <path d="M4 6h16" />
+                                            <path d="M4 12h16" />
+                                            <path d="M4 18h16" />
+                                        </svg>
+                                        Selecciona un workspace para ver sus mappings
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="subpanel onboarding-panel" id="onboardingStepPanel2b">
+                                <div class="subpanel-title">Paso 2 · Selección sugerida de objetos SQL</div>
+                                <div class="inline-actions">
+                                    <button class="btn btn-ghost" type="button" onclick="loadOnboardingSchemaCandidates()">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+                                            <polyline points="23 4 23 10 17 10" />
+                                            <polyline points="1 20 1 14 7 14" />
+                                            <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
+                                            <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
+                                        </svg>
+                                        Descubrir schema
+                                    </button>
+                                    <button class="btn btn-ghost" type="button" onclick="setOnboardingSchemaSelection(true)">Seleccionar todo</button>
+                                    <button class="btn btn-ghost" type="button" onclick="setOnboardingSchemaSelection(false)">Limpiar</button>
+                                </div>
+                                <div class="action-meta" id="onboardingSchemaMeta">
+                                    <span class="meta-empty">Aún no se ha cargado el schema de la conexión</span>
+                                </div>
+                                <div class="mini-scroll" id="onboardingSchemaCandidateList">
+                                    <div class="empty-state">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <rect x="4" y="4" width="16" height="16" rx="2" />
+                                            <path d="M8 8h8" />
+                                            <path d="M8 12h8" />
+                                            <path d="M8 16h5" />
+                                        </svg>
+                                        Descubre el schema para seleccionar los objetos permitidos
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="subpanel onboarding-panel" id="onboardingStepPanel3">
+                                <div class="subpanel-title">Paso 3 · Inicialización del dominio</div>
+                                <div class="onboarding-health">
+                                    <div class="health-card">
+                                        <div class="hero-kicker">Allowed Objects</div>
+                                        <div class="hero-value" id="txtOnboardingAllowedCount">0</div>
+                                        <div class="hero-sub">Objetos activos del dominio</div>
+                                    </div>
+                                    <div class="health-card">
+                                        <div class="hero-kicker">Schema Docs</div>
+                                        <div class="hero-value" id="txtOnboardingSchemaDocCount">0</div>
+                                        <div class="hero-sub">Docs indexados para el dominio</div>
+                                    </div>
+                                    <div class="health-card">
+                                        <div class="hero-kicker">Semantic Hints</div>
+                                        <div class="hero-value" id="txtOnboardingHintCount">0</div>
+                                        <div class="hero-sub">Hints activos disponibles</div>
+                                    </div>
+                                </div>
+                                <div class="onboarding-status-grid">
+                                    <div class="status-tile" id="tileAllowedObjects">
+                                        <div class="status-dot"></div>
+                                        <div>
+                                            <div class="status-title">Allowed Objects</div>
+                                            <div class="status-sub">Selecciona al menos un objeto del schema</div>
+                                        </div>
+                                    </div>
+                                    <div class="status-tile" id="tileSchemaDocs">
+                                        <div class="status-dot"></div>
+                                        <div>
+                                            <div class="status-title">Schema Docs</div>
+                                            <div class="status-sub">Reindexa el schema para construir contexto</div>
+                                        </div>
+                                    </div>
+                                    <div class="status-tile" id="tileSemanticHints">
+                                        <div class="status-dot"></div>
+                                        <div>
+                                            <div class="status-title">Semantic Hints</div>
+                                            <div class="status-sub">Siembra inicial heurística del dominio</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="action-meta" id="onboardingStatusMeta">
+                                    <span class="meta-empty">Ejecuta la inicialización para dejar el dominio listo para pruebas.</span>
+                                </div>
+                            </div>
+
+                            <div class="subpanel onboarding-panel" id="onboardingStepPanel4">
+                                <div class="subpanel-title">Paso 4 · Validación guiada del dominio</div>
+                                <div class="field-group">
+                                    <label class="field-label">Preguntas sugeridas</label>
+                                    <div class="onboarding-suggestion-list" id="onboardingSuggestionList">
+                                        <span class="meta-empty">Inicializa el dominio para generar preguntas sugeridas.</span>
+                                    </div>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Pregunta de prueba</label>
+                                    <textarea id="txtOnboardingValidationQuestion" class="field-input" rows="3" placeholder="Ej. Muéstrame 5 registros de SalesOrderHeader."></textarea>
+                                    <div class="field-hint">Se ejecuta sobre el tenant, domain y connection configurados en este wizard.</div>
+                                </div>
+                                <div class="onboarding-validation-grid">
+                                    <div class="validation-card">
+                                        <div class="subpanel-title">SQL generado</div>
+                                        <pre class="validation-preview validation-preview-sql" id="txtOnboardingValidationSql">Aún no se ha ejecutado ninguna prueba.</pre>
+                                    </div>
+                                    <div class="validation-card">
+                                        <div class="subpanel-title">Resultado y estado</div>
+                                        <pre class="validation-preview" id="txtOnboardingValidationResult">Ejecuta una pregunta real para confirmar que el dominio responde correctamente.</pre>
+                                    </div>
+                                </div>
+                                <div class="action-meta" id="onboardingValidationMeta">
+                                    <span class="meta-empty">Cuando esta prueba responda bien, el dominio queda listo para uso inicial.</span>
+                                </div>
+                                <div class="rag-banner" id="onboardingValidationBanner"></div>
+                            </div>
+
+                            <div class="onboarding-section-break" aria-hidden="true">
+                                <span>Readiness final del dominio</span>
+                            </div>
+
+                            <div class="subpanel onboarding-panel" id="onboardingStepPanel5">
+                                <div class="subpanel-title">Checklist final · Readiness del dominio</div>
+                                <div class="onboarding-readiness-grid">
+                                    <div class="readiness-card" id="readinessConnectionCard">
+                                        <div class="readiness-head">
+                                            <span class="status-dot"></span>
+                                            <span class="status-title">Workspace y conexión</span>
+                                        </div>
+                                        <div class="status-sub">Tenant, domain y connection listos para ejecutar.</div>
+                                    </div>
+                                    <div class="readiness-card" id="readinessSchemaCard">
+                                        <div class="readiness-head">
+                                            <span class="status-dot"></span>
+                                            <span class="status-title">Contexto del motor</span>
+                                        </div>
+                                        <div class="status-sub">AllowedObjects, SchemaDocs y SemanticHints inicializados.</div>
+                                    </div>
+                                    <div class="readiness-card" id="readinessValidationCard">
+                                        <div class="readiness-head">
+                                            <span class="status-dot"></span>
+                                            <span class="status-title">Prueba funcional</span>
+                                        </div>
+                                        <div class="status-sub">Al menos una pregunta real respondida por el pipeline SQL.</div>
+                                    </div>
+                                </div>
+                                <div class="action-meta" id="onboardingReadinessMeta">
+                                    <span class="meta-empty">Completa los cuatro pasos para considerar este dominio listo para usuarios internos.</span>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Domain Pack JSON</label>
+                                    <textarea id="txtOnboardingDomainPackJson" class="sql-editor" rows="10" placeholder="Exporta el domain pack actual o pega aquí un JSON para importarlo."></textarea>
+                                    <div class="field-hint">Incluye tenant/domain mapping, prompting/retrieval, allowed objects, business rules, semantic hints, query patterns y training examples del dominio.</div>
+                                </div>
+                                <div class="action-meta" id="onboardingPackMeta">
+                                    <span class="meta-empty">Usa este bloque para mover el dominio a otro ambiente sin rehacer el onboarding completo.</span>
+                                </div>
+                                <div class="rag-banner" id="onboardingPackBanner"></div>
+                            </div>
+
+                            <div class="rag-banner" id="onboardingBanner"></div>
+                        </div>
+
+                        <div class="editor-actions">
+                            <div class="action-meta" id="onboardingMeta">
+                                <span class="meta-empty">Selecciona un workspace existente o crea uno nuevo</span>
+                            </div>
+                            <div class="inline-actions">
+                                <button class="btn btn-ghost" type="button" onclick="resetOnboardingForm()">Nuevo workspace</button>
+                                <button class="btn btn-ghost" type="button" onclick="startOnboardingTour()">
+                                    Tour guiado
+                                </button>
+                                <button class="btn btn-ghost" type="button" id="btnOnboardingExportPack" onclick="exportOnboardingDomainPack()">
+                                    <div class="btn-spinner" id="onboardingExportPackSpinner"></div>
+                                    Exportar pack
+                                </button>
+                                <button class="btn btn-ghost" type="button" id="btnOnboardingImportPack" onclick="importOnboardingDomainPack()">
+                                    <div class="btn-spinner" id="onboardingImportPackSpinner"></div>
+                                    Importar pack
+                                </button>
+                                <button class="btn btn-ok" type="button" id="btnOnboardingSaveAllowedObjects" onclick="saveOnboardingAllowedObjects()" disabled>
+                                    <div class="btn-spinner" id="onboardingAllowedSpinner"></div>
+                                    Guardar Allowed Objects
+                                </button>
+                                <button class="btn btn-amber" type="button" id="btnOnboardingInitialize" onclick="initializeOnboardingDomain()">
+                                    <div class="btn-spinner" id="onboardingInitializeSpinner"></div>
+                                    Inicializar dominio
+                                </button>
+                                <button class="btn btn-primary" type="button" id="btnOnboardingRunValidation" onclick="runOnboardingValidationQuestion()">
+                                    <div class="btn-spinner" id="onboardingValidationSpinner"></div>
+                                    Ejecutar prueba
+                                </button>
+                                <button class="btn btn-primary" type="button" id="btnOnboardingSaveStep1" onclick="saveOnboardingStep1()">
+                                    <div class="btn-spinner" id="onboardingSpinner"></div>
+                                    Guardar paso 1
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="tour-overlay" id="onboardingTourOverlay" style="display:none"></div>
+                        <div class="tour-popover" id="onboardingTourPopover" style="display:none">
+                            <div class="tour-kicker" id="onboardingTourStepLabel">Paso 1</div>
+                            <div class="tour-title" id="onboardingTourTitle">Bienvenido al wizard</div>
+                            <div class="tour-body" id="onboardingTourBody">Este flujo te guía desde la configuración del workspace hasta una prueba real del dominio.</div>
+                            <div class="tour-actions">
+                                <button class="btn btn-ghost" type="button" id="btnOnboardingTourPrev" onclick="prevOnboardingTourStep()">Anterior</button>
+                                <button class="btn btn-ghost" type="button" onclick="closeOnboardingTour()">Cerrar</button>
+                                <button class="btn btn-primary" type="button" id="btnOnboardingTourNext" onclick="nextOnboardingTourStep()">Siguiente</button>
+                            </div>
                         </div>
                     </div>
 

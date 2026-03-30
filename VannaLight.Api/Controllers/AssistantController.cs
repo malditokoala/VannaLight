@@ -16,6 +16,9 @@ public record AskRequest(
     string Question,
     string? UserId,
     string? ConnectionId,
+    string? TenantKey,
+    string? Domain,
+    string? ConnectionName,
     AskMode Mode = AskMode.Data
 );
 
@@ -29,6 +32,7 @@ public record FeedbackRequest(
 public class AssistantController(
     IJobStore jobStore,
     IAskRequestQueue queue,
+    IExecutionContextResolver executionContextResolver,
     ISqlCacheService cacheService, // <-- NUEVO: Inyectamos el servicio de caché (SOLID)
     IHubContext<AssistantHub> hubContext) : ControllerBase
 {
@@ -41,6 +45,11 @@ public class AssistantController(
         string cleanQuestion = request.Question.Trim();
         string userId = request.UserId ?? "UsuarioPlanta_01";
         string connectionId = request.ConnectionId ?? string.Empty;
+        var executionContext = await executionContextResolver.ResolveAsync(
+            request.TenantKey,
+            request.Domain,
+            request.ConnectionName,
+            HttpContext.RequestAborted);
 
         // --- 1) CACHÉ: SOLO PARA DATA (SQL) ---
         if (request.Mode == AskMode.Data)
@@ -50,7 +59,13 @@ public class AssistantController(
 
             if (sql != null)
             {
-                var cachedJobId = await jobStore.CreateJobAsync(userId, "User", cleanQuestion, request.Mode.ToString());
+                var cachedJobId = await jobStore.CreateJobAsync(
+                    userId,
+                    "User",
+                    cleanQuestion,
+                    request.Mode.ToString(),
+                    executionContext,
+                    HttpContext.RequestAborted);
                 var cachedResultJson = JsonSerializer.Serialize(data);
 
                 await jobStore.UpdateJobAsync(
@@ -84,12 +99,34 @@ public class AssistantController(
 
         // --- 2) FLUJO NORMAL: ENCOLAR TRABAJO ---
         // FIX: Guardamos explícitamente el "Mode" en la base de datos para no mezclar
-        var jobId = await jobStore.CreateJobAsync(userId, "User", cleanQuestion, request.Mode.ToString());
+        var jobId = await jobStore.CreateJobAsync(
+            userId,
+            "User",
+            cleanQuestion,
+            request.Mode.ToString(),
+            executionContext,
+            HttpContext.RequestAborted);
 
-        var workItem = new AskWorkItem(jobId, cleanQuestion, userId, connectionId, request.Mode);
+        var workItem = new AskWorkItem(
+            jobId,
+            cleanQuestion,
+            userId,
+            connectionId,
+            request.Mode,
+            executionContext.TenantKey,
+            executionContext.Domain,
+            executionContext.ConnectionName);
         await queue.EnqueueAsync(workItem);
 
-        return Accepted(new { JobId = jobId, Status = "Queued", Mode = request.Mode.ToString() });
+        return Accepted(new
+        {
+            JobId = jobId,
+            Status = "Queued",
+            Mode = request.Mode.ToString(),
+            executionContext.TenantKey,
+            executionContext.Domain,
+            executionContext.ConnectionName
+        });
     }
 
     // --- NUEVO: Endpoint para cargar el historial en el Chat separando SQL y ML ---
@@ -132,9 +169,17 @@ public class AssistantController(
         return Ok(new
         {
             job.JobId,
+            job.TenantKey,
+            job.Domain,
+            job.ConnectionName,
+            job.Question,
             job.Status,
+            job.Mode,
             job.SqlText,
-            job.ErrorText
+            job.ResultJson,
+            job.ErrorText,
+            job.VerificationStatus,
+            job.UserFeedback
         });
     }
 

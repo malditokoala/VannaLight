@@ -47,6 +47,20 @@ public class SqliteConnectionProfileStore : IConnectionProfileStore
             new CommandDefinition(sql, new { environmentName, profileKey, connectionName }, cancellationToken: ct));
     }
 
+    public async Task<IReadOnlyList<ConnectionProfile>> GetAllAsync(string environmentName, CancellationToken ct = default)
+    {
+        const string sql = @"
+                            SELECT *
+                            FROM ConnectionProfiles
+                            WHERE EnvironmentName = @environmentName
+                            ORDER BY IsActive DESC, ConnectionName, ProfileKey;";
+
+        await using var conn = CreateConnection();
+        var rows = await conn.QueryAsync<ConnectionProfile>(
+            new CommandDefinition(sql, new { environmentName }, cancellationToken: ct));
+        return rows.ToList();
+    }
+
     public async Task<int> UpsertAsync(ConnectionProfile profile, CancellationToken ct = default)
     {
         const string sql = @"

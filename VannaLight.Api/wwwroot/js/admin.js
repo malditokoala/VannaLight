@@ -7,6 +7,7 @@ let activeFilter = 'all'; // 'all' | 'pending' | 'negative' | 'verified'
 let globalSystemConfigEntries = [];
 let globalSystemConfigProfile = null;
 let selectedSystemConfigEntryId = null;
+let defaultAdminTenant = '';
 
 let globalAllowedObjects = [];
 let selectedAllowedObjectId = null;
@@ -29,6 +30,16 @@ let selectedQueryPatternTermId = null;
 
 let globalProfiles = [];
 let selectedProfileIndex = -1;
+
+let globalTenants = [];
+let globalConnectionProfiles = [];
+let globalTenantDomains = [];
+let globalOnboardingSchemaCandidates = [];
+let globalOnboardingStatus = null;
+let globalOnboardingValidation = null;
+let selectedOnboardingTenantKey = null;
+let onboardingBootstrap = null;
+let activeOnboardingTourStep = -1;
 
 const promptConfigFields = [
     { key: 'SystemPersona', valueType: 'string', elementId: 'txtPromptSystemPersona', description: 'Persona base del system prompt SQL.' },
@@ -70,10 +81,47 @@ const timeScopeTermGroups = new Set([
     'time_scope_current_shift'
 ]);
 
+const onboardingTourSteps = [
+    {
+        targetId: 'onboardingStepPanel1',
+        stepLabel: 'Paso 1',
+        title: 'Define el workspace',
+        body: 'Aquí defines el tenant, el domain y la conexión operativa. Este paso fija el contexto sobre el que trabajará todo el motor.'
+    },
+    {
+        targetId: 'onboardingStepPanel2b',
+        stepLabel: 'Paso 2',
+        title: 'Selecciona los objetos permitidos',
+        body: 'Descubre el schema y marca solo las tablas o vistas que realmente quieras exponer al motor SQL. Esto alimenta AllowedObjects y el validator fail-closed.'
+    },
+    {
+        targetId: 'onboardingStepPanel3',
+        stepLabel: 'Paso 3',
+        title: 'Inicializa el dominio',
+        body: 'Este paso reindexa schema docs y siembra semantic hints básicos para que el carril LLM tenga contexto suficiente desde el primer día.'
+    },
+    {
+        targetId: 'onboardingStepPanel4',
+        stepLabel: 'Paso 4',
+        title: 'Ejecuta una prueba real',
+        body: 'Corre una pregunta guiada contra el pipeline real. El wizard te muestra el SQL, el resultado y si el dominio ya respondió correctamente.'
+    },
+    {
+        targetId: 'onboardingStepPanel5',
+        stepLabel: 'Checklist final',
+        title: 'Confirma readiness',
+        body: 'Este resumen te dice si el dominio ya está listo para usuarios internos o si todavía necesita más curación antes de salir a operación.'
+    }
+];
+
 // ═══════════════════════════════════════════════════════════
 // TAB SWITCHING
 // ═══════════════════════════════════════════════════════════
 function switchTab(t) {
+    if (t !== 'onboarding') {
+        closeOnboardingTour();
+    }
+
     document.querySelectorAll('.tab-btn').forEach(b => {
         b.className = 'tab-btn';
     });
@@ -87,6 +135,1310 @@ function switchTab(t) {
 
     if (tab) tab.className = 'tab-btn active-' + t;
     if (pane) pane.classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════
+// ONBOARDING TAB
+// ═══════════════════════════════════════════════════════════
+async function loadOnboardingBootstrap() {
+    const list = document.getElementById('onboardingTenantList');
+    if (!list) return;
+
+    try {
+        const res = await fetch('/api/admin/onboarding/bootstrap');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        onboardingBootstrap = await res.json();
+        globalTenants = Array.isArray(onboardingBootstrap?.Tenants) ? onboardingBootstrap.Tenants : [];
+        globalConnectionProfiles = Array.isArray(onboardingBootstrap?.Connections) ? onboardingBootstrap.Connections : [];
+        globalTenantDomains = [];
+
+        populateOnboardingSummary();
+        populateOnboardingConnectionOptions();
+        renderOnboardingTenantList();
+
+        const defaultTenantKey = onboardingBootstrap?.Defaults?.TenantKey || defaultAdminTenant || 'default';
+        if (defaultTenantKey) {
+            await selectOnboardingTenant(defaultTenantKey);
+        } else {
+            resetOnboardingForm();
+        }
+    } catch (e) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M8 12h8"></path>
+                    <path d="M12 8v8"></path>
+                </svg>
+                Error al cargar onboarding bootstrap
+            </div>`;
+    }
+}
+
+function populateOnboardingSummary() {
+    const defaults = onboardingBootstrap?.Defaults || {};
+    const profile = onboardingBootstrap?.Profile || {};
+    setText('txtOnboardingEnvironment', onboardingBootstrap?.EnvironmentName || 'Development');
+    setText('txtOnboardingSystemProfile', profile.profileKey || profile.ProfileKey || defaults.SystemProfileKey || 'default');
+    setText('txtOnboardingConnectionCount', String(globalConnectionProfiles.length || 0));
+}
+
+function populateOnboardingConnectionOptions() {
+    const select = document.getElementById('txtOnboardingConnectionName');
+    if (!select) return;
+
+    if (!globalConnectionProfiles.length) {
+        select.innerHTML = '<option value="OperationalDb">OperationalDb</option>';
+        return;
+    }
+
+    select.innerHTML = globalConnectionProfiles.map(profile => {
+        const connectionName = profile.connectionName || profile.ConnectionName || 'OperationalDb';
+        const profileKey = profile.profileKey || profile.ProfileKey || 'default';
+        const databaseName = profile.databaseName || profile.DatabaseName || '—';
+        const isActive = !!(profile.isActive || profile.IsActive);
+        const label = `${connectionName} · ${databaseName} · ${profileKey}${isActive ? ' · activo' : ''}`;
+        return `<option value="${escHtml(connectionName)}">${escHtml(label)}</option>`;
+    }).join('');
+}
+
+function renderOnboardingTenantList() {
+    const list = document.getElementById('onboardingTenantList');
+    const count = document.getElementById('onboardingTenantCount');
+    if (!list) return;
+
+    if (count) count.textContent = String(globalTenants.length || 0);
+
+    if (!globalTenants.length) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M12 3v18"></path>
+                    <path d="M3 12h18"></path>
+                    <circle cx="12" cy="12" r="9"></circle>
+                </svg>
+                Aún no hay workspaces registrados
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = globalTenants.map(tenant => {
+        const tenantKey = tenant.tenantKey || tenant.TenantKey || '';
+        const displayName = tenant.displayName || tenant.DisplayName || tenantKey;
+        const isActive = !!(tenant.isActive || tenant.IsActive);
+        return `
+            <div class="history-item ${selectedOnboardingTenantKey === tenantKey ? 'selected' : ''}" id="tenant-${escAttr(tenantKey)}" onclick="selectOnboardingTenant('${jsString(tenantKey)}')">
+                <div class="hi-top">
+                    <div class="hi-question">${escHtml(displayName)}</div>
+                    <div class="hi-time">${escHtml(tenantKey)}</div>
+                </div>
+                <div class="hi-badges">
+                    <span class="hi-verify ${isActive ? 'verified' : 'rejected'}">${isActive ? 'Activo' : 'Inactivo'}</span>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+async function selectOnboardingTenant(tenantKey) {
+    if (!tenantKey) return;
+    selectedOnboardingTenantKey = tenantKey;
+    renderOnboardingTenantList();
+
+    const tenant = globalTenants.find(x => String(x.tenantKey || x.TenantKey || '') === String(tenantKey));
+    if (!tenant) {
+        resetOnboardingForm();
+        return;
+    }
+
+    setValue('txtOnboardingTenantKey', tenant.tenantKey || tenant.TenantKey || '');
+    setValue('txtOnboardingDisplayName', tenant.displayName || tenant.DisplayName || '');
+    setValue('txtOnboardingDescription', tenant.description || tenant.Description || '');
+    setValue('txtOnboardingSystemProfileKey', onboardingBootstrap?.Defaults?.SystemProfileKey || 'default');
+
+    await loadTenantDomains(tenantKey);
+    await loadOnboardingStatus();
+}
+
+async function loadTenantDomains(tenantKey) {
+    const list = document.getElementById('onboardingTenantDomainList');
+    if (!list || !tenantKey) return;
+
+    list.innerHTML = `
+        <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 6h16"></path>
+                <path d="M4 12h16"></path>
+                <path d="M4 18h16"></path>
+            </svg>
+            Cargando mappings...
+        </div>`;
+
+    try {
+        const res = await fetch(`/api/admin/tenant-domains?tenantKey=${encodeURIComponent(tenantKey)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        globalTenantDomains = await res.json();
+        renderTenantDomains();
+
+        const defaultMapping = globalTenantDomains.find(x => !!(x.isDefault ?? x.IsDefault)) || globalTenantDomains[0];
+        if (defaultMapping) {
+            setValue('txtOnboardingDomain', defaultMapping.domain || defaultMapping.Domain || '');
+            setValue('txtOnboardingConnectionName', defaultMapping.connectionName || defaultMapping.ConnectionName || onboardingBootstrap?.Defaults?.ConnectionName || 'OperationalDb');
+            setValue('txtOnboardingSystemProfileKey', defaultMapping.systemProfileKey || defaultMapping.SystemProfileKey || onboardingBootstrap?.Defaults?.SystemProfileKey || 'default');
+            setOnboardingMeta(defaultMapping);
+        } else {
+            setValue('txtOnboardingDomain', onboardingBootstrap?.Defaults?.Domain || defaultAllowedDomain || '');
+            setValue('txtOnboardingConnectionName', onboardingBootstrap?.Defaults?.ConnectionName || 'OperationalDb');
+            setOnboardingMeta(null);
+        }
+    } catch (e) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M8 12h8"></path>
+                    <path d="M12 8v8"></path>
+                </svg>
+                Error al cargar mappings
+            </div>`;
+    }
+}
+
+function renderTenantDomains() {
+    const list = document.getElementById('onboardingTenantDomainList');
+    if (!list) return;
+
+    if (!globalTenantDomains.length) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M4 6h16"></path>
+                    <path d="M4 12h16"></path>
+                    <path d="M4 18h16"></path>
+                </svg>
+                Este workspace aún no tiene mappings
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = globalTenantDomains.map(item => {
+        const domain = item.domain || item.Domain || '';
+        const connectionName = item.connectionName || item.ConnectionName || 'OperationalDb';
+        const profileKey = item.systemProfileKey || item.SystemProfileKey || 'default';
+        const isDefault = !!(item.isDefault ?? item.IsDefault);
+        return `
+            <div class="history-item onboarding-mapping">
+                <div class="hi-top">
+                    <div class="hi-question">${escHtml(domain)}</div>
+                    <div class="hi-time">${escHtml(connectionName)}</div>
+                </div>
+                <div class="hi-badges">
+                    <span class="hi-verify ${isDefault ? 'verified' : 'pending'}">${isDefault ? 'Default' : 'Mapping'}</span>
+                    <span class="hi-status ok"><span class="dot"></span>${escHtml(profileKey)}</span>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function resetOnboardingForm() {
+    closeOnboardingTour();
+    selectedOnboardingTenantKey = null;
+    renderOnboardingTenantList();
+    globalTenantDomains = [];
+    renderTenantDomains();
+    globalOnboardingSchemaCandidates = [];
+    renderOnboardingSchemaCandidates();
+    globalOnboardingStatus = null;
+    renderOnboardingStatus();
+    resetOnboardingValidation();
+    hideOnboardingPackBanner();
+
+    setValue('txtOnboardingTenantKey', onboardingBootstrap?.Defaults?.TenantKey || defaultAdminTenant || 'default');
+    setValue('txtOnboardingDisplayName', '');
+    setValue('txtOnboardingDescription', '');
+    setValue('txtOnboardingDomain', onboardingBootstrap?.Defaults?.Domain || defaultAllowedDomain || '');
+    setValue('txtOnboardingConnectionName', onboardingBootstrap?.Defaults?.ConnectionName || 'OperationalDb');
+    setValue('txtOnboardingSystemProfileKey', onboardingBootstrap?.Defaults?.SystemProfileKey || 'default');
+    setValue('txtOnboardingDomainPackJson', '');
+
+    const meta = document.getElementById('onboardingMeta');
+    if (meta) {
+        meta.innerHTML = '<span class="meta-empty">Nuevo workspace listo para guardarse</span>';
+    }
+
+    const packMeta = document.getElementById('onboardingPackMeta');
+    if (packMeta) {
+        packMeta.innerHTML = '<span class="meta-empty">Usa este bloque para mover el dominio a otro ambiente sin rehacer el onboarding completo.</span>';
+    }
+
+    hideOnboardingBanner();
+}
+
+async function loadOnboardingSchemaCandidates() {
+    const connectionName = getValue('txtOnboardingConnectionName').trim();
+    const domain = getValue('txtOnboardingDomain').trim();
+
+    if (!connectionName || !domain) {
+        showOnboardingBanner('warn', 'Primero define Domain y ConnectionName en el paso 1.');
+        return;
+    }
+
+    const list = document.getElementById('onboardingSchemaCandidateList');
+    if (list) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                    <path d="M8 8h8"></path>
+                    <path d="M8 12h8"></path>
+                    <path d="M8 16h5"></path>
+                </svg>
+                Descubriendo schema...
+            </div>`;
+    }
+
+    try {
+        const res = await fetch(`/api/admin/onboarding/schema-candidates?connectionName=${encodeURIComponent(connectionName)}&domain=${encodeURIComponent(domain)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        globalOnboardingSchemaCandidates = (await res.json()).map(item => ({
+            ...item,
+            isSelected: !!(item.isCurrentlyAllowed ?? item.IsCurrentlyAllowed ?? item.isSuggested ?? item.IsSuggested)
+        }));
+        renderOnboardingSchemaCandidates();
+        renderOnboardingValidation();
+        updateOnboardingStepper();
+        hideOnboardingBanner();
+    } catch (e) {
+        if (list) {
+            list.innerHTML = `
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M8 12h8"></path>
+                        <path d="M12 8v8"></path>
+                    </svg>
+                    Error al descubrir schema
+                </div>`;
+        }
+        showOnboardingBanner('err', 'No se pudo descubrir el schema: ' + e.message);
+    }
+}
+
+function renderOnboardingSchemaCandidates() {
+    const list = document.getElementById('onboardingSchemaCandidateList');
+    const meta = document.getElementById('onboardingSchemaMeta');
+    const saveBtn = document.getElementById('btnOnboardingSaveAllowedObjects');
+    if (!list) return;
+
+    if (!globalOnboardingSchemaCandidates.length) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                    <path d="M8 8h8"></path>
+                    <path d="M8 12h8"></path>
+                    <path d="M8 16h5"></path>
+                </svg>
+                Descubre el schema para seleccionar los objetos permitidos
+            </div>`;
+
+        if (meta) meta.innerHTML = '<span class="meta-empty">Aún no se ha cargado el schema de la conexión</span>';
+        if (saveBtn) saveBtn.disabled = true;
+        return;
+    }
+
+    const selectedCount = globalOnboardingSchemaCandidates.filter(x => !!x.isSelected).length;
+    const existingCount = globalOnboardingSchemaCandidates.filter(x => !!(x.isCurrentlyAllowed ?? x.IsCurrentlyAllowed)).length;
+
+    if (meta) {
+        meta.innerHTML = `
+            <span class="meta-chip status-ok">${selectedCount} seleccionados</span>
+            <span class="meta-chip training-no">${globalOnboardingSchemaCandidates.length} detectados</span>
+            <span class="meta-chip training-no">${existingCount} ya permitidos</span>`;
+    }
+
+    list.innerHTML = globalOnboardingSchemaCandidates.map((item, idx) => {
+        const schemaName = item.schemaName || item.SchemaName || '';
+        const objectName = item.objectName || item.ObjectName || '';
+        const objectType = item.objectType || item.ObjectType || '';
+        const desc = item.description || item.Description || '';
+        const isCurrentlyAllowed = !!(item.isCurrentlyAllowed ?? item.IsCurrentlyAllowed);
+        const isSelected = !!item.isSelected;
+        const columnCount = item.columnCount ?? item.ColumnCount ?? 0;
+        const pkCount = item.primaryKeyCount ?? item.PrimaryKeyCount ?? 0;
+        const fkCount = item.foreignKeyCount ?? item.ForeignKeyCount ?? 0;
+
+        return `
+            <label class="schema-candidate ${isSelected ? 'is-selected' : ''}">
+                <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleOnboardingSchemaCandidate(${idx}, this.checked)" />
+                <div class="schema-candidate-body">
+                    <div class="hi-top">
+                        <div class="hi-question">${escHtml(schemaName)}.${escHtml(objectName)}</div>
+                        <div class="hi-time">${escHtml(objectType)}</div>
+                    </div>
+                    <div class="hi-badges">
+                        <span class="hi-verify ${isCurrentlyAllowed ? 'verified' : 'pending'}">${isCurrentlyAllowed ? 'Ya permitido' : 'Nuevo'}</span>
+                        <span class="hi-status ok"><span class="dot"></span>${columnCount} cols</span>
+                        <span class="hi-status ok"><span class="dot"></span>${pkCount} pk</span>
+                        <span class="hi-status ok"><span class="dot"></span>${fkCount} fk</span>
+                    </div>
+                    ${desc ? `<div class="schema-candidate-desc">${escHtml(desc)}</div>` : ''}
+                </div>
+            </label>`;
+    }).join('');
+
+    if (saveBtn) saveBtn.disabled = selectedCount === 0;
+    updateOnboardingStepper();
+}
+
+function toggleOnboardingSchemaCandidate(idx, isSelected) {
+    const item = globalOnboardingSchemaCandidates[idx];
+    if (!item) return;
+    item.isSelected = !!isSelected;
+    renderOnboardingSchemaCandidates();
+}
+
+function setOnboardingSchemaSelection(isSelected) {
+    if (!globalOnboardingSchemaCandidates.length) return;
+    globalOnboardingSchemaCandidates.forEach(item => { item.isSelected = !!isSelected; });
+    renderOnboardingSchemaCandidates();
+}
+
+async function saveOnboardingAllowedObjects() {
+    const domain = getValue('txtOnboardingDomain').trim();
+    if (!domain) {
+        showOnboardingBanner('warn', 'Primero define el Domain del workspace.');
+        return;
+    }
+
+    if (!globalOnboardingSchemaCandidates.length) {
+        showOnboardingBanner('warn', 'Primero descubre el schema de la conexión.');
+        return;
+    }
+
+    const btn = document.getElementById('btnOnboardingSaveAllowedObjects');
+    const spin = document.getElementById('onboardingAllowedSpinner');
+    if (btn) btn.disabled = true;
+    if (spin) spin.style.display = 'block';
+
+    try {
+        const res = await fetch('/api/admin/onboarding/allowed-objects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                Domain: domain,
+                Items: globalOnboardingSchemaCandidates.map(item => ({
+                    SchemaName: item.schemaName || item.SchemaName,
+                    ObjectName: item.objectName || item.ObjectName,
+                    ObjectType: item.objectType || item.ObjectType,
+                    IsSelected: !!item.isSelected
+                }))
+            })
+        });
+
+        if (res.ok) {
+            const body = await safeJson(res);
+            showOnboardingBanner('ok', body?.Message || 'AllowedObjects guardados correctamente.');
+            loadAllowedObjects();
+            await loadOnboardingSchemaCandidates();
+            await loadOnboardingStatus();
+        } else {
+            const body = await safeJson(res);
+            showOnboardingBanner('err', body?.Error || ('Error al guardar AllowedObjects. Código: ' + res.status));
+        }
+    } catch (e) {
+        showOnboardingBanner('err', 'Error de red: ' + e.message);
+    } finally {
+        if (spin) spin.style.display = 'none';
+        renderOnboardingSchemaCandidates();
+    }
+}
+
+async function initializeOnboardingDomain() {
+    const domain = getValue('txtOnboardingDomain').trim();
+    const connectionName = getValue('txtOnboardingConnectionName').trim();
+
+    if (!domain || !connectionName) {
+        showOnboardingBanner('warn', 'Primero define Domain y ConnectionName.');
+        return;
+    }
+
+    const btn = document.getElementById('btnOnboardingInitialize');
+    const spin = document.getElementById('onboardingInitializeSpinner');
+    if (btn) btn.disabled = true;
+    if (spin) spin.style.display = 'block';
+
+    try {
+        const res = await fetch('/api/admin/onboarding/initialize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                Domain: domain,
+                ConnectionName: connectionName
+            })
+        });
+
+        if (res.ok) {
+            const body = await safeJson(res);
+            globalOnboardingStatus = body?.Status || null;
+            renderOnboardingStatus();
+            renderOnboardingValidation();
+            showOnboardingBanner('ok', body?.Message || 'Dominio inicializado correctamente.');
+            loadSemanticHints();
+        } else {
+            const body = await safeJson(res);
+            showOnboardingBanner('err', body?.Error || ('Error al inicializar. Código: ' + res.status));
+        }
+    } catch (e) {
+        showOnboardingBanner('err', 'Error de red: ' + e.message);
+    } finally {
+        if (btn) btn.disabled = false;
+        if (spin) spin.style.display = 'none';
+        updateOnboardingStepper();
+    }
+}
+
+async function loadOnboardingStatus() {
+    const domain = getValue('txtOnboardingDomain').trim();
+    const connectionName = getValue('txtOnboardingConnectionName').trim();
+
+    if (!domain) {
+        globalOnboardingStatus = null;
+        renderOnboardingStatus();
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/admin/onboarding/status?domain=${encodeURIComponent(domain)}&connectionName=${encodeURIComponent(connectionName || 'OperationalDb')}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        globalOnboardingStatus = await res.json();
+    } catch {
+        globalOnboardingStatus = null;
+    }
+
+    renderOnboardingStatus();
+}
+
+function renderOnboardingStatus() {
+    const status = globalOnboardingStatus;
+    setText('txtOnboardingAllowedCount', String(status?.AllowedObjectsCount ?? 0));
+    setText('txtOnboardingSchemaDocCount', String(status?.SchemaDocsCount ?? 0));
+    setText('txtOnboardingHintCount', String(status?.SemanticHintsCount ?? 0));
+
+    updateStatusTile('tileAllowedObjects', !!status?.Health?.HasAllowedObjects);
+    updateStatusTile('tileSchemaDocs', !!status?.Health?.HasSchemaDocs);
+    updateStatusTile('tileSemanticHints', !!status?.Health?.HasSemanticHints);
+
+    const meta = document.getElementById('onboardingStatusMeta');
+    if (meta) {
+        if (!status) {
+            meta.innerHTML = '<span class="meta-empty">Ejecuta la inicialización para dejar el dominio listo para pruebas.</span>';
+        } else {
+            meta.innerHTML = `
+                <span class="meta-chip status-ok">${escHtml(status.Domain || '')}</span>
+                <span class="meta-chip training-no">${escHtml(status.ConnectionName || '')}</span>
+                <span class="meta-chip training-no">${status.AllowedObjectsCount || 0} AO</span>
+                <span class="meta-chip training-no">${status.SchemaDocsCount || 0} SD</span>
+                <span class="meta-chip training-no">${status.SemanticHintsCount || 0} SH</span>`;
+        }
+    }
+
+    const isInitialized = !!status?.Health?.HasSchemaDocs && !!status?.Health?.HasSemanticHints;
+    if (!isInitialized && globalOnboardingValidation?.jobId) {
+        resetOnboardingValidation(true);
+    } else {
+        renderOnboardingValidation();
+    }
+
+    renderOnboardingReadiness();
+    updateOnboardingStepper();
+}
+
+function updateStatusTile(id, isOk) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('is-ok', !!isOk);
+    el.classList.toggle('is-pending', !isOk);
+}
+
+function updateOnboardingStepper() {
+    const hasWorkspace = !!getValue('txtOnboardingTenantKey').trim() && !!getValue('txtOnboardingDomain').trim() && !!getValue('txtOnboardingConnectionName').trim();
+    const hasAllowed = globalOnboardingSchemaCandidates.filter(x => !!x.isSelected).length > 0 || !!globalOnboardingStatus?.Health?.HasAllowedObjects;
+    const isInitialized = !!globalOnboardingStatus?.Health?.HasSchemaDocs && !!globalOnboardingStatus?.Health?.HasSemanticHints;
+    const hasValidation = isOnboardingValidationSuccessful(globalOnboardingValidation);
+
+    setStepChipState('stepChip1', hasWorkspace, true);
+    setStepChipState('stepChip2', hasAllowed, hasWorkspace);
+    setStepChipState('stepChip3', isInitialized, hasAllowed);
+    setStepChipState('stepChip4', hasValidation, isInitialized);
+    renderOnboardingReadiness();
+}
+
+function setStepChipState(id, isComplete, isActive) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('is-complete', !!isComplete);
+    el.classList.toggle('is-active', !isComplete && !!isActive);
+}
+
+async function saveOnboardingStep1() {
+    const tenantKey = getValue('txtOnboardingTenantKey').trim();
+    const displayName = getValue('txtOnboardingDisplayName').trim();
+    const domain = getValue('txtOnboardingDomain').trim();
+    const connectionName = getValue('txtOnboardingConnectionName').trim();
+    const description = getValue('txtOnboardingDescription').trim();
+    const systemProfileKey = getValue('txtOnboardingSystemProfileKey').trim();
+
+    if (!tenantKey || !displayName || !domain || !connectionName) {
+        showOnboardingBanner('warn', 'TenantKey, DisplayName, Domain y ConnectionName son requeridos.');
+        return;
+    }
+
+    const btn = document.getElementById('btnOnboardingSaveStep1');
+    const spin = document.getElementById('onboardingSpinner');
+    if (btn) btn.disabled = true;
+    if (spin) spin.style.display = 'block';
+
+    try {
+        const res = await fetch('/api/admin/onboarding/step1', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                TenantKey: tenantKey,
+                DisplayName: displayName,
+                Domain: domain,
+                ConnectionName: connectionName,
+                Description: description || null,
+                SystemProfileKey: systemProfileKey || null
+            })
+        });
+
+        if (res.ok) {
+            const body = await safeJson(res);
+            showOnboardingBanner('ok', body?.Message || 'Paso 1 guardado correctamente.');
+            await loadSystemConfig();
+            await loadOnboardingBootstrap();
+            await selectOnboardingTenant(tenantKey);
+        } else {
+            const body = await safeJson(res);
+            showOnboardingBanner('err', body?.Error || ('Error al guardar el paso 1. Código: ' + res.status));
+        }
+    } catch (e) {
+        showOnboardingBanner('err', 'Error de red: ' + e.message);
+    } finally {
+        if (btn) btn.disabled = false;
+        if (spin) spin.style.display = 'none';
+    }
+}
+
+function setOnboardingMeta(mapping) {
+    const meta = document.getElementById('onboardingMeta');
+    if (!meta) return;
+
+    if (!mapping) {
+        meta.innerHTML = '<span class="meta-empty">Workspace sin mapping default aún</span>';
+        return;
+    }
+
+    meta.innerHTML = `
+        <span class="meta-chip status-ok">${escHtml(mapping.domain || mapping.Domain || '')}</span>
+        <span class="meta-chip training-no">${escHtml(mapping.connectionName || mapping.ConnectionName || 'OperationalDb')}</span>
+        <span class="meta-chip training-no">${escHtml(mapping.systemProfileKey || mapping.SystemProfileKey || 'default')}</span>`;
+}
+
+function resetOnboardingValidation(keepQuestion = false) {
+    const currentQuestion = getValue('txtOnboardingValidationQuestion').trim();
+    globalOnboardingValidation = null;
+
+    if (!keepQuestion) {
+        setValue('txtOnboardingValidationQuestion', '');
+    } else if (currentQuestion) {
+        setValue('txtOnboardingValidationQuestion', currentQuestion);
+    }
+
+    hideOnboardingValidationBanner();
+    renderOnboardingValidation();
+}
+
+function renderOnboardingValidation() {
+    const suggestionList = document.getElementById('onboardingSuggestionList');
+    const meta = document.getElementById('onboardingValidationMeta');
+    const runBtn = document.getElementById('btnOnboardingRunValidation');
+    const isInitialized = !!globalOnboardingStatus?.Health?.HasSchemaDocs && !!globalOnboardingStatus?.Health?.HasSemanticHints;
+    const suggestions = buildOnboardingSuggestedQuestions();
+    const currentQuestion = getValue('txtOnboardingValidationQuestion').trim();
+
+    if (!currentQuestion && suggestions.length) {
+        setValue('txtOnboardingValidationQuestion', suggestions[0]);
+    }
+
+    if (suggestionList) {
+        if (!isInitialized) {
+            suggestionList.innerHTML = '<span class="meta-empty">Inicializa el dominio para generar preguntas sugeridas.</span>';
+        } else if (!suggestions.length) {
+            suggestionList.innerHTML = '<span class="meta-empty">No hay objetos suficientes para sugerir preguntas; escribe una manualmente.</span>';
+        } else {
+            suggestionList.innerHTML = suggestions.map(question => `
+                <button class="suggestion-chip" type="button" onclick="applyOnboardingSuggestedQuestion('${jsString(question)}')">
+                    ${escHtml(question)}
+                </button>`).join('');
+        }
+    }
+
+    if (runBtn) {
+        runBtn.disabled = !isInitialized;
+    }
+
+    setText('txtOnboardingValidationSql', formatOnboardingValidationSql(globalOnboardingValidation));
+    setText('txtOnboardingValidationResult', formatOnboardingValidationResult(globalOnboardingValidation));
+
+    if (meta) {
+        if (!isInitialized) {
+            meta.innerHTML = '<span class="meta-empty">Completa la inicialización antes de ejecutar una prueba.</span>';
+        } else if (!globalOnboardingValidation) {
+            meta.innerHTML = `
+                <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingDomain').trim() || 'sin-domain')}</span>
+                <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingConnectionName').trim() || 'OperationalDb')}</span>
+                <span class="meta-empty">Ejecuta una pregunta real para cerrar el onboarding.</span>`;
+        } else {
+            const statusKey = String(globalOnboardingValidation.status || '').toLowerCase();
+            const statusClass = statusKey === 'completed'
+                ? 'status-ok'
+                : (statusKey === 'queued' || statusKey === 'processing' ? 'verify-pending' : 'status-err');
+            const resultCount = globalOnboardingValidation.resultCount;
+            const statusLabel = globalOnboardingValidation.status || 'Queued';
+            const jobShort = String(globalOnboardingValidation.jobId || '').slice(0, 8);
+
+            meta.innerHTML = `
+                <span class="meta-chip ${statusClass}">${escHtml(statusLabel)}</span>
+                ${jobShort ? `<span class="meta-chip training-no">Job ${escHtml(jobShort)}</span>` : ''}
+                ${resultCount !== null && resultCount !== undefined ? `<span class="meta-chip training-no">${resultCount} filas</span>` : ''}
+                <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingDomain').trim() || 'sin-domain')}</span>
+                ${isOnboardingValidationSuccessful(globalOnboardingValidation)
+                    ? '<span class="meta-chip verify-ok">Dominio listo para preguntas reales</span>'
+                    : '<span class="meta-chip verify-pending">Ajusta y vuelve a probar si la respuesta no es confiable</span>'}`;
+        }
+    }
+
+    renderOnboardingReadiness();
+    updateOnboardingStepper();
+}
+
+function buildOnboardingSuggestedQuestions() {
+    const selectedObjects = globalOnboardingSchemaCandidates
+        .filter(item => !!item.isSelected)
+        .slice(0, 2);
+    const fallbackObjects = globalOnboardingSchemaCandidates.slice(0, 2);
+    const sourceObjects = selectedObjects.length ? selectedObjects : fallbackObjects;
+    const suggestions = [];
+
+    sourceObjects.forEach(item => {
+        const objectName = String(item.objectName || item.ObjectName || '').trim();
+        if (!objectName) return;
+
+        suggestions.push(`Muéstrame 5 registros de ${objectName}.`);
+        suggestions.push(`¿Cuántos registros hay en ${objectName}?`);
+    });
+
+    return [...new Set(suggestions)].slice(0, 4);
+}
+
+function applyOnboardingSuggestedQuestion(question) {
+    setValue('txtOnboardingValidationQuestion', question || '');
+    hideOnboardingValidationBanner();
+}
+
+async function runOnboardingValidationQuestion() {
+    const question = getValue('txtOnboardingValidationQuestion').trim();
+    const tenantKey = getValue('txtOnboardingTenantKey').trim();
+    const domain = getValue('txtOnboardingDomain').trim();
+    const connectionName = getValue('txtOnboardingConnectionName').trim();
+    const isInitialized = !!globalOnboardingStatus?.Health?.HasSchemaDocs && !!globalOnboardingStatus?.Health?.HasSemanticHints;
+
+    if (!isInitialized) {
+        showOnboardingValidationBanner('warn', 'Completa la inicialización del dominio antes de ejecutar una prueba.');
+        return;
+    }
+
+    if (!question) {
+        showOnboardingValidationBanner('warn', 'Escribe o selecciona una pregunta de prueba.');
+        return;
+    }
+
+    const btn = document.getElementById('btnOnboardingRunValidation');
+    const spin = document.getElementById('onboardingValidationSpinner');
+    if (btn) btn.disabled = true;
+    if (spin) spin.style.display = 'block';
+
+    globalOnboardingValidation = {
+        jobId: null,
+        question,
+        status: 'Queued',
+        sqlText: null,
+        resultJson: null,
+        errorText: null,
+        resultCount: null
+    };
+    renderOnboardingValidation();
+
+    try {
+        const res = await fetch('/api/assistant/ask', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                Question: question,
+                UserId: 'AdminOnboarding',
+                TenantKey: tenantKey || null,
+                Domain: domain || null,
+                ConnectionName: connectionName || null,
+                Mode: 'Data'
+            })
+        });
+
+        const body = await safeJson(res);
+        if (!res.ok) {
+            showOnboardingValidationBanner('err', body?.Error || ('Error al iniciar la prueba. Código: ' + res.status));
+            globalOnboardingValidation.status = 'Failed';
+            globalOnboardingValidation.errorText = body?.Error || 'No se pudo encolar la prueba.';
+            renderOnboardingValidation();
+            return;
+        }
+
+        globalOnboardingValidation.jobId = body?.JobId || body?.jobId || null;
+        globalOnboardingValidation.status = body?.Status || body?.status || 'Queued';
+        renderOnboardingValidation();
+
+        if (!globalOnboardingValidation.jobId) {
+            showOnboardingValidationBanner('err', 'La API no devolvió un JobId para monitorear la prueba.');
+            return;
+        }
+
+        await pollOnboardingValidationJob(globalOnboardingValidation.jobId);
+    } catch (e) {
+        showOnboardingValidationBanner('err', 'Error de red ejecutando la prueba: ' + e.message);
+        globalOnboardingValidation.status = 'Failed';
+        globalOnboardingValidation.errorText = e.message;
+        renderOnboardingValidation();
+    } finally {
+        if (btn) btn.disabled = false;
+        if (spin) spin.style.display = 'none';
+    }
+}
+
+async function pollOnboardingValidationJob(jobId) {
+    const maxAttempts = 45;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (attempt > 0) {
+            await delay(1000);
+        }
+
+        const res = await fetch(`/api/assistant/status/${encodeURIComponent(jobId)}`);
+        const body = await safeJson(res);
+        if (!res.ok || !body) {
+            continue;
+        }
+
+        const status = body.Status || body.status || 'Queued';
+        const resultJson = body.ResultJson || body.resultJson || null;
+        const parsedResult = tryParseJson(resultJson);
+
+        globalOnboardingValidation = {
+            jobId: body.JobId || body.jobId || jobId,
+            question: body.Question || body.question || globalOnboardingValidation?.question || getValue('txtOnboardingValidationQuestion').trim(),
+            status,
+            sqlText: body.SqlText || body.sqlText || null,
+            resultJson,
+            parsedResult,
+            errorText: body.ErrorText || body.errorText || null,
+            resultCount: inferResultCount(parsedResult)
+        };
+        renderOnboardingValidation();
+
+        if (isTerminalOnboardingJobStatus(status)) {
+            if (isOnboardingValidationSuccessful(globalOnboardingValidation)) {
+                showOnboardingValidationBanner('ok', 'La pregunta de prueba respondió correctamente. El dominio ya tiene un camino básico funcional.');
+            } else if (String(status).toLowerCase() === 'requiresreview') {
+                showOnboardingValidationBanner('warn', 'La prueba llegó a revisión. El dominio necesita curación adicional antes de salir a usuarios.');
+            } else {
+                showOnboardingValidationBanner('err', 'La prueba falló. Revisa AllowedObjects, SchemaDocs y SemanticHints antes de continuar.');
+            }
+            return;
+        }
+    }
+
+    showOnboardingValidationBanner('warn', 'La prueba sigue en proceso. Puedes revisar el historial o volver a consultar el estado en unos segundos.');
+}
+
+function isTerminalOnboardingJobStatus(status) {
+    const key = String(status || '').toLowerCase();
+    return key === 'completed' || key === 'failed' || key === 'requiresreview';
+}
+
+function isOnboardingValidationSuccessful(validation) {
+    if (!validation) return false;
+    const key = String(validation.status || '').toLowerCase();
+    return key === 'completed' && !!validation.sqlText && !validation.errorText;
+}
+
+function formatOnboardingValidationSql(validation) {
+    if (!validation?.sqlText) {
+        return 'Aún no se ha ejecutado ninguna prueba.';
+    }
+
+    return String(validation.sqlText).trim();
+}
+
+function formatOnboardingValidationResult(validation) {
+    if (!validation) {
+        return 'Ejecuta una pregunta real para confirmar que el dominio responde correctamente.';
+    }
+
+    const status = String(validation.status || 'Queued');
+    if (!isTerminalOnboardingJobStatus(status)) {
+        return `Estado: ${status}\n\nLa prueba sigue ejecutándose.`;
+    }
+
+    if (validation.errorText) {
+        return `Estado: ${status}\n\n${String(validation.errorText).trim()}`;
+    }
+
+    const parsed = validation.parsedResult ?? tryParseJson(validation.resultJson);
+    if (Array.isArray(parsed)) {
+        const sample = parsed.slice(0, 5);
+        return `Estado: ${status}\nFilas: ${parsed.length}\n\n${JSON.stringify(sample, null, 2)}`;
+    }
+
+    if (parsed && typeof parsed === 'object') {
+        return `Estado: ${status}\n\n${JSON.stringify(parsed, null, 2)}`;
+    }
+
+    if (validation.resultJson) {
+        return `Estado: ${status}\n\n${String(validation.resultJson).slice(0, 4000)}`;
+    }
+
+    return `Estado: ${status}\n\nLa consulta terminó sin datos serializados visibles.`;
+}
+
+function inferResultCount(parsedResult) {
+    if (Array.isArray(parsedResult)) {
+        return parsedResult.length;
+    }
+
+    if (parsedResult && Array.isArray(parsedResult.rows)) {
+        return parsedResult.rows.length;
+    }
+
+    return null;
+}
+
+function tryParseJson(value) {
+    if (!value || typeof value !== 'string') return value ?? null;
+    try {
+        return JSON.parse(value);
+    } catch {
+        return null;
+    }
+}
+
+function showOnboardingValidationBanner(type, message) {
+    const el = document.getElementById('onboardingValidationBanner');
+    if (!el) return;
+    el.className = 'rag-banner ' + type;
+    el.textContent = message;
+    el.style.display = 'block';
+}
+
+function hideOnboardingValidationBanner() {
+    const el = document.getElementById('onboardingValidationBanner');
+    if (!el) return;
+    el.style.display = 'none';
+    el.className = 'rag-banner';
+}
+
+function renderOnboardingReadiness() {
+    const hasWorkspace = !!getValue('txtOnboardingTenantKey').trim() && !!getValue('txtOnboardingDomain').trim() && !!getValue('txtOnboardingConnectionName').trim();
+    const hasContext = !!globalOnboardingStatus?.Health?.HasAllowedObjects
+        && !!globalOnboardingStatus?.Health?.HasSchemaDocs
+        && !!globalOnboardingStatus?.Health?.HasSemanticHints;
+    const hasValidation = isOnboardingValidationSuccessful(globalOnboardingValidation);
+    const meta = document.getElementById('onboardingReadinessMeta');
+
+    updateReadinessCard('readinessConnectionCard', hasWorkspace);
+    updateReadinessCard('readinessSchemaCard', hasContext);
+    updateReadinessCard('readinessValidationCard', hasValidation);
+
+    if (!meta) return;
+
+    if (hasWorkspace && hasContext && hasValidation) {
+        meta.innerHTML = `
+            <span class="meta-chip verify-ok">Dominio listo</span>
+            <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingDomain').trim() || 'sin-domain')}</span>
+            <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingConnectionName').trim() || 'OperationalDb')}</span>
+            <span class="meta-chip status-ok">Onboarding básico completado</span>`;
+        return;
+    }
+
+    const missing = [];
+    if (!hasWorkspace) missing.push('workspace');
+    if (!hasContext) missing.push('contexto');
+    if (!hasValidation) missing.push('prueba');
+
+    meta.innerHTML = `
+        <span class="meta-chip verify-pending">Pendiente</span>
+        <span class="meta-empty">Falta cerrar: ${escHtml(missing.join(', '))}</span>`;
+}
+
+function updateReadinessCard(id, isOk) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('is-ok', !!isOk);
+    el.classList.toggle('is-pending', !isOk);
+}
+
+function startOnboardingTour() {
+    switchTab('onboarding');
+    ensureOnboardingTourLayer();
+    activeOnboardingTourStep = 0;
+    renderOnboardingTour();
+}
+
+function nextOnboardingTourStep() {
+    if (activeOnboardingTourStep < 0) return;
+    if (activeOnboardingTourStep >= onboardingTourSteps.length - 1) {
+        closeOnboardingTour();
+        return;
+    }
+
+    activeOnboardingTourStep += 1;
+    renderOnboardingTour();
+}
+
+function prevOnboardingTourStep() {
+    if (activeOnboardingTourStep <= 0) return;
+    activeOnboardingTourStep -= 1;
+    renderOnboardingTour();
+}
+
+function closeOnboardingTour() {
+    ensureOnboardingTourLayer();
+    activeOnboardingTourStep = -1;
+    const overlay = document.getElementById('onboardingTourOverlay');
+    const popover = document.getElementById('onboardingTourPopover');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+    if (popover) {
+        popover.style.display = 'none';
+        popover.style.visibility = '';
+        popover.style.left = '';
+        popover.style.right = '';
+        popover.style.top = '';
+        popover.style.bottom = '';
+    }
+
+    document.querySelectorAll('.tour-target').forEach(el => el.classList.remove('tour-target'));
+}
+
+function renderOnboardingTour() {
+    ensureOnboardingTourLayer();
+    const step = onboardingTourSteps[activeOnboardingTourStep];
+    const overlay = document.getElementById('onboardingTourOverlay');
+    const popover = document.getElementById('onboardingTourPopover');
+    const prevBtn = document.getElementById('btnOnboardingTourPrev');
+    const nextBtn = document.getElementById('btnOnboardingTourNext');
+    if (!step || !overlay || !popover) {
+        closeOnboardingTour();
+        return;
+    }
+
+    document.querySelectorAll('.tour-target').forEach(el => el.classList.remove('tour-target'));
+
+    const target = document.getElementById(step.targetId);
+    if (target) {
+        target.classList.add('tour-target');
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    setText('onboardingTourStepLabel', `${step.stepLabel} de ${onboardingTourSteps.length}`);
+    setText('onboardingTourTitle', step.title);
+    setText('onboardingTourBody', step.body);
+
+    if (prevBtn) {
+        prevBtn.disabled = activeOnboardingTourStep === 0;
+    }
+
+    if (nextBtn) {
+        nextBtn.textContent = activeOnboardingTourStep >= onboardingTourSteps.length - 1 ? 'Terminar' : 'Siguiente';
+    }
+
+    overlay.style.display = 'block';
+    popover.style.display = 'flex';
+    positionOnboardingTourPopover(target, popover);
+}
+
+function positionOnboardingTourPopover(target, popover) {
+    if (!popover) {
+        return;
+    }
+
+    const padding = 24;
+    const topRailOffset = 88;
+    const gap = 18;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    popover.style.visibility = 'hidden';
+    popover.style.left = '';
+    popover.style.right = '';
+    popover.style.top = '';
+    popover.style.bottom = '';
+
+    const popoverRect = popover.getBoundingClientRect();
+    if (!target) {
+        popover.style.left = `${viewportWidth - popoverRect.width - padding}px`;
+        popover.style.top = `${topRailOffset}px`;
+        popover.style.visibility = '';
+        return;
+    }
+
+    const targetRect = target.getBoundingClientRect();
+    const candidates = [
+        {
+            left: viewportWidth - popoverRect.width - padding,
+            top: topRailOffset
+        },
+        {
+            left: padding,
+            top: topRailOffset
+        },
+        {
+            left: clamp(targetRect.left - popoverRect.width - gap, padding, viewportWidth - popoverRect.width - padding),
+            top: clamp(targetRect.top, topRailOffset, viewportHeight - popoverRect.height - padding)
+        },
+        {
+            left: clamp(targetRect.left, padding, viewportWidth - popoverRect.width - padding),
+            top: clamp(targetRect.top - popoverRect.height - gap, topRailOffset, viewportHeight - popoverRect.height - padding)
+        },
+        {
+            left: viewportWidth - popoverRect.width - padding,
+            top: viewportHeight - popoverRect.height - padding
+        }
+    ];
+
+    let selected = candidates[0];
+    for (const candidate of candidates) {
+        const candidateRect = {
+            left: candidate.left,
+            top: candidate.top,
+            right: candidate.left + popoverRect.width,
+            bottom: candidate.top + popoverRect.height
+        };
+
+        if (!rectsOverlap(candidateRect, targetRect)) {
+            selected = candidate;
+            break;
+        }
+    }
+
+    popover.style.left = `${Math.round(selected.left)}px`;
+    popover.style.top = `${Math.round(selected.top)}px`;
+    popover.style.visibility = '';
+}
+
+function ensureOnboardingTourLayer() {
+    const body = document.body;
+    const overlay = document.getElementById('onboardingTourOverlay');
+    const popover = document.getElementById('onboardingTourPopover');
+    if (!body) {
+        return;
+    }
+
+    if (overlay && overlay.parentElement !== body) {
+        body.appendChild(overlay);
+    }
+
+    if (popover && popover.parentElement !== body) {
+        body.appendChild(popover);
+    }
+}
+
+function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+}
+
+function rectsOverlap(a, b) {
+    return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+}
+
+async function exportOnboardingDomainPack() {
+    const tenantKey = getValue('txtOnboardingTenantKey').trim();
+    const domain = getValue('txtOnboardingDomain').trim();
+
+    if (!tenantKey || !domain) {
+        showOnboardingPackBanner('warn', 'Primero define TenantKey y Domain en el wizard.');
+        return;
+    }
+
+    const btn = document.getElementById('btnOnboardingExportPack');
+    const spin = document.getElementById('onboardingExportPackSpinner');
+    if (btn) btn.disabled = true;
+    if (spin) spin.style.display = 'block';
+
+    try {
+        const res = await fetch(`/api/admin/domain-pack/export?tenantKey=${encodeURIComponent(tenantKey)}&domain=${encodeURIComponent(domain)}`);
+        const body = await safeJson(res);
+        if (!res.ok || !body) {
+            showOnboardingPackBanner('err', body?.Error || ('Error al exportar el pack. Código: ' + res.status));
+            return;
+        }
+
+        const serialized = JSON.stringify(body, null, 2);
+        setValue('txtOnboardingDomainPackJson', serialized);
+        renderOnboardingPackMeta(body);
+        showOnboardingPackBanner('ok', 'Domain pack exportado correctamente. Ya quedó cargado en el editor y listo para descargarse o copiarse.');
+        downloadTextFile(`${sanitizeFileName(tenantKey)}-${sanitizeFileName(domain)}-domain-pack.json`, serialized);
+    } catch (e) {
+        showOnboardingPackBanner('err', 'Error de red exportando el pack: ' + e.message);
+    } finally {
+        if (btn) btn.disabled = false;
+        if (spin) spin.style.display = 'none';
+    }
+}
+
+async function importOnboardingDomainPack() {
+    const raw = getValue('txtOnboardingDomainPackJson').trim();
+    if (!raw) {
+        showOnboardingPackBanner('warn', 'Pega o exporta primero un JSON de domain pack.');
+        return;
+    }
+
+    let pack = null;
+    try {
+        pack = JSON.parse(raw);
+    } catch (e) {
+        showOnboardingPackBanner('err', 'El JSON del pack no es válido: ' + e.message);
+        return;
+    }
+
+    const btn = document.getElementById('btnOnboardingImportPack');
+    const spin = document.getElementById('onboardingImportPackSpinner');
+    if (btn) btn.disabled = true;
+    if (spin) spin.style.display = 'block';
+
+    try {
+        const res = await fetch('/api/admin/domain-pack/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(pack)
+        });
+        const body = await safeJson(res);
+        if (!res.ok) {
+            showOnboardingPackBanner('err', body?.Error || ('Error al importar el pack. Código: ' + res.status));
+            return;
+        }
+
+        showOnboardingPackBanner('ok', body?.Message || 'Domain pack importado correctamente.');
+        renderOnboardingPackMeta({
+            TenantKey: body?.TenantKey || body?.tenantKey || pack?.TenantKey || pack?.tenantKey || '',
+            Domain: body?.Domain || body?.domain || pack?.Domain || pack?.domain || '',
+            ConnectionName: body?.ConnectionName || body?.connectionName || pack?.ConnectionName || pack?.connectionName || '',
+            Imported: body?.Imported || body?.imported || null
+        });
+
+        await loadSystemConfig();
+        await loadOnboardingBootstrap();
+
+        const importedTenantKey = body?.TenantKey || body?.tenantKey || pack?.TenantKey || pack?.tenantKey;
+        if (importedTenantKey) {
+            await selectOnboardingTenant(importedTenantKey);
+        }
+
+        if (pack?.Domain || pack?.domain) {
+            setValue('txtOnboardingDomain', pack?.Domain || pack?.domain || '');
+        }
+
+        if (pack?.ConnectionName || pack?.connectionName) {
+            setValue('txtOnboardingConnectionName', pack?.ConnectionName || pack?.connectionName || '');
+        }
+
+        await loadOnboardingSchemaCandidates();
+        await loadOnboardingStatus();
+    } catch (e) {
+        showOnboardingPackBanner('err', 'Error de red importando el pack: ' + e.message);
+    } finally {
+        if (btn) btn.disabled = false;
+        if (spin) spin.style.display = 'none';
+    }
+}
+
+function renderOnboardingPackMeta(pack) {
+    const meta = document.getElementById('onboardingPackMeta');
+    if (!meta) return;
+
+    const tenantKey = pack?.TenantKey || pack?.tenantKey || 'sin-tenant';
+    const domain = pack?.Domain || pack?.domain || 'sin-domain';
+    const connectionName = pack?.ConnectionName || pack?.connectionName || 'sin-connection';
+    const imported = pack?.Imported || pack?.imported || null;
+    const counts = imported
+        ? [
+            `${imported.SystemConfigEntries ?? imported.systemConfigEntries ?? 0} cfg`,
+            `${imported.AllowedObjects ?? imported.allowedObjects ?? 0} AO`,
+            `${imported.BusinessRules ?? imported.businessRules ?? 0} BR`,
+            `${imported.SemanticHints ?? imported.semanticHints ?? 0} SH`,
+            `${imported.QueryPatterns ?? imported.queryPatterns ?? 0} QP`,
+            `${imported.TrainingExamples ?? imported.trainingExamples ?? 0} TE`
+        ]
+        : [
+            `${((pack?.SystemConfigEntries || pack?.systemConfigEntries) || []).length} cfg`,
+            `${((pack?.AllowedObjects || pack?.allowedObjects) || []).length} AO`,
+            `${((pack?.BusinessRules || pack?.businessRules) || []).length} BR`,
+            `${((pack?.SemanticHints || pack?.semanticHints) || []).length} SH`,
+            `${((pack?.QueryPatterns || pack?.queryPatterns) || []).length} QP`,
+            `${((pack?.TrainingExamples || pack?.trainingExamples) || []).length} TE`
+        ];
+
+    meta.innerHTML = `
+        <span class="meta-chip status-ok">${escHtml(tenantKey)}</span>
+        <span class="meta-chip training-no">${escHtml(domain)}</span>
+        <span class="meta-chip training-no">${escHtml(connectionName)}</span>
+        ${counts.map(item => `<span class="meta-chip training-no">${escHtml(item)}</span>`).join('')}`;
+}
+
+function showOnboardingPackBanner(type, message) {
+    const el = document.getElementById('onboardingPackBanner');
+    if (!el) return;
+    el.className = 'rag-banner ' + type;
+    el.textContent = message;
+    el.style.display = 'block';
+}
+
+function hideOnboardingPackBanner() {
+    const el = document.getElementById('onboardingPackBanner');
+    if (!el) return;
+    el.style.display = 'none';
+    el.className = 'rag-banner';
+}
+
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function showOnboardingBanner(type, message) {
+    const el = document.getElementById('onboardingBanner');
+    if (!el) return;
+    el.className = 'rag-banner ' + type;
+    el.textContent = message;
+    el.style.display = 'block';
+}
+
+function hideOnboardingBanner() {
+    const el = document.getElementById('onboardingBanner');
+    if (!el) return;
+    el.style.display = 'none';
+    el.className = 'rag-banner';
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -381,10 +1733,15 @@ function applyAdminDomainDefault() {
     const adminDomainEntry = globalSystemConfigEntries.find(item =>
         String(item.section || item.Section || '').toLowerCase() === 'uidefaults'
         && String(item.key || item.Key || '').toLowerCase() === 'admindomain');
+    const adminTenantEntry = globalSystemConfigEntries.find(item =>
+        String(item.section || item.Section || '').toLowerCase() === 'uidefaults'
+        && String(item.key || item.Key || '').toLowerCase() === 'admintenant');
 
     const configuredDomain = (adminDomainEntry?.value || adminDomainEntry?.Value || '').trim();
-    if (!configuredDomain) return;
+    const configuredTenant = (adminTenantEntry?.value || adminTenantEntry?.Value || '').trim();
 
+    defaultAdminTenant = configuredTenant || defaultAdminTenant;
+    if (!configuredDomain) return;
     defaultAllowedDomain = configuredDomain;
     defaultBusinessRuleDomain = configuredDomain;
     defaultSemanticHintDomain = configuredDomain;
@@ -2257,6 +3614,34 @@ function escHtml(s) {
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function escAttr(s) {
+    return escHtml(s).replace(/'/g, '&#39;');
+}
+
+function jsString(s) {
+    return String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function sanitizeFileName(value) {
+    return String(value ?? 'domain-pack')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9-_]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'domain-pack';
+}
+
+function downloadTextFile(fileName, content) {
+    const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
+
 async function safeJson(res) {
     try { return await res.json(); } catch { return null; }
 }
@@ -2272,6 +3657,7 @@ function setText(id, value) { const el = document.getElementById(id); if (el) el
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
     await loadSystemConfig();
+    await loadOnboardingBootstrap();
     loadHistory();
     loadAllowedObjects();
     loadBusinessRules();

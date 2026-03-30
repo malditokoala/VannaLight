@@ -3,7 +3,15 @@ using VannaLight.Api.Contracts;
 
 namespace VannaLight.Api.Services;
 
-public record AskWorkItem(Guid JobId, string Question, string UserId, string ConnectionId, AskMode Mode);
+public record AskWorkItem(
+    Guid JobId,
+    string Question,
+    string UserId,
+    string ConnectionId,
+    AskMode Mode,
+    string TenantKey,
+    string Domain,
+    string ConnectionName);
 
 public interface IAskRequestQueue
 {
