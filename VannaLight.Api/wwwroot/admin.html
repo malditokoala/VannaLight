@@ -431,24 +431,24 @@
                                 </div>
                                 <div class="section-header-text">
                                     <div class="sh-title">Wizard de Onboarding</div>
-                                    <div class="sh-sub">Paso 1 de 4 · Tenant + Domain + Connection mapping</div>
+                                    <div class="sh-sub">Configura un workspace, elige la base y valida que el dominio responda bien.</div>
                                 </div>
                             </div>
 
                             <div class="onboarding-stepper">
-                                <div class="step-chip is-active" id="stepChip1">
+                                <div class="step-chip is-active is-clickable" id="stepChip1" onclick="scrollToOnboardingPanel('onboardingStepPanel1')">
                                     <span class="step-index">1</span>
-                                    <span class="step-copy">Workspace</span>
+                                    <span class="step-copy">Configurar</span>
                                 </div>
-                                <div class="step-chip" id="stepChip2">
+                                <div class="step-chip is-clickable" id="stepChip2" onclick="scrollToOnboardingPanel('onboardingStepPanel2b')">
                                     <span class="step-index">2</span>
-                                    <span class="step-copy">Allowed Objects</span>
+                                    <span class="step-copy">Elegir tablas</span>
                                 </div>
-                                <div class="step-chip" id="stepChip3">
+                                <div class="step-chip is-clickable" id="stepChip3" onclick="scrollToOnboardingPanel('onboardingStepPanel3')">
                                     <span class="step-index">3</span>
-                                    <span class="step-copy">Inicializar</span>
+                                    <span class="step-copy">Preparar</span>
                                 </div>
-                                <div class="step-chip" id="stepChip4">
+                                <div class="step-chip is-clickable" id="stepChip4" onclick="scrollToOnboardingPanel('onboardingStepPanel4')">
                                     <span class="step-index">4</span>
                                     <span class="step-copy">Probar</span>
                                 </div>
@@ -456,54 +456,121 @@
 
                             <div class="onboarding-hero">
                                 <div class="hero-card">
-                                    <div class="hero-kicker">Environment</div>
+                                    <div class="hero-kicker">Ambiente</div>
                                     <div class="hero-value" id="txtOnboardingEnvironment">—</div>
-                                    <div class="hero-sub">Entorno operativo activo</div>
+                                    <div class="hero-sub">Ambiente activo del wizard</div>
                                 </div>
                                 <div class="hero-card">
-                                    <div class="hero-kicker">System Profile</div>
+                                    <div class="hero-kicker">Perfil técnico</div>
                                     <div class="hero-value" id="txtOnboardingSystemProfile">—</div>
-                                    <div class="hero-sub">Perfil de configuración del wizard</div>
+                                    <div class="hero-sub">Configuración técnica usada por este flujo</div>
                                 </div>
                                 <div class="hero-card">
                                     <div class="hero-kicker">Conexiones</div>
                                     <div class="hero-value" id="txtOnboardingConnectionCount">0</div>
-                                    <div class="hero-sub">Connection profiles disponibles</div>
+                                    <div class="hero-sub">Conexiones disponibles para este ambiente</div>
+                                </div>
+                            </div>
+
+                            <div class="subpanel onboarding-guide">
+                                <div class="subpanel-title">Cómo usar este wizard</div>
+                                <div class="onboarding-guide-copy">Sigue este orden para evitar errores y dejar el dominio listo en una sola pasada.</div>
+                                <div class="onboarding-guide-list">
+                                    <div class="onboarding-guide-item"><strong>1.</strong> Guarda el workspace con su conexión.</div>
+                                    <div class="onboarding-guide-item"><strong>2.</strong> Descubre el schema y elige las tablas que sí vas a permitir.</div>
+                                    <div class="onboarding-guide-item"><strong>3.</strong> Prepara el dominio para generar contexto técnico.</div>
+                                    <div class="onboarding-guide-item"><strong>4.</strong> Ejecuta una pregunta real para validar el resultado.</div>
                                 </div>
                             </div>
 
                             <div class="subpanel onboarding-panel" id="onboardingStepPanel1">
-                                <div class="subpanel-title">Paso 1 · Definir workspace</div>
+                                <div class="subpanel-title">Paso 1 · Configura el workspace</div>
                                 <div class="form-grid-2">
                                     <div class="field-group">
-                                        <label class="field-label">Tenant Key</label>
-                                        <input type="text" id="txtOnboardingTenantKey" class="field-input" placeholder="acme" />
+                                        <label class="field-label">Workspace / Tenant <span class="field-label-hint" title="Identificador interno y estable del workspace o cliente.">ⓘ</span></label>
+                                        <input type="text" id="txtOnboardingTenantKey" class="field-input" placeholder="Ej. northwind-demo" />
+                                        <div class="field-hint">Usa una clave corta y estable para identificar este workspace.</div>
+                                        <div class="field-error" id="errOnboardingTenantKey"></div>
                                     </div>
                                     <div class="field-group">
-                                        <label class="field-label">Display Name</label>
-                                        <input type="text" id="txtOnboardingDisplayName" class="field-input" placeholder="ACME" />
+                                        <label class="field-label">Nombre visible</label>
+                                        <input type="text" id="txtOnboardingDisplayName" class="field-input" placeholder="Ej. Northwind Demo" />
+                                        <div class="field-hint">Nombre amigable que verán los usuarios en la interfaz.</div>
+                                        <div class="field-error" id="errOnboardingDisplayName"></div>
                                     </div>
                                     <div class="field-group">
-                                        <label class="field-label">Domain</label>
-                                        <input type="text" id="txtOnboardingDomain" class="field-input" placeholder="adventureworks-sales" />
+                                        <label class="field-label">Contexto de datos / Domain <span class="field-label-hint" title="Nombre del dominio semántico que usará el motor para este conjunto de datos.">ⓘ</span></label>
+                                        <input type="text" id="txtOnboardingDomain" class="field-input" placeholder="Ej. northwind-sales" />
+                                        <div class="field-hint">Describe el contexto de negocio de esta base o área.</div>
+                                        <div class="field-error" id="errOnboardingDomain"></div>
                                     </div>
                                     <div class="field-group">
-                                        <label class="field-label">Connection Name</label>
-                                        <select id="txtOnboardingConnectionName" class="field-input"></select>
+                                        <label class="field-label">Conexión de base de datos</label>
+                                        <div class="connection-picker">
+                                            <select id="txtOnboardingConnectionName" class="field-input"></select>
+                                            <button class="btn btn-ghost" type="button" onclick="toggleOnboardingConnectionEditor()">Nueva conexión</button>
+                                        </div>
+                                        <div class="field-hint">Selecciona una conexión existente o crea una nueva desde aquí.</div>
+                                        <div class="field-error" id="errOnboardingConnectionName"></div>
+                                    </div>
+                                </div>
+                                <div class="subpanel onboarding-inline-editor" id="onboardingConnectionEditor" style="display:none">
+                                    <div class="subpanel-title">Nueva conexión operativa</div>
+                                    <div class="field-hint">Disponible solo para administradores. La cadena se valida primero y se guarda cifrada para este ambiente.</div>
+                                    <div class="form-grid-2">
+                                        <div class="field-group">
+                                            <label class="field-label">Nombre de la conexión</label>
+                                            <input type="text" id="txtOnboardingNewConnectionName" class="field-input" placeholder="Ej. NorthwindDb" />
+                                            <div class="field-hint">Usa un nombre corto y reconocible para encontrarla después.</div>
+                                            <div class="field-error" id="errOnboardingNewConnectionName"></div>
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">Descripción</label>
+                                            <input type="text" id="txtOnboardingNewConnectionDescription" class="field-input" placeholder="Ej. SQL Server local para Northwind" />
+                                            <div class="field-hint">Opcional. Útil para distinguir ambientes o bases similares.</div>
+                                        </div>
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Connection String <span class="field-label-hint" title="Cadena completa para conectarse a la base. Se validará antes de guardarse.">ⓘ</span></label>
+                                        <textarea id="txtOnboardingNewConnectionString" class="field-input" rows="3" placeholder="Pega aquí la cadena de conexión completa. Se validará y se guardará cifrada."></textarea>
+                                        <div class="field-hint">Pega la cadena completa. Si conecta bien, el sistema la guardará cifrada.</div>
+                                        <div class="field-error" id="errOnboardingNewConnectionString"></div>
+                                    </div>
+                                    <div class="rag-banner" id="onboardingConnectionBanner"></div>
+                                    <div class="editor-actions">
+                                        <div class="action-meta" id="onboardingConnectionMeta">
+                                            <span class="meta-empty">Solo administradores. La cadena se valida antes de guardarse y se persiste cifrada para el ambiente actual.</span>
+                                        </div>
+                                        <div class="inline-actions">
+                                            <button class="btn btn-ghost" type="button" onclick="validateOnboardingConnection()">
+                                                <div class="btn-spinner" id="onboardingConnectionValidateSpinner"></div>
+                                                Validar conexión
+                                            </button>
+                                            <button class="btn btn-primary" type="button" onclick="saveOnboardingConnection()">
+                                                <div class="btn-spinner" id="onboardingConnectionSaveSpinner"></div>
+                                                Guardar conexión
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="field-group">
-                                    <label class="field-label">Description</label>
-                                    <textarea id="txtOnboardingDescription" class="field-input" rows="3" placeholder="Descripción opcional del tenant o workspace."></textarea>
+                                    <label class="field-label">Descripción</label>
+                                    <textarea id="txtOnboardingDescription" class="field-input" rows="3" placeholder="Ej. Prueba de onboarding para la base Northwind."></textarea>
+                                    <div class="field-hint">Opcional. Sirve para dejar contexto de qué base o propósito tiene este workspace.</div>
                                 </div>
-                                <div class="field-group">
-                                    <label class="field-label">System Profile Key</label>
+                                <div class="advanced-toggle-row">
+                                    <button class="btn btn-ghost" type="button" id="btnToggleOnboardingAdvanced" onclick="toggleOnboardingAdvancedOptions()">Mostrar opciones avanzadas</button>
+                                    <div class="field-hint">Deja estas opciones ocultas si vas a trabajar con la configuración estándar.</div>
+                                </div>
+                                <div class="field-group onboarding-advanced" id="onboardingAdvancedOptions" style="display:none">
+                                    <label class="field-label">Perfil técnico <span class="field-label-hint" title="Configuración técnica del motor. En la mayoría de los casos se puede dejar en default.">ⓘ</span></label>
                                     <input type="text" id="txtOnboardingSystemProfileKey" class="field-input" placeholder="default" />
+                                    <div class="field-hint">Si no necesitas una configuración especial, déjalo en <strong>default</strong>.</div>
                                 </div>
                             </div>
 
                             <div class="subpanel onboarding-panel" id="onboardingStepPanel2">
-                                <div class="subpanel-title">Mappings actuales del tenant</div>
+                                <div class="subpanel-title">Configuración actual del workspace</div>
                                 <div class="mini-scroll" id="onboardingTenantDomainList">
                                     <div class="empty-state">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -517,7 +584,8 @@
                             </div>
 
                             <div class="subpanel onboarding-panel" id="onboardingStepPanel2b">
-                                <div class="subpanel-title">Paso 2 · Selección sugerida de objetos SQL</div>
+                                <div class="subpanel-title">Paso 2 · Elige las tablas permitidas</div>
+                                <div class="field-hint">Descubre el schema y marca solo las tablas o vistas que el motor podrá consultar.</div>
                                 <div class="inline-actions">
                                     <button class="btn btn-ghost" type="button" onclick="loadOnboardingSchemaCandidates()">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
@@ -548,20 +616,21 @@
                             </div>
 
                             <div class="subpanel onboarding-panel" id="onboardingStepPanel3">
-                                <div class="subpanel-title">Paso 3 · Inicialización del dominio</div>
+                                <div class="subpanel-title">Paso 3 · Prepara el dominio</div>
+                                <div class="field-hint">Este paso genera el contexto técnico que el motor necesita para responder mejor.</div>
                                 <div class="onboarding-health">
                                     <div class="health-card">
-                                        <div class="hero-kicker">Allowed Objects</div>
+                                        <div class="hero-kicker">Tablas permitidas</div>
                                         <div class="hero-value" id="txtOnboardingAllowedCount">0</div>
                                         <div class="hero-sub">Objetos activos del dominio</div>
                                     </div>
                                     <div class="health-card">
-                                        <div class="hero-kicker">Schema Docs</div>
+                                        <div class="hero-kicker">Contexto del schema</div>
                                         <div class="hero-value" id="txtOnboardingSchemaDocCount">0</div>
                                         <div class="hero-sub">Docs indexados para el dominio</div>
                                     </div>
                                     <div class="health-card">
-                                        <div class="hero-kicker">Semantic Hints</div>
+                                        <div class="hero-kicker">Pistas del dominio</div>
                                         <div class="hero-value" id="txtOnboardingHintCount">0</div>
                                         <div class="hero-sub">Hints activos disponibles</div>
                                     </div>
@@ -570,22 +639,22 @@
                                     <div class="status-tile" id="tileAllowedObjects">
                                         <div class="status-dot"></div>
                                         <div>
-                                            <div class="status-title">Allowed Objects</div>
-                                            <div class="status-sub">Selecciona al menos un objeto del schema</div>
+                                            <div class="status-title">Tablas permitidas</div>
+                                            <div class="status-sub">Guarda al menos una tabla o vista del schema</div>
                                         </div>
                                     </div>
                                     <div class="status-tile" id="tileSchemaDocs">
                                         <div class="status-dot"></div>
                                         <div>
-                                            <div class="status-title">Schema Docs</div>
+                                            <div class="status-title">Contexto del schema</div>
                                             <div class="status-sub">Reindexa el schema para construir contexto</div>
                                         </div>
                                     </div>
                                     <div class="status-tile" id="tileSemanticHints">
                                         <div class="status-dot"></div>
                                         <div>
-                                            <div class="status-title">Semantic Hints</div>
-                                            <div class="status-sub">Siembra inicial heurística del dominio</div>
+                                            <div class="status-title">Pistas del dominio</div>
+                                            <div class="status-sub">Genera ayudas semánticas iniciales para el motor</div>
                                         </div>
                                     </div>
                                 </div>
@@ -595,7 +664,7 @@
                             </div>
 
                             <div class="subpanel onboarding-panel" id="onboardingStepPanel4">
-                                <div class="subpanel-title">Paso 4 · Validación guiada del dominio</div>
+                                <div class="subpanel-title">Paso 4 · Haz una prueba real</div>
                                 <div class="field-group">
                                     <label class="field-label">Preguntas sugeridas</label>
                                     <div class="onboarding-suggestion-list" id="onboardingSuggestionList">
@@ -604,8 +673,9 @@
                                 </div>
                                 <div class="field-group">
                                     <label class="field-label">Pregunta de prueba</label>
-                                    <textarea id="txtOnboardingValidationQuestion" class="field-input" rows="3" placeholder="Ej. Muéstrame 5 registros de SalesOrderHeader."></textarea>
-                                    <div class="field-hint">Se ejecuta sobre el tenant, domain y connection configurados en este wizard.</div>
+                                    <textarea id="txtOnboardingValidationQuestion" class="field-input" rows="3" placeholder="Ej. Muéstrame 5 registros de Orders."></textarea>
+                                    <div class="field-hint">Se ejecuta sobre el workspace y la conexión configurados en este wizard.</div>
+                                    <div class="field-error" id="errOnboardingValidationQuestion"></div>
                                 </div>
                                 <div class="onboarding-validation-grid">
                                     <div class="validation-card">
@@ -635,14 +705,14 @@
                                             <span class="status-dot"></span>
                                             <span class="status-title">Workspace y conexión</span>
                                         </div>
-                                        <div class="status-sub">Tenant, domain y connection listos para ejecutar.</div>
+                                        <div class="status-sub">Workspace, contexto y conexión listos para ejecutar.</div>
                                     </div>
                                     <div class="readiness-card" id="readinessSchemaCard">
                                         <div class="readiness-head">
                                             <span class="status-dot"></span>
                                             <span class="status-title">Contexto del motor</span>
                                         </div>
-                                        <div class="status-sub">AllowedObjects, SchemaDocs y SemanticHints inicializados.</div>
+                                        <div class="status-sub">Tablas permitidas, contexto del schema y pistas del dominio inicializados.</div>
                                     </div>
                                     <div class="readiness-card" id="readinessValidationCard">
                                         <div class="readiness-head">
@@ -671,7 +741,7 @@
 
                         <div class="editor-actions">
                             <div class="action-meta" id="onboardingMeta">
-                                <span class="meta-empty">Selecciona un workspace existente o crea uno nuevo</span>
+                                <span class="meta-empty">Empieza guardando el workspace. Después podrás descubrir el schema y seguir con el flujo.</span>
                             </div>
                             <div class="inline-actions">
                                 <button class="btn btn-ghost" type="button" onclick="resetOnboardingForm()">Nuevo workspace</button>
@@ -688,19 +758,19 @@
                                 </button>
                                 <button class="btn btn-ok" type="button" id="btnOnboardingSaveAllowedObjects" onclick="saveOnboardingAllowedObjects()" disabled>
                                     <div class="btn-spinner" id="onboardingAllowedSpinner"></div>
-                                    Guardar Allowed Objects
+                                    Guardar tablas y continuar
                                 </button>
                                 <button class="btn btn-amber" type="button" id="btnOnboardingInitialize" onclick="initializeOnboardingDomain()">
                                     <div class="btn-spinner" id="onboardingInitializeSpinner"></div>
-                                    Inicializar dominio
+                                    Preparar dominio
                                 </button>
                                 <button class="btn btn-primary" type="button" id="btnOnboardingRunValidation" onclick="runOnboardingValidationQuestion()">
                                     <div class="btn-spinner" id="onboardingValidationSpinner"></div>
-                                    Ejecutar prueba
+                                    Ejecutar prueba real
                                 </button>
                                 <button class="btn btn-primary" type="button" id="btnOnboardingSaveStep1" onclick="saveOnboardingStep1()">
                                     <div class="btn-spinner" id="onboardingSpinner"></div>
-                                    Guardar paso 1
+                                    Guardar workspace y continuar
                                 </button>
                             </div>
                         </div>

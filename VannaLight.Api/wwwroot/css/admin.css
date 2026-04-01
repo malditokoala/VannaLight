@@ -656,6 +656,24 @@ body {
     letter-spacing: .04em;
 }
 
+.field-error {
+    display: none;
+    margin-top: 6px;
+    font-family: var(--mono);
+    font-size: .58rem;
+    color: var(--err-c);
+    letter-spacing: .03em;
+}
+
+.field-error.is-visible {
+    display: block;
+}
+
+.field-input.input-error {
+    border-color: color-mix(in srgb, var(--err-c) 60%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--err-c) 22%, transparent);
+}
+
 /* checkbox inline */
 input[type="checkbox"] {
     width: 16px;
@@ -1172,6 +1190,15 @@ input[type="checkbox"] {
     background: var(--surface);
 }
 
+.step-chip.is-clickable {
+    cursor: pointer;
+}
+
+.step-chip.is-clickable:hover {
+    border-color: color-mix(in srgb, var(--onboarding-c) 24%, transparent);
+    background: color-mix(in srgb, var(--onboarding-c) 4%, var(--surface));
+}
+
 .step-chip.is-active {
     border-color: color-mix(in srgb, var(--onboarding-c) 45%, transparent);
     background: color-mix(in srgb, var(--onboarding-c) 7%, var(--surface));
@@ -1244,14 +1271,48 @@ input[type="checkbox"] {
     color: var(--dim);
 }
 
+.onboarding-guide {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--onboarding-c) 7%, var(--surface)), var(--surface));
+    border: 1px solid color-mix(in srgb, var(--onboarding-c) 18%, var(--border));
+}
+
+.onboarding-guide-copy {
+    font-family: var(--sans);
+    font-size: .84rem;
+    color: var(--text);
+    margin-bottom: 12px;
+}
+
+.onboarding-guide-list {
+    display: grid;
+    gap: 8px;
+}
+
+.onboarding-guide-item {
+    font-family: var(--sans);
+    font-size: .82rem;
+    color: var(--dim);
+}
+
 .onboarding-panel {
     min-height: 0;
     position: relative;
     scroll-margin-top: 24px;
+    transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
 }
 
 .onboarding-panel + .onboarding-panel {
     margin-top: 24px;
+}
+
+.onboarding-panel.is-current {
+    border-color: color-mix(in srgb, var(--onboarding-c) 32%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--onboarding-c) 14%, transparent);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--onboarding-c) 4%, var(--surface)), var(--surface));
+}
+
+.onboarding-panel.is-complete {
+    border-color: color-mix(in srgb, var(--ok-c) 24%, transparent);
 }
 
 .onboarding-health {
@@ -1361,6 +1422,42 @@ input[type="checkbox"] {
     font-size: .76rem;
     color: var(--dim);
     line-height: 1.45;
+}
+
+.connection-picker {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.onboarding-inline-editor {
+    margin-top: 14px;
+    border-style: dashed;
+}
+
+.advanced-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.advanced-toggle-row .field-hint {
+    margin-top: 0;
+}
+
+.onboarding-advanced {
+    margin-top: 10px;
+    padding: 12px 14px;
+    border: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--surface) 88%, #000);
+}
+
+.history-item.draft-workspace {
+    border-left-color: color-mix(in srgb, var(--warn-c) 45%, transparent);
 }
 
 .onboarding-suggestion-list {

@@ -5,6 +5,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="LLamaSharp" Version="0.26.0" />
     <PackageReference Include="LLamaSharp.Backend.Cuda12" Version="0.26.0" />

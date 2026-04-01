@@ -146,6 +146,23 @@ public record OnboardingInitializeRequest(
     string Domain,
     string ConnectionName);
 
+public record ConnectionValidationRequest(
+    string ConnectionString);
+
+public record ConnectionProfileUpsertRequest(
+    string ConnectionName,
+    string ConnectionString,
+    string? Description);
+
+internal sealed record ConnectionValidationMetadata(
+    string ServerHost,
+    string DatabaseName,
+    string? UserName,
+    bool IntegratedSecurity,
+    bool Encrypt,
+    bool TrustServerCertificate,
+    string ServerVersion);
+
 [ApiController]
 [Route("api/[controller]")]
 public class AdminController(
@@ -153,6 +170,7 @@ public class AdminController(
     ISystemConfigProvider systemConfigProvider,
     ISystemConfigStore systemConfigStore,
     IConnectionProfileStore connectionProfileStore,
+    IAppSecretStore appSecretStore,
     IOperationalConnectionResolver operationalConnectionResolver,
     IAllowedObjectStore allowedObjectStore,
     ISchemaIngestor schemaIngestor,
@@ -168,6 +186,7 @@ public class AdminController(
     ITrainingStore trainingStore,
     SqliteOptions sqliteOptions,
     OperationalDbOptions operationalDbOptions,
+    Microsoft.AspNetCore.DataProtection.IDataProtectionProvider dataProtectionProvider,
     IngestUseCase ingestUseCase,
     TrainExampleUseCase useCase,
     IConfiguration configuration,
@@ -354,6 +373,120 @@ public class AdminController(
         });
     }
 
+    [HttpPost("connections/validate")]
+    public async Task<IActionResult> ValidateConnectionProfile([FromBody] ConnectionValidationRequest request, CancellationToken ct)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.ConnectionString))
+            return BadRequest(new { Error = "ConnectionString es requerido." });
+
+        try
+        {
+            var metadata = await ValidateSqlServerConnectionAsync(request.ConnectionString.Trim(), ct);
+            return Ok(new
+            {
+                Message = "Conexión validada correctamente.",
+                metadata.ServerHost,
+                metadata.DatabaseName,
+                metadata.UserName,
+                metadata.IntegratedSecurity,
+                metadata.Encrypt,
+                metadata.TrustServerCertificate,
+                metadata.ServerVersion
+            });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
+    }
+
+    [HttpPost("connections")]
+    public async Task<IActionResult> SaveConnectionProfile([FromBody] ConnectionProfileUpsertRequest request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { Error = "Body inválido." });
+
+        if (string.IsNullOrWhiteSpace(request.ConnectionName))
+            return BadRequest(new { Error = "ConnectionName es requerido." });
+
+        if (string.IsNullOrWhiteSpace(request.ConnectionString))
+            return BadRequest(new { Error = "ConnectionString es requerido." });
+
+        var normalizedConnectionName = request.ConnectionName.Trim();
+        var environmentName = configuration["SystemStartup:EnvironmentName"] ?? "Development";
+        var profileKey = configuration["SystemStartup:DefaultSystemProfile"] ?? "default";
+        var now = DateTime.UtcNow.ToString("o");
+
+        ConnectionValidationMetadata metadata;
+        try
+        {
+            metadata = await ValidateSqlServerConnectionAsync(request.ConnectionString.Trim(), ct);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Error = $"La conexión no es válida: {ex.Message}" });
+        }
+
+        var secretKey = BuildConnectionSecretKey(environmentName, profileKey, normalizedConnectionName);
+        var protector = dataProtectionProvider.CreateProtector(VannaLight.Infrastructure.Security.AppSecretProtection.Purpose);
+        var plainBytes = System.Text.Encoding.UTF8.GetBytes(request.ConnectionString.Trim());
+        var cipherBytes = protector.Protect(plainBytes);
+        var cipherText = Convert.ToBase64String(cipherBytes);
+        var existingSecret = await appSecretStore.GetByKeyAsync(secretKey, ct);
+
+        await appSecretStore.UpsertAsync(
+            new AppSecret
+            {
+                Id = existingSecret?.Id ?? 0,
+                SecretKey = secretKey,
+                CipherText = cipherText,
+                Description = string.IsNullOrWhiteSpace(request.Description)
+                    ? $"Connection secret for {normalizedConnectionName}."
+                    : request.Description.Trim(),
+                CreatedUtc = existingSecret?.CreatedUtc ?? now,
+                UpdatedUtc = now
+            },
+            ct);
+
+        var existingProfile = await connectionProfileStore.GetAsync(environmentName, profileKey, normalizedConnectionName, ct);
+        var profileId = await connectionProfileStore.UpsertAsync(
+            new ConnectionProfile
+            {
+                Id = existingProfile?.Id ?? 0,
+                EnvironmentName = environmentName,
+                ProfileKey = profileKey,
+                ConnectionName = normalizedConnectionName,
+                ProviderKind = "SqlServer",
+                ConnectionMode = "FullStringRef",
+                ServerHost = metadata.ServerHost,
+                DatabaseName = metadata.DatabaseName,
+                UserName = metadata.UserName,
+                IntegratedSecurity = metadata.IntegratedSecurity,
+                Encrypt = metadata.Encrypt,
+                TrustServerCertificate = metadata.TrustServerCertificate,
+                CommandTimeoutSec = 30,
+                SecretRef = $"appsecret:{secretKey}",
+                IsActive = true,
+                Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+                CreatedUtc = existingProfile?.CreatedUtc ?? now,
+                UpdatedUtc = now
+            },
+            ct);
+
+        return Ok(new
+        {
+            Message = "Conexión guardada correctamente.",
+            Id = profileId,
+            ConnectionName = normalizedConnectionName,
+            metadata.ServerHost,
+            metadata.DatabaseName,
+            metadata.UserName,
+            metadata.IntegratedSecurity,
+            metadata.Encrypt,
+            metadata.TrustServerCertificate
+        });
+    }
+
     [HttpPost("onboarding/step1")]
     public async Task<IActionResult> SaveOnboardingStep1([FromBody] OnboardingStep1Request request, CancellationToken ct)
     {
@@ -378,7 +511,18 @@ public class AdminController(
             .FirstOrDefault(x => string.Equals(x.ConnectionName, normalizedConnectionName, StringComparison.OrdinalIgnoreCase));
 
         if (connectionProfile is null)
-            return NotFound(new { Error = "La conexión seleccionada no existe en ConnectionProfiles." });
+        {
+            try
+            {
+                var resolvedConnectionString = await operationalConnectionResolver.ResolveConnectionStringAsync(normalizedConnectionName, ct);
+                if (string.IsNullOrWhiteSpace(resolvedConnectionString))
+                    return NotFound(new { Error = "La conexión seleccionada no existe ni pudo resolverse desde secrets/configuración." });
+            }
+            catch
+            {
+                return NotFound(new { Error = "La conexión seleccionada no existe ni pudo resolverse desde secrets/configuración." });
+            }
+        }
 
         var now = DateTime.UtcNow.ToString("o");
         var normalizedTenantKey = request.TenantKey.Trim();
@@ -1766,5 +1910,34 @@ public class AdminController(
             "dimension" => $"Dimensión o etiqueta descriptiva sugerida para segmentar resultados: {table.Schema}.{table.Name}.{column.Name}.",
             _ => $"Pista semántica generada para {table.Schema}.{table.Name}.{column.Name}."
         };
+    }
+
+    private static string BuildConnectionSecretKey(string environmentName, string profileKey, string connectionName)
+    {
+        return $"connections/{environmentName.Trim().ToLowerInvariant()}/{profileKey.Trim().ToLowerInvariant()}/{connectionName.Trim().ToLowerInvariant()}";
+    }
+
+    private static async Task<ConnectionValidationMetadata> ValidateSqlServerConnectionAsync(string connectionString, CancellationToken ct)
+    {
+        var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connectionString)
+        {
+            ConnectTimeout = 5
+        };
+
+        await using var connection = new Microsoft.Data.SqlClient.SqlConnection(builder.ConnectionString);
+        await connection.OpenAsync(ct);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128));";
+        var serverVersion = Convert.ToString(await command.ExecuteScalarAsync(ct)) ?? connection.ServerVersion;
+
+        return new ConnectionValidationMetadata(
+            ServerHost: builder.DataSource,
+            DatabaseName: builder.InitialCatalog,
+            UserName: string.IsNullOrWhiteSpace(builder.UserID) ? null : builder.UserID,
+            IntegratedSecurity: builder.IntegratedSecurity,
+            Encrypt: builder.Encrypt,
+            TrustServerCertificate: builder.TrustServerCertificate,
+            ServerVersion: serverVersion);
     }
 }

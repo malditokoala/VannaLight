@@ -12,15 +12,16 @@ using VannaLight.Core.Models;
 
 namespace VannaLight.Api.Controllers;
 
-public record AskRequest(
-    string Question,
-    string? UserId,
-    string? ConnectionId,
-    string? TenantKey,
-    string? Domain,
-    string? ConnectionName,
-    AskMode Mode = AskMode.Data
-);
+public sealed record AskRequest
+{
+    public string Question { get; init; } = string.Empty;
+    public string? UserId { get; init; }
+    public string? ConnectionId { get; init; }
+    public string? TenantKey { get; init; }
+    public string? Domain { get; init; }
+    public string? ConnectionName { get; init; }
+    public AskMode Mode { get; init; } = AskMode.Data;
+}
 
 public record FeedbackRequest(
     Guid JobId,

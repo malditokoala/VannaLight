@@ -1,5 +1,6 @@
 using Dapper;
 using LLama.Native;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using VannaLight.Api.Hubs;
@@ -45,6 +46,7 @@ var sqlitePath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPa
 
 var runtimeRel = builder.Configuration["Paths:RuntimeDb"] ?? "Data/vanna_runtime.db";
 var runtimePath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, runtimeRel));
+var dataProtectionKeysPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "Data", "dpkeys"));
 
 var modelRelOrAbs = builder.Configuration["Paths:Model"] ?? @"C:\Modelos\qwen2.5-coder-7b-instruct-q4_k_m.gguf";
 var modelPath = Path.IsPathRooted(modelRelOrAbs)
@@ -53,6 +55,7 @@ var modelPath = Path.IsPathRooted(modelRelOrAbs)
 
 Directory.CreateDirectory(Path.GetDirectoryName(sqlitePath)!);
 Directory.CreateDirectory(Path.GetDirectoryName(runtimePath)!);
+Directory.CreateDirectory(dataProtectionKeysPath);
 
 // ---------------------------------------------------------
 // 2. CONFIGURACION DE ARRANQUE
@@ -88,12 +91,16 @@ builder.Services.AddSingleton<IOptions<RuntimeDbOptions>>(Options.Create(runtime
 // AppSettings actual: se mantiene por compatibilidad hasta mover LlmClient
 var settings = AppSettingsFactory.Create(RuntimeProfile.ALTO, modelPath);
 builder.Services.AddSingleton(settings);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
+    .SetApplicationName("VannaLight");
 
 // ---------------------------------------------------------
 // 4. NUEVA CAPA DE CONFIGURACION OPERATIVA
 // ---------------------------------------------------------
 builder.Services.AddSingleton<ISystemConfigStore>(_ => new SqliteSystemConfigStore(sqlitePath));
 builder.Services.AddSingleton<IConnectionProfileStore>(_ => new SqliteConnectionProfileStore(sqlitePath));
+builder.Services.AddSingleton<IAppSecretStore>(_ => new SqliteAppSecretStore(sqlitePath));
 builder.Services.AddSingleton<ITenantStore>(_ => new SqliteTenantStore(sqlitePath));
 builder.Services.AddSingleton<ITenantDomainStore>(_ => new SqliteTenantDomainStore(sqlitePath));
 builder.Services.AddSingleton<ISystemConfigProvider, SystemConfigProvider>();
@@ -255,6 +262,16 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
             CreatedUtc TEXT NOT NULL,
             UpdatedUtc TEXT NOT NULL,
             UNIQUE(EnvironmentName, ProfileKey, ConnectionName)
+        );
+
+        CREATE TABLE IF NOT EXISTS AppSecrets (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            SecretKey TEXT NOT NULL,
+            CipherText TEXT NOT NULL,
+            Description TEXT NULL,
+            CreatedUtc TEXT NOT NULL,
+            UpdatedUtc TEXT NOT NULL,
+            UNIQUE(SecretKey)
         );
 
         CREATE TABLE IF NOT EXISTS Tenants (

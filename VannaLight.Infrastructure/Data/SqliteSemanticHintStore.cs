@@ -90,8 +90,29 @@ ORDER BY IsActive DESC, Priority ASC, Id ASC;";
         var displayName = NormalizeOptional(hint.DisplayName);
         var objectName = NormalizeOptional(hint.ObjectName);
         var columnName = NormalizeOptional(hint.ColumnName);
+        var targetId = hint.Id;
 
-        if (hint.Id > 0)
+        if (targetId <= 0)
+        {
+            const string findExistingSql = @"
+SELECT Id
+FROM SemanticHints
+WHERE Domain = @Domain
+  AND HintKey = @HintKey
+LIMIT 1;";
+
+            targetId = await conn.ExecuteScalarAsync<long?>(
+                new CommandDefinition(
+                    findExistingSql,
+                    new
+                    {
+                        Domain = normalizedDomain,
+                        HintKey = hintKey
+                    },
+                    cancellationToken: ct)) ?? 0;
+        }
+
+        if (targetId > 0)
         {
             const string updateSql = @"
 UPDATE SemanticHints
@@ -113,7 +134,7 @@ WHERE Id = @Id;";
                     updateSql,
                     new
                     {
-                        hint.Id,
+                        Id = targetId,
                         Domain = normalizedDomain,
                         HintKey = hintKey,
                         HintType = hintType,
@@ -127,7 +148,7 @@ WHERE Id = @Id;";
                     },
                     cancellationToken: ct));
 
-            return affected > 0 ? hint.Id : 0;
+            return affected > 0 ? targetId : 0;
         }
 
         const string insertSql = @"

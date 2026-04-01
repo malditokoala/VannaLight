@@ -50,8 +50,8 @@ public sealed class SqliteAllowedObjectStore : IAllowedObjectStore
             dbPath = Path.GetFullPath(dbPath);
         }
 
-        _readConnectionString = $"Data Source={dbPath};Mode=ReadOnly;Cache=Shared;";
-        _writeConnectionString = $"Data Source={dbPath};Cache=Shared;";
+        _readConnectionString = $"Data Source={dbPath};Mode=ReadOnly;";
+        _writeConnectionString = $"Data Source={dbPath};Mode=ReadWriteCreate;";
     }
 
     public async Task<IReadOnlyList<AllowedObject>> GetActiveObjectsAsync(
