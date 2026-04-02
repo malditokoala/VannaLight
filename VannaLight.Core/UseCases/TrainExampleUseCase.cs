@@ -14,11 +14,18 @@ public sealed class TrainExampleUseCase
         _patternMatcher = patternMatcher;
     }
 
-    public async Task TrainAsync(string? question, string? sqlText, string? domain, bool isVerified, CancellationToken ct)
+    public async Task TrainAsync(
+        string? question,
+        string? sqlText,
+        AskExecutionContext? executionContext,
+        bool isVerified,
+        CancellationToken ct)
     {
         var cleanQuestion = CleanText(question);
         var cleanSql = CleanText(sqlText);
-        var cleanDomain = CleanText(domain);
+        var cleanTenantKey = CleanText(executionContext?.TenantKey);
+        var cleanDomain = CleanText(executionContext?.Domain);
+        var cleanConnectionName = CleanText(executionContext?.ConnectionName);
 
         if (string.IsNullOrWhiteSpace(cleanQuestion) || string.IsNullOrWhiteSpace(cleanSql))
             throw new ArgumentException("La pregunta o el SQL están vacíos o corruptos.");
@@ -29,7 +36,9 @@ public sealed class TrainExampleUseCase
             new TrainingExampleUpsert(
                 cleanQuestion,
                 cleanSql,
+                string.IsNullOrWhiteSpace(cleanTenantKey) ? null : cleanTenantKey,
                 string.IsNullOrWhiteSpace(cleanDomain) ? null : cleanDomain,
+                string.IsNullOrWhiteSpace(cleanConnectionName) ? null : cleanConnectionName,
                 string.IsNullOrWhiteSpace(intentName) ? null : intentName,
                 isVerified,
                 isVerified ? 100 : 0),

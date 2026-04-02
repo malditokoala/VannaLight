@@ -35,8 +35,45 @@ public class AssistantController(
     IAskRequestQueue queue,
     IExecutionContextResolver executionContextResolver,
     ISqlCacheService cacheService, // <-- NUEVO: Inyectamos el servicio de caché (SOLID)
-    IHubContext<AssistantHub> hubContext) : ControllerBase
+    IHubContext<AssistantHub> hubContext,
+    ITenantStore tenantStore,
+    ITenantDomainStore tenantDomainStore,
+    IOperationalConnectionResolver operationalConnectionResolver) : ControllerBase
 {
+    [HttpGet("contexts")]
+    public async Task<IActionResult> GetRuntimeContextsAsync(CancellationToken ct)
+    {
+        try
+        {
+            var tenants = await tenantStore.GetAllAsync(ct);
+            var items = new List<object>();
+
+            foreach (var tenant in tenants.Where(t => t.IsActive))
+            {
+                var mappings = await tenantDomainStore.GetAllByTenantAsync(tenant.TenantKey, ct);
+                foreach (var mapping in mappings.Where(m => m.IsActive))
+                {
+                    items.Add(new
+                    {
+                        tenantKey = tenant.TenantKey,
+                        tenantDisplayName = tenant.DisplayName,
+                        domain = mapping.Domain,
+                        connectionName = mapping.ConnectionName,
+                        systemProfileKey = string.IsNullOrWhiteSpace(mapping.SystemProfileKey) ? "default" : mapping.SystemProfileKey,
+                        isDefault = mapping.IsDefault,
+                        label = $"{tenant.DisplayName} · {mapping.Domain} · {mapping.ConnectionName}"
+                    });
+                }
+            }
+
+            return Ok(items);
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
+    }
+
     [HttpPost("ask")]
     public async Task<IActionResult> AskAsync([FromBody] AskRequest request)
     {
@@ -51,12 +88,24 @@ public class AssistantController(
             request.Domain,
             request.ConnectionName,
             HttpContext.RequestAborted);
+        var sqlServerConnectionString = string.Empty;
+        if (request.Mode == AskMode.Data)
+        {
+            sqlServerConnectionString = await operationalConnectionResolver.ResolveConnectionStringAsync(
+                executionContext.ConnectionName,
+                HttpContext.RequestAborted);
+        }
 
         // --- 1) CACHÉ: SOLO PARA DATA (SQL) ---
         if (request.Mode == AskMode.Data)
         {
             // Toda la complejidad de Dapper, SQLite y SQL Server se delega al servicio
-            var (sql, data) = await cacheService.TryGetCachedResultAsync(cleanQuestion, userId, default);
+            var (sql, data) = await cacheService.TryGetCachedResultAsync(
+                cleanQuestion,
+                userId,
+                executionContext,
+                sqlServerConnectionString,
+                HttpContext.RequestAborted);
 
             if (sql != null)
             {
@@ -116,7 +165,8 @@ public class AssistantController(
             request.Mode,
             executionContext.TenantKey,
             executionContext.Domain,
-            executionContext.ConnectionName);
+            executionContext.ConnectionName,
+            executionContext.SystemProfileKey);
         await queue.EnqueueAsync(workItem);
 
         return Accepted(new
@@ -126,7 +176,8 @@ public class AssistantController(
             Mode = request.Mode.ToString(),
             executionContext.TenantKey,
             executionContext.Domain,
-            executionContext.ConnectionName
+            executionContext.ConnectionName,
+            executionContext.SystemProfileKey
         });
     }
 
@@ -134,9 +185,16 @@ public class AssistantController(
     [HttpGet("history")]
     public async Task<IActionResult> GetHistoryAsync([FromQuery] string mode = "Data", CancellationToken ct = default)
     {
-        // El frontend de chat pasará '?mode=Data' o '?mode=Predict' según el tab activo
-        var jobs = await jobStore.GetRecentJobsAsync(50, mode, ct);
-        return Ok(jobs);
+        try
+        {
+            // El frontend de chat pasará '?mode=Data' o '?mode=Predict' según el tab activo
+            var jobs = await jobStore.GetRecentJobsAsync(50, mode, ct);
+            return Ok(jobs);
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpPost("feedback")]

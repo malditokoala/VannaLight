@@ -28,7 +28,7 @@ public sealed class WiDocIngestor
 
     public async Task<WiReindexResult> ReindexAsync(CancellationToken ct)
     {
-        string wiRootSetting = await _systemConfigProvider.GetRequiredValueAsync("Docs", "WiRootPath", ct);
+        string wiRootSetting = await _systemConfigProvider.GetRequiredValueAsync("Docs", "WiRootPath", ct: ct);
         string wiRoot = Path.IsPathRooted(wiRootSetting)
             ? wiRootSetting
             : Path.GetFullPath(Path.Combine(_environment.ContentRootPath, wiRootSetting));

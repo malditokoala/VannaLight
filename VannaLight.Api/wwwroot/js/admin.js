@@ -34,13 +34,16 @@ let selectedProfileIndex = -1;
 let globalTenants = [];
 let globalConnectionProfiles = [];
 let globalTenantDomains = [];
+let globalOnboardingRuntimeContexts = [];
 let globalOnboardingSchemaCandidates = [];
 let globalOnboardingStatus = null;
 let globalOnboardingValidation = null;
 let selectedOnboardingTenantKey = null;
+let globalAdminActiveContext = null;
 let onboardingBootstrap = null;
 let activeOnboardingTourStep = -1;
 const onboardingWorkspaceStateKey = 'vannalight.onboarding.workspace';
+const adminScopedTabs = new Set(['allowed', 'business-rules', 'semantics', 'patterns']);
 
 const promptConfigFields = [
     { key: 'SystemPersona', valueType: 'string', elementId: 'txtPromptSystemPersona', description: 'Persona base del system prompt SQL.' },
@@ -115,10 +118,217 @@ const onboardingTourSteps = [
     }
 ];
 
+function getOnboardingDefaults() {
+    return onboardingBootstrap?.defaults || onboardingBootstrap?.Defaults || {};
+}
+
+function getOnboardingProfile() {
+    return onboardingBootstrap?.profile || onboardingBootstrap?.Profile || {};
+}
+
+function getAdminScopedTabConfig(tabKey) {
+    const configs = {
+        'allowed': {
+            label: 'Allowed Objects',
+            listId: 'allowedList',
+            countId: 'allowedCount',
+            filterId: 'txtAllowedDomainFilter',
+            editorDomainId: 'txtAllowedDomain',
+            hintId: 'allowedContextHint',
+            bannerId: 'allowedBanner',
+            load: loadAllowedObjects,
+            reset: resetAllowedObjectForm
+        },
+        'business-rules': {
+            label: 'Business Rules',
+            listId: 'businessRuleList',
+            countId: 'businessRuleCount',
+            filterId: 'txtBusinessRuleDomainFilter',
+            editorDomainId: 'txtBusinessRuleDomain',
+            hintId: 'businessRuleContextHint',
+            bannerId: 'businessRuleBanner',
+            load: loadBusinessRules,
+            reset: resetBusinessRuleForm
+        },
+        'semantics': {
+            label: 'Semantic Hints',
+            listId: 'semanticHintList',
+            countId: 'semanticHintCount',
+            filterId: 'txtSemanticHintDomainFilter',
+            editorDomainId: 'txtSemanticHintDomain',
+            hintId: 'semanticHintContextHint',
+            bannerId: 'semanticHintBanner',
+            load: loadSemanticHints,
+            reset: resetSemanticHintForm
+        },
+        'patterns': {
+            label: 'Query Patterns',
+            listId: 'queryPatternList',
+            countId: 'queryPatternCount',
+            filterId: 'txtQueryPatternDomainFilter',
+            editorDomainId: 'txtQueryPatternDomain',
+            hintId: 'queryPatternContextHint',
+            bannerId: 'queryPatternBanner',
+            load: loadQueryPatterns,
+            reset: resetQueryPatternForm
+        }
+    };
+
+    return configs[tabKey] || null;
+}
+
+function normalizeAdminContext(rawContext) {
+    if (!rawContext) return null;
+
+    const tenantKey = String(rawContext.tenantKey || rawContext.TenantKey || '').trim();
+    const tenantDisplayName = String(rawContext.tenantDisplayName || rawContext.TenantDisplayName || rawContext.displayName || rawContext.DisplayName || tenantKey).trim();
+    const domain = String(rawContext.domain || rawContext.Domain || '').trim();
+    const connectionName = String(rawContext.connectionName || rawContext.ConnectionName || '').trim();
+    const systemProfileKey = String(rawContext.systemProfileKey || rawContext.SystemProfileKey || 'default').trim() || 'default';
+
+    if (!tenantKey || !domain || !connectionName) return null;
+
+    return {
+        tenantKey,
+        tenantDisplayName: tenantDisplayName || tenantKey,
+        domain,
+        connectionName,
+        systemProfileKey
+    };
+}
+
+function getCurrentAdminScopedTabKey() {
+    if (document.getElementById('pane-allowed')?.classList.contains('active')) return 'allowed';
+    if (document.getElementById('pane-business-rules')?.classList.contains('active')) return 'business-rules';
+    if (document.getElementById('pane-semantics')?.classList.contains('active')) return 'semantics';
+    if (document.getElementById('pane-patterns')?.classList.contains('active')) return 'patterns';
+    return null;
+}
+
+function setScopedTabHint(config, message) {
+    if (!config?.hintId) return;
+    const hint = document.getElementById(config.hintId);
+    if (hint) hint.textContent = message;
+}
+
+function renderScopedTabEmptyState(config, message) {
+    const list = document.getElementById(config.listId);
+    const count = document.getElementById(config.countId);
+    if (count) count.textContent = '0';
+    if (!list) return;
+
+    list.innerHTML = `
+        <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 12h16"></path>
+                <path d="M12 4v16"></path>
+                <circle cx="12" cy="12" r="9"></circle>
+            </svg>
+            ${escHtml(message)}
+        </div>`;
+}
+
+function clearAdminScopedTabCollections(tabKey) {
+    if (tabKey === 'allowed') globalAllowedObjects = [];
+    if (tabKey === 'business-rules') globalBusinessRules = [];
+    if (tabKey === 'semantics') globalSemanticHints = [];
+    if (tabKey === 'patterns') {
+        globalQueryPatterns = [];
+        globalQueryPatternTerms = [];
+        selectedQueryPatternTermId = null;
+    }
+}
+
+function getActiveAdminContext() {
+    return globalAdminActiveContext;
+}
+
+function syncAdminScopedFiltersToContext(context) {
+    const normalized = normalizeAdminContext(context);
+    const domain = normalized?.domain || '';
+    const tenantDisplayName = normalized?.tenantDisplayName || normalized?.tenantKey || 'sin workspace';
+    const connectionName = normalized?.connectionName || 'sin conexión';
+
+    defaultAllowedDomain = domain;
+    defaultBusinessRuleDomain = domain;
+    defaultSemanticHintDomain = domain;
+    defaultQueryPatternDomain = domain;
+
+    const configs = ['allowed', 'business-rules', 'semantics', 'patterns']
+        .map(getAdminScopedTabConfig)
+        .filter(Boolean);
+
+    configs.forEach(config => {
+        setValue(config.filterId, domain);
+        if (!getValue(config.editorDomainId).trim()) {
+            setValue(config.editorDomainId, domain);
+        }
+
+        if (domain) {
+            setScopedTabHint(config, `Contexto activo: ${tenantDisplayName} / ${domain} / ${connectionName}`);
+        } else {
+            setScopedTabHint(config, `Selecciona un contexto en Onboarding para ver ${config.label}.`);
+        }
+    });
+}
+
+function renderContextRequiredState(tabKey, message = 'Selecciona primero un contexto en Onboarding.') {
+    const config = getAdminScopedTabConfig(tabKey);
+    if (!config) return;
+
+    clearAdminScopedTabCollections(tabKey);
+    config.reset?.();
+    setValue(config.filterId, '');
+    setValue(config.editorDomainId, '');
+    setScopedTabHint(config, message);
+    renderScopedTabEmptyState(config, message);
+}
+
+async function activateAdminScopedTab(tabKey) {
+    if (!adminScopedTabs.has(tabKey)) return;
+
+    const context = getActiveAdminContext();
+    if (!context?.domain) {
+        renderContextRequiredState(tabKey, 'Selecciona primero un workspace y un contexto válido en Onboarding.');
+        return;
+    }
+
+    syncAdminScopedFiltersToContext(context);
+    const config = getAdminScopedTabConfig(tabKey);
+    if (config?.load) {
+        await config.load();
+    }
+}
+
+async function setAdminActiveContext(rawContext, options = {}) {
+    const normalized = normalizeAdminContext(rawContext);
+    globalAdminActiveContext = normalized;
+    syncAdminScopedFiltersToContext(normalized);
+
+    const currentScopedTab = getCurrentAdminScopedTabKey();
+    if (options.reloadCurrentTab && currentScopedTab) {
+        if (normalized) {
+            await activateAdminScopedTab(currentScopedTab);
+        } else {
+            renderContextRequiredState(currentScopedTab, 'Selecciona primero un workspace y un contexto válido en Onboarding.');
+        }
+    }
+}
+
+function buildAdminContextFromOnboardingForm() {
+    return normalizeAdminContext({
+        tenantKey: getValue('txtOnboardingTenantKey').trim(),
+        tenantDisplayName: getValue('txtOnboardingDisplayName').trim(),
+        domain: getValue('txtOnboardingDomain').trim(),
+        connectionName: getValue('txtOnboardingConnectionName').trim(),
+        systemProfileKey: getValue('txtOnboardingSystemProfileKey').trim()
+    });
+}
+
 // -----------------------------------------------------------
 // TAB SWITCHING
 // -----------------------------------------------------------
-function switchTab(t) {
+async function switchTab(t) {
     if (t !== 'onboarding') {
         closeOnboardingTour();
     }
@@ -136,6 +346,8 @@ function switchTab(t) {
 
     if (tab) tab.className = 'tab-btn active-' + t;
     if (pane) pane.classList.add('active');
+
+    await activateAdminScopedTab(t);
 }
 
 // -----------------------------------------------------------
@@ -150,16 +362,19 @@ async function loadOnboardingBootstrap() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         onboardingBootstrap = await res.json();
-        globalTenants = Array.isArray(onboardingBootstrap?.Tenants) ? onboardingBootstrap.Tenants : [];
-        globalConnectionProfiles = Array.isArray(onboardingBootstrap?.Connections) ? onboardingBootstrap.Connections : [];
+        globalTenants = Array.isArray(onboardingBootstrap?.tenants) ? onboardingBootstrap.tenants : (Array.isArray(onboardingBootstrap?.Tenants) ? onboardingBootstrap.Tenants : []);
+        globalConnectionProfiles = Array.isArray(onboardingBootstrap?.connections) ? onboardingBootstrap.connections : (Array.isArray(onboardingBootstrap?.Connections) ? onboardingBootstrap.Connections : []);
+        globalOnboardingRuntimeContexts = Array.isArray(onboardingBootstrap?.runtimeContexts) ? onboardingBootstrap.runtimeContexts : (Array.isArray(onboardingBootstrap?.RuntimeContexts) ? onboardingBootstrap.RuntimeContexts : []);
         globalTenantDomains = [];
 
         populateOnboardingSummary();
         populateOnboardingConnectionOptions();
+        renderOnboardingRuntimeContexts();
         renderOnboardingTenantList();
 
         const persistedWorkspace = readOnboardingWorkspaceState();
-        const defaultTenantKey = persistedWorkspace?.tenantKey || onboardingBootstrap?.Defaults?.TenantKey || defaultAdminTenant || 'default';
+        const defaults = getOnboardingDefaults();
+        const defaultTenantKey = persistedWorkspace?.tenantKey || defaults.tenantKey || defaults.TenantKey || defaultAdminTenant || 'default';
         const hasTenantInBootstrap = !!globalTenants.find(x => String(x.tenantKey || x.TenantKey || '') === String(defaultTenantKey));
         if (defaultTenantKey && hasTenantInBootstrap) {
             await selectOnboardingTenant(defaultTenantKey);
@@ -182,10 +397,10 @@ async function loadOnboardingBootstrap() {
 }
 
 function populateOnboardingSummary() {
-    const defaults = onboardingBootstrap?.Defaults || {};
-    const profile = onboardingBootstrap?.Profile || {};
-    setText('txtOnboardingEnvironment', onboardingBootstrap?.EnvironmentName || 'Development');
-    setText('txtOnboardingSystemProfile', profile.profileKey || profile.ProfileKey || defaults.SystemProfileKey || 'default');
+    const defaults = getOnboardingDefaults();
+    const profile = getOnboardingProfile();
+    setText('txtOnboardingEnvironment', onboardingBootstrap?.environmentName || onboardingBootstrap?.EnvironmentName || 'Development');
+    setText('txtOnboardingSystemProfile', profile.profileKey || profile.ProfileKey || defaults.systemProfileKey || defaults.SystemProfileKey || 'default');
     setText('txtOnboardingConnectionCount', String(globalConnectionProfiles.length || 0));
 }
 
@@ -195,6 +410,7 @@ function populateOnboardingConnectionOptions() {
 
     if (!globalConnectionProfiles.length) {
         select.innerHTML = '<option value="OperationalDb">OperationalDb</option>';
+        renderOnboardingConnectionCatalog();
         return;
     }
 
@@ -206,6 +422,110 @@ function populateOnboardingConnectionOptions() {
         const label = `${connectionName} · ${databaseName} · ${profileKey}${isActive ? ' · activo' : ''}`;
         return `<option value="${escHtml(connectionName)}">${escHtml(label)}</option>`;
     }).join('');
+
+    renderOnboardingConnectionCatalog();
+}
+
+function renderOnboardingConnectionCatalog() {
+    const list = document.getElementById('onboardingConnectionCatalog');
+    if (!list) return;
+
+    if (!globalConnectionProfiles.length) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
+                    <path d="M5 5v14c0 1.66 3.1 3 7 3s7-1.34 7-3V5"></path>
+                </svg>
+                Aún no hay conexiones configuradas
+            </div>`;
+        return;
+    }
+
+    const selectedConnectionName = getValue('txtOnboardingConnectionName').trim();
+    list.innerHTML = globalConnectionProfiles.map(profile => {
+        const connectionName = profile.connectionName || profile.ConnectionName || 'OperationalDb';
+        const profileKey = profile.profileKey || profile.ProfileKey || 'default';
+        const databaseName = profile.databaseName || profile.DatabaseName || '—';
+        const serverHost = profile.serverHost || profile.ServerHost || '—';
+        const description = profile.description || profile.Description || '';
+        const isActive = !!(profile.isActive || profile.IsActive);
+        const isSelected = selectedConnectionName && selectedConnectionName === connectionName;
+        return `
+            <div class="history-item onboarding-connection-card ${isSelected ? 'is-selected' : ''}" onclick="applyOnboardingConnection('${jsString(connectionName)}')">
+                <div class="hi-top">
+                    <div class="hi-question">${escHtml(connectionName)}</div>
+                    <div class="hi-time">${escHtml(databaseName)}</div>
+                </div>
+                <div class="onboarding-connection-meta">${escHtml(serverHost)} · Perfil ${escHtml(profileKey)}</div>
+                <div class="hi-badges">
+                    <span class="hi-verify ${isActive ? 'verified' : 'rejected'}">${isActive ? 'Activa' : 'Inactiva'}</span>
+                    ${description ? `<span class="hi-status ok"><span class="dot"></span>${escHtml(description)}</span>` : ''}
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function renderOnboardingRuntimeContexts() {
+    const list = document.getElementById('onboardingRuntimeContextList');
+    if (!list) return;
+
+    const selectedTenantKey = getValue('txtOnboardingTenantKey').trim() || selectedOnboardingTenantKey || '';
+    const visibleRuntimeContexts = selectedTenantKey
+        ? globalOnboardingRuntimeContexts.filter(item =>
+            String(item.tenantKey || item.TenantKey || '') === String(selectedTenantKey))
+        : globalOnboardingRuntimeContexts;
+
+    if (!visibleRuntimeContexts.length) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M4 6h16"></path>
+                    <path d="M4 12h16"></path>
+                    <path d="M4 18h16"></path>
+                </svg>
+                ${selectedTenantKey ? 'Este workspace no tiene contextos runtime disponibles' : 'No hay contextos disponibles en runtime'}
+            </div>`;
+        return;
+    }
+
+    const selectedDomain = getValue('txtOnboardingDomain').trim();
+    const selectedConnectionName = getValue('txtOnboardingConnectionName').trim();
+
+    list.innerHTML = visibleRuntimeContexts.map(item => {
+        const tenantKey = item.tenantKey || item.TenantKey || '';
+        const tenantDisplayName = item.tenantDisplayName || item.TenantDisplayName || tenantKey;
+        const domain = item.domain || item.Domain || '';
+        const connectionName = item.connectionName || item.ConnectionName || 'OperationalDb';
+        const profileKey = item.systemProfileKey || item.SystemProfileKey || 'default';
+        const isDefault = !!(item.isDefault ?? item.IsDefault);
+        const isSelected = tenantKey === selectedTenantKey && domain === selectedDomain && connectionName === selectedConnectionName;
+
+        return `
+            <div class="history-item onboarding-mapping is-clickable ${isSelected ? 'is-selected' : ''}" onclick="applyOnboardingRuntimeContext('${jsString(tenantKey)}','${jsString(domain)}','${jsString(connectionName)}','${jsString(profileKey)}')">
+                <div class="hi-top">
+                    <div class="hi-question">${escHtml(tenantDisplayName)} · ${escHtml(domain)}</div>
+                    <div class="hi-time">${escHtml(connectionName)}</div>
+                </div>
+                <div class="hi-badges">
+                    <span class="hi-verify ${isDefault ? 'verified' : 'pending'}">${isDefault ? 'Default runtime' : 'Runtime'}</span>
+                    <span class="hi-status ok"><span class="dot"></span>${escHtml(profileKey)}</span>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function applyOnboardingConnection(connectionName) {
+    if (!connectionName) return;
+    setValue('txtOnboardingConnectionName', connectionName);
+    persistOnboardingWorkspaceState();
+    setOnboardingMeta(null);
+    renderTenantDomains();
+    renderOnboardingConnectionCatalog();
+    renderOnboardingRuntimeContexts();
+    renderOnboardingActionGuidance();
+    updateOnboardingStepper();
+    hideOnboardingBanner();
 }
 
 function renderOnboardingTenantList() {
@@ -215,10 +535,61 @@ function renderOnboardingTenantList() {
 
     const persistedWorkspace = readOnboardingWorkspaceState();
     const hasPersistedDraft = !!(persistedWorkspace?.tenantKey || persistedWorkspace?.domain || persistedWorkspace?.connectionName);
-    const effectiveCount = globalTenants.length || (hasPersistedDraft ? 1 : 0);
+    const runtimeContextCount = Array.isArray(globalOnboardingRuntimeContexts) ? globalOnboardingRuntimeContexts.length : 0;
+    const effectiveCount = Math.max(globalTenants.length, runtimeContextCount, hasPersistedDraft ? 1 : 0);
     if (count) count.textContent = String(effectiveCount);
 
-    if (!globalTenants.length) {
+    const tenantCards = globalTenants.map(tenant => {
+        const tenantKey = tenant.tenantKey || tenant.TenantKey || '';
+        const displayName = tenant.displayName || tenant.DisplayName || tenantKey;
+        const isActive = !!(tenant.isActive || tenant.IsActive);
+        const tenantContextCount = globalOnboardingRuntimeContexts.filter(x =>
+            String(x.tenantKey || x.TenantKey || '') === String(tenantKey)).length;
+
+        return `
+            <div class="history-item ${selectedOnboardingTenantKey === tenantKey ? 'selected' : ''}" id="tenant-${escAttr(tenantKey)}" onclick="selectOnboardingTenant('${jsString(tenantKey)}')">
+                <div class="hi-top">
+                    <div class="hi-question">${escHtml(displayName)}</div>
+                    <div class="hi-time">${escHtml(tenantKey)}</div>
+                </div>
+                <div class="hi-badges">
+                    <span class="hi-verify ${isActive ? 'verified' : 'rejected'}">${isActive ? 'Workspace activo' : 'Workspace inactivo'}</span>
+                    ${tenantContextCount ? `<span class="hi-status ok"><span class="dot"></span>${tenantContextCount} contexto${tenantContextCount === 1 ? '' : 's'}</span>` : ''}
+                </div>
+            </div>`;
+    });
+
+    const visibleRuntimeContexts = selectedOnboardingTenantKey
+        ? globalOnboardingRuntimeContexts.filter(item =>
+            String(item.tenantKey || item.TenantKey || '') === String(selectedOnboardingTenantKey))
+        : globalOnboardingRuntimeContexts;
+
+    const runtimeCards = visibleRuntimeContexts.map(item => {
+        const tenantKey = item.tenantKey || item.TenantKey || '';
+        const tenantDisplayName = item.tenantDisplayName || item.TenantDisplayName || tenantKey;
+        const domain = item.domain || item.Domain || '';
+        const connectionName = item.connectionName || item.ConnectionName || 'OperationalDb';
+        const profileKey = item.systemProfileKey || item.SystemProfileKey || 'default';
+        const isDefault = !!(item.isDefault ?? item.IsDefault);
+        const isSelected =
+            tenantKey === getValue('txtOnboardingTenantKey').trim()
+            && domain === getValue('txtOnboardingDomain').trim()
+            && connectionName === getValue('txtOnboardingConnectionName').trim();
+
+        return `
+            <div class="history-item onboarding-context-card ${isSelected ? 'selected' : ''}" onclick="applyOnboardingRuntimeContext('${jsString(tenantKey)}','${jsString(domain)}','${jsString(connectionName)}','${jsString(profileKey)}')">
+                <div class="hi-top">
+                    <div class="hi-question">${escHtml(tenantDisplayName)} · ${escHtml(domain)}</div>
+                    <div class="hi-time">${escHtml(connectionName)}</div>
+                </div>
+                <div class="hi-badges">
+                    <span class="hi-verify ${isDefault ? 'verified' : 'pending'}">${isDefault ? 'Contexto default' : 'Contexto runtime'}</span>
+                    <span class="hi-status ok"><span class="dot"></span>${escHtml(profileKey)}</span>
+                </div>
+            </div>`;
+    });
+
+    if (!tenantCards.length && !runtimeCards.length) {
         if (hasPersistedDraft) {
             const tenantKey = persistedWorkspace.tenantKey || 'workspace-actual';
             const displayName = persistedWorkspace.displayName || persistedWorkspace.tenantKey || 'Workspace actual';
@@ -248,21 +619,15 @@ function renderOnboardingTenantList() {
         return;
     }
 
-    list.innerHTML = globalTenants.map(tenant => {
-        const tenantKey = tenant.tenantKey || tenant.TenantKey || '';
-        const displayName = tenant.displayName || tenant.DisplayName || tenantKey;
-        const isActive = !!(tenant.isActive || tenant.IsActive);
-        return `
-            <div class="history-item ${selectedOnboardingTenantKey === tenantKey ? 'selected' : ''}" id="tenant-${escAttr(tenantKey)}" onclick="selectOnboardingTenant('${jsString(tenantKey)}')">
-                <div class="hi-top">
-                    <div class="hi-question">${escHtml(displayName)}</div>
-                    <div class="hi-time">${escHtml(tenantKey)}</div>
-                </div>
-                <div class="hi-badges">
-                    <span class="hi-verify ${isActive ? 'verified' : 'rejected'}">${isActive ? 'Activo' : 'Inactivo'}</span>
-                </div>
-            </div>`;
-    }).join('');
+    const sections = [];
+    if (tenantCards.length) {
+        sections.push(`<div class="onboarding-list-heading">Workspaces</div>${tenantCards.join('')}`);
+    }
+    if (runtimeCards.length) {
+        sections.push(`<div class="onboarding-list-heading">${selectedOnboardingTenantKey ? 'Contextos del workspace seleccionado' : 'Contextos disponibles'}</div>${runtimeCards.join('')}`);
+    }
+
+    list.innerHTML = sections.join('');
 }
 
 async function selectOnboardingTenant(tenantKey) {
@@ -279,16 +644,20 @@ async function selectOnboardingTenant(tenantKey) {
     setValue('txtOnboardingTenantKey', tenant.tenantKey || tenant.TenantKey || '');
     setValue('txtOnboardingDisplayName', tenant.displayName || tenant.DisplayName || '');
     setValue('txtOnboardingDescription', tenant.description || tenant.Description || '');
-    setValue('txtOnboardingSystemProfileKey', onboardingBootstrap?.Defaults?.SystemProfileKey || 'default');
+    const defaults = getOnboardingDefaults();
+    setValue('txtOnboardingSystemProfileKey', defaults.systemProfileKey || defaults.SystemProfileKey || 'default');
     toggleOnboardingAdvancedOptions((getValue('txtOnboardingSystemProfileKey').trim() || 'default') !== 'default');
 
     await loadTenantDomains(tenantKey);
     await loadOnboardingStatus();
     persistOnboardingWorkspaceState();
+    renderOnboardingConnectionCatalog();
 
     if (getValue('txtOnboardingDomain').trim() && getValue('txtOnboardingConnectionName').trim()) {
         await loadOnboardingSchemaCandidates();
     }
+
+    await setAdminActiveContext(buildAdminContextFromOnboardingForm(), { reloadCurrentTab: true });
 }
 
 async function loadTenantDomains(tenantKey) {
@@ -315,14 +684,16 @@ async function loadTenantDomains(tenantKey) {
         const defaultMapping = globalTenantDomains.find(x => !!(x.isDefault ?? x.IsDefault)) || globalTenantDomains[0];
         if (defaultMapping) {
             setValue('txtOnboardingDomain', defaultMapping.domain || defaultMapping.Domain || '');
-            setValue('txtOnboardingConnectionName', defaultMapping.connectionName || defaultMapping.ConnectionName || onboardingBootstrap?.Defaults?.ConnectionName || 'OperationalDb');
-            setValue('txtOnboardingSystemProfileKey', defaultMapping.systemProfileKey || defaultMapping.SystemProfileKey || onboardingBootstrap?.Defaults?.SystemProfileKey || 'default');
+            const defaults = getOnboardingDefaults();
+            setValue('txtOnboardingConnectionName', defaultMapping.connectionName || defaultMapping.ConnectionName || defaults.connectionName || defaults.ConnectionName || 'OperationalDb');
+            setValue('txtOnboardingSystemProfileKey', defaultMapping.systemProfileKey || defaultMapping.SystemProfileKey || defaults.systemProfileKey || defaults.SystemProfileKey || 'default');
             setOnboardingMeta(defaultMapping);
         } else {
             const persistedWorkspace = readOnboardingWorkspaceState();
-            setValue('txtOnboardingDomain', persistedWorkspace?.domain || onboardingBootstrap?.Defaults?.Domain || defaultAllowedDomain || '');
-            setValue('txtOnboardingConnectionName', persistedWorkspace?.connectionName || onboardingBootstrap?.Defaults?.ConnectionName || 'OperationalDb');
-            setValue('txtOnboardingSystemProfileKey', persistedWorkspace?.systemProfileKey || onboardingBootstrap?.Defaults?.SystemProfileKey || 'default');
+            const defaults = getOnboardingDefaults();
+            setValue('txtOnboardingDomain', persistedWorkspace?.domain || defaults.domain || defaults.Domain || defaultAllowedDomain || '');
+            setValue('txtOnboardingConnectionName', persistedWorkspace?.connectionName || defaults.connectionName || defaults.ConnectionName || 'OperationalDb');
+            setValue('txtOnboardingSystemProfileKey', persistedWorkspace?.systemProfileKey || defaults.systemProfileKey || defaults.SystemProfileKey || 'default');
             setOnboardingMeta(null);
         }
         toggleOnboardingAdvancedOptions((getValue('txtOnboardingSystemProfileKey').trim() || 'default') !== 'default');
@@ -380,8 +751,11 @@ function renderTenantDomains() {
         const connectionName = item.connectionName || item.ConnectionName || 'OperationalDb';
         const profileKey = item.systemProfileKey || item.SystemProfileKey || 'default';
         const isDefault = !!(item.isDefault ?? item.IsDefault);
+        const isSelected =
+            domain === getValue('txtOnboardingDomain').trim()
+            && connectionName === getValue('txtOnboardingConnectionName').trim();
         return `
-            <div class="history-item onboarding-mapping">
+            <div class="history-item onboarding-mapping is-clickable ${isSelected ? 'is-selected' : ''}" onclick="applyOnboardingMapping('${jsString(domain)}','${jsString(connectionName)}','${jsString(profileKey)}')">
                 <div class="hi-top">
                     <div class="hi-question">${escHtml(domain)}</div>
                     <div class="hi-time">${escHtml(connectionName)}</div>
@@ -392,6 +766,67 @@ function renderTenantDomains() {
                 </div>
             </div>`;
     }).join('');
+}
+
+function applyOnboardingMapping(domain, connectionName, profileKey) {
+    setValue('txtOnboardingDomain', domain || '');
+    setValue('txtOnboardingConnectionName', connectionName || 'OperationalDb');
+    setValue('txtOnboardingSystemProfileKey', profileKey || 'default');
+    toggleOnboardingAdvancedOptions((getValue('txtOnboardingSystemProfileKey').trim() || 'default') !== 'default');
+    persistOnboardingWorkspaceState();
+    setOnboardingMeta({
+        Domain: domain,
+        ConnectionName: connectionName,
+        SystemProfileKey: profileKey
+    });
+    renderTenantDomains();
+    renderOnboardingConnectionCatalog();
+    renderOnboardingRuntimeContexts();
+    renderOnboardingActionGuidance();
+    updateOnboardingStepper();
+    hideOnboardingBanner();
+    setAdminActiveContext(buildAdminContextFromOnboardingForm(), { reloadCurrentTab: true });
+}
+
+async function applyOnboardingRuntimeContext(tenantKey, domain, connectionName, profileKey) {
+    const tenantExists = globalTenants.some(x => String(x.tenantKey || x.TenantKey || '') === String(tenantKey));
+
+    if (tenantExists) {
+        await selectOnboardingTenant(tenantKey);
+    } else {
+        setValue('txtOnboardingTenantKey', tenantKey || '');
+        setValue('txtOnboardingDisplayName', tenantKey || '');
+    }
+
+    setValue('txtOnboardingDomain', domain || '');
+    setValue('txtOnboardingConnectionName', connectionName || 'OperationalDb');
+    setValue('txtOnboardingSystemProfileKey', profileKey || 'default');
+    toggleOnboardingAdvancedOptions((getValue('txtOnboardingSystemProfileKey').trim() || 'default') !== 'default');
+    persistOnboardingWorkspaceState();
+    setOnboardingMeta({
+        Domain: domain,
+        ConnectionName: connectionName,
+        SystemProfileKey: profileKey
+    });
+    resetOnboardingValidation();
+
+    if (getValue('txtOnboardingDomain').trim() && getValue('txtOnboardingConnectionName').trim()) {
+        await loadOnboardingStatus();
+        await loadOnboardingSchemaCandidates();
+    } else {
+        globalOnboardingSchemaCandidates = [];
+        renderOnboardingSchemaCandidates();
+        globalOnboardingStatus = null;
+        renderOnboardingStatus();
+    }
+
+    renderTenantDomains();
+    renderOnboardingConnectionCatalog();
+    renderOnboardingRuntimeContexts();
+    renderOnboardingActionGuidance();
+    updateOnboardingStepper();
+    hideOnboardingBanner();
+    await setAdminActiveContext(buildAdminContextFromOnboardingForm(), { reloadCurrentTab: true });
 }
 
 function resetOnboardingForm() {
@@ -407,14 +842,17 @@ function resetOnboardingForm() {
     resetOnboardingValidation();
     hideOnboardingPackBanner();
 
-    setValue('txtOnboardingTenantKey', onboardingBootstrap?.Defaults?.TenantKey || defaultAdminTenant || 'default');
+    const defaults = getOnboardingDefaults();
+    setValue('txtOnboardingTenantKey', defaults.tenantKey || defaults.TenantKey || defaultAdminTenant || 'default');
     setValue('txtOnboardingDisplayName', '');
     setValue('txtOnboardingDescription', '');
-    setValue('txtOnboardingDomain', onboardingBootstrap?.Defaults?.Domain || defaultAllowedDomain || '');
-    setValue('txtOnboardingConnectionName', onboardingBootstrap?.Defaults?.ConnectionName || 'OperationalDb');
-    setValue('txtOnboardingSystemProfileKey', onboardingBootstrap?.Defaults?.SystemProfileKey || 'default');
+    setValue('txtOnboardingDomain', defaults.domain || defaults.Domain || defaultAllowedDomain || '');
+    setValue('txtOnboardingConnectionName', defaults.connectionName || defaults.ConnectionName || 'OperationalDb');
+    setValue('txtOnboardingSystemProfileKey', defaults.systemProfileKey || defaults.SystemProfileKey || 'default');
     setValue('txtOnboardingDomainPackJson', '');
     toggleOnboardingAdvancedOptions(false);
+    renderOnboardingConnectionCatalog();
+    renderOnboardingRuntimeContexts();
 
     const meta = document.getElementById('onboardingMeta');
     if (meta) {
@@ -431,6 +869,7 @@ function resetOnboardingForm() {
     clearOnboardingConnectionErrors();
     clearOnboardingFieldError('validationQuestion');
     renderOnboardingActionGuidance();
+    setAdminActiveContext(null, { reloadCurrentTab: true });
 }
 
 function persistOnboardingWorkspaceState() {
@@ -745,7 +1184,8 @@ async function applyPersistedOnboardingWorkspaceState(workspace) {
     setValue('txtOnboardingDisplayName', workspace.displayName || '');
     setValue('txtOnboardingDomain', workspace.domain || '');
     setValue('txtOnboardingConnectionName', workspace.connectionName || '');
-    setValue('txtOnboardingSystemProfileKey', workspace.systemProfileKey || onboardingBootstrap?.Defaults?.SystemProfileKey || 'default');
+    const defaults = getOnboardingDefaults();
+    setValue('txtOnboardingSystemProfileKey', workspace.systemProfileKey || defaults.systemProfileKey || defaults.SystemProfileKey || 'default');
     setValue('txtOnboardingDescription', workspace.description || '');
     toggleOnboardingAdvancedOptions((workspace.systemProfileKey || 'default') !== 'default');
 
@@ -767,6 +1207,7 @@ async function applyPersistedOnboardingWorkspaceState(workspace) {
 
     setOnboardingMeta(null);
     renderOnboardingActionGuidance();
+    await setAdminActiveContext(buildAdminContextFromOnboardingForm(), { reloadCurrentTab: true });
 }
 
 function toggleOnboardingConnectionEditor(forceOpen = null) {
@@ -2328,24 +2769,6 @@ function applyAdminDomainDefault() {
     defaultBusinessRuleDomain = configuredDomain;
     defaultSemanticHintDomain = configuredDomain;
     defaultQueryPatternDomain = configuredDomain;
-
-    const ids = [
-        'txtAllowedDomainFilter',
-        'txtAllowedDomain',
-        'txtBusinessRuleDomainFilter',
-        'txtBusinessRuleDomain',
-        'txtSemanticHintDomainFilter',
-        'txtSemanticHintDomain',
-        'txtQueryPatternDomainFilter',
-        'txtQueryPatternDomain'
-    ];
-
-    ids.forEach(id => {
-        const el = document.getElementById(id);
-        if (el && !el.value) {
-            el.value = configuredDomain;
-        }
-    });
 }
 
 // -----------------------------------------------------------
@@ -2672,11 +3095,17 @@ function hideSchemaBanner() {
 // ALLOWED OBJECTS TAB
 // -----------------------------------------------------------
 async function loadAllowedObjects() {
-    const domainInput = document.getElementById('txtAllowedDomainFilter');
-    const domain = (domainInput?.value || defaultAllowedDomain).trim();
+    const context = getActiveAdminContext();
+    const domain = context?.domain?.trim() || '';
     const list = document.getElementById('allowedList');
 
-    if (!domain) { showAllowedBanner('warn', 'Debes indicar un dominio para cargar Allowed Objects.'); return; }
+    if (!domain) {
+        renderContextRequiredState('allowed', 'Selecciona primero un contexto en Onboarding para cargar Allowed Objects.');
+        showAllowedBanner('warn', 'Selecciona primero un contexto en Onboarding.');
+        return;
+    }
+
+    setValue('txtAllowedDomainFilter', domain);
 
     try {
         const res = await fetch(`/api/admin/allowed-objects?domain=${encodeURIComponent(domain)}`);
@@ -2915,11 +3344,17 @@ function hideAllowedBanner() {
 // BUSINESS RULES TAB
 // -----------------------------------------------------------
 async function loadBusinessRules() {
-    const domainInput = document.getElementById('txtBusinessRuleDomainFilter');
-    const domain = (domainInput?.value || defaultBusinessRuleDomain).trim();
+    const context = getActiveAdminContext();
+    const domain = context?.domain?.trim() || '';
     const list = document.getElementById('businessRuleList');
 
-    if (!domain) { showBusinessRuleBanner('warn', 'Debes indicar un dominio para cargar Business Rules.'); return; }
+    if (!domain) {
+        renderContextRequiredState('business-rules', 'Selecciona primero un contexto en Onboarding para cargar Business Rules.');
+        showBusinessRuleBanner('warn', 'Selecciona primero un contexto en Onboarding.');
+        return;
+    }
+
+    setValue('txtBusinessRuleDomainFilter', domain);
 
     try {
         const res = await fetch(`/api/admin/business-rules?domain=${encodeURIComponent(domain)}`);
@@ -3151,11 +3586,17 @@ function hideBusinessRuleBanner() {
 // SEMANTIC HINTS TAB
 // -----------------------------------------------------------
 async function loadSemanticHints() {
-    const domainInput = document.getElementById('txtSemanticHintDomainFilter');
-    const domain = (domainInput?.value || defaultSemanticHintDomain).trim();
+    const context = getActiveAdminContext();
+    const domain = context?.domain?.trim() || '';
     const list = document.getElementById('semanticHintList');
 
-    if (!domain) { showSemanticHintBanner('warn', 'Debes indicar un dominio para cargar semantic hints.'); return; }
+    if (!domain) {
+        renderContextRequiredState('semantics', 'Selecciona primero un contexto en Onboarding para cargar Semantic Hints.');
+        showSemanticHintBanner('warn', 'Selecciona primero un contexto en Onboarding.');
+        return;
+    }
+
+    setValue('txtSemanticHintDomainFilter', domain);
 
     try {
         const res = await fetch(`/api/admin/semantic-hints?domain=${encodeURIComponent(domain)}`);
@@ -3424,11 +3865,17 @@ function hideSemanticHintBanner() {
 // QUERY PATTERNS TAB
 // -----------------------------------------------------------
 async function loadQueryPatterns() {
-    const domainInput = document.getElementById('txtQueryPatternDomainFilter');
-    const domain = (domainInput?.value || defaultQueryPatternDomain).trim();
+    const context = getActiveAdminContext();
+    const domain = context?.domain?.trim() || '';
     const list = document.getElementById('queryPatternList');
 
-    if (!domain) { showQueryPatternBanner('warn', 'Debes indicar un dominio para cargar Query Patterns.'); return; }
+    if (!domain) {
+        renderContextRequiredState('patterns', 'Selecciona primero un contexto en Onboarding para cargar Query Patterns.');
+        showQueryPatternBanner('warn', 'Selecciona primero un contexto en Onboarding.');
+        return;
+    }
+
+    setValue('txtQueryPatternDomainFilter', domain);
 
     try {
         const res = await fetch(`/api/admin/query-patterns?domain=${encodeURIComponent(domain)}`);
@@ -4241,16 +4688,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadSystemConfig();
     await loadOnboardingBootstrap();
     loadHistory();
-    loadAllowedObjects();
-    loadBusinessRules();
-    loadSemanticHints();
-    loadQueryPatterns();
     loadProfiles();
     resetSystemConfigForm();
     resetAllowedObjectForm();
     resetBusinessRuleForm();
     resetSemanticHintForm();
     resetQueryPatternForm();
+    await setAdminActiveContext(buildAdminContextFromOnboardingForm(), { reloadCurrentTab: false });
 
     ['txtOnboardingTenantKey', 'txtOnboardingDisplayName', 'txtOnboardingDomain', 'txtOnboardingConnectionName', 'txtOnboardingDescription', 'txtOnboardingSystemProfileKey']
         .forEach(id => {
@@ -4273,6 +4717,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 setOnboardingMeta(null);
                 renderOnboardingActionGuidance();
                 renderTenantDomains();
+                renderOnboardingConnectionCatalog();
+                renderOnboardingRuntimeContexts();
                 updateOnboardingStepper();
             });
             el.addEventListener('change', () => {
@@ -4292,6 +4738,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 setOnboardingMeta(null);
                 renderOnboardingActionGuidance();
                 renderTenantDomains();
+                renderOnboardingConnectionCatalog();
+                renderOnboardingRuntimeContexts();
                 updateOnboardingStepper();
             });
         });

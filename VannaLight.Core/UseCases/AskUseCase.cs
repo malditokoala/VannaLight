@@ -51,7 +51,7 @@ public class AskUseCase(
         string memoryDbPath,
         string runtimeDbPath,
         string sqlServerConnString,
-        string domain,
+        AskExecutionContext executionContext,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(question))
@@ -84,7 +84,7 @@ public class AskUseCase(
                 AskFailureKind.GenerationError);
         }
 
-        if (string.IsNullOrWhiteSpace(domain))
+        if (executionContext is null || string.IsNullOrWhiteSpace(executionContext.Domain))
         {
             return new AskResult(
                 false,
@@ -94,7 +94,10 @@ public class AskUseCase(
                 AskFailureKind.GenerationError);
         }
 
-        var normalizedDomain = domain.Trim();
+        var normalizedDomain = executionContext.Domain.Trim();
+        var profileKey = string.IsNullOrWhiteSpace(executionContext.SystemProfileKey)
+            ? null
+            : executionContext.SystemProfileKey.Trim();
 
         var allowedObjectNames = await GetAllowedObjectNamesAsync(
                 normalizedDomain,
@@ -129,7 +132,7 @@ public class AskUseCase(
                     AskFailureKind.GenerationError);
             }
 
-            if (!validator.TryValidate(patternSql, out var patternValidationError))
+            if (!validator.TryValidate(patternSql, normalizedDomain, out var patternValidationError))
             {
                 var reviewId = await TryEnqueueReviewAsync(
                     runtimeDbPath,
@@ -188,7 +191,7 @@ public class AskUseCase(
         var context = await retriever.RetrieveAsync(
             memoryDbPath,
             question,
-            normalizedDomain,
+            executionContext,
             inferredIntentName,
             ct);
 
@@ -204,7 +207,7 @@ public class AskUseCase(
             maxHints: 8,
             ct);
 
-        var prompt = await BuildPromptAsync(question, context, rules, semanticHints, allowedObjectNames, ct);
+        var prompt = await BuildPromptAsync(question, context, rules, semanticHints, allowedObjectNames, profileKey, ct);
 
         var rawSql = await llmClient.GenerateSqlAsync(prompt, ct);
         var cleanSql = CleanLlmOutput(rawSql);
@@ -219,7 +222,7 @@ public class AskUseCase(
                 AskFailureKind.GenerationError);
         }
 
-        if (!validator.TryValidate(cleanSql, out var validationError))
+        if (!validator.TryValidate(cleanSql, normalizedDomain, out var validationError))
         {
             var reviewId = await TryEnqueueReviewAsync(
                 runtimeDbPath,
@@ -363,20 +366,21 @@ public class AskUseCase(
         IReadOnlyList<BusinessRule> rules,
         IReadOnlyList<SemanticHint> semanticHints,
         IReadOnlyList<string> allowedObjectNames,
+        string? profileKey,
         CancellationToken ct)
     {
-        var maxPromptChars = await GetPromptIntAsync("MaxPromptChars", 9000, ct);
-        var maxRulesChars = await GetPromptIntAsync("MaxRulesChars", 1800, ct);
-        var maxSemanticHintsChars = await GetPromptIntAsync("MaxSemanticHintsChars", 1400, ct);
-        var maxSchemasChars = await GetPromptIntAsync("MaxSchemasChars", 1800, ct);
-        var maxExamplesChars = await GetPromptIntAsync("MaxExamplesChars", 4200, ct);
-        var maxRules = await GetPromptIntAsync("MaxRules", 6, ct);
-        var maxSemanticHints = await GetPromptIntAsync("MaxSemanticHints", 8, ct);
-        var maxSchemas = await GetPromptIntAsync("MaxSchemas", 3, ct);
-        var maxExamples = await GetPromptIntAsync("MaxExamples", 2, ct);
-        var systemPersona = await GetPromptTextAsync("SystemPersona", "Eres un desarrollador experto en T-SQL para SQL Server.", ct);
-        var taskInstruction = await GetPromptTextAsync("TaskInstruction", "Tu tarea es generar SOLO codigo SQL valido para SQL Server.", ct);
-        var contextInstruction = await GetPromptTextAsync("ContextInstruction", "Debes basarte estrictamente en los objetos SQL permitidos, reglas, esquemas y ejemplos proporcionados.", ct);
+        var maxPromptChars = await GetPromptIntAsync("MaxPromptChars", 9000, profileKey, ct);
+        var maxRulesChars = await GetPromptIntAsync("MaxRulesChars", 1800, profileKey, ct);
+        var maxSemanticHintsChars = await GetPromptIntAsync("MaxSemanticHintsChars", 1400, profileKey, ct);
+        var maxSchemasChars = await GetPromptIntAsync("MaxSchemasChars", 1800, profileKey, ct);
+        var maxExamplesChars = await GetPromptIntAsync("MaxExamplesChars", 4200, profileKey, ct);
+        var maxRules = await GetPromptIntAsync("MaxRules", 6, profileKey, ct);
+        var maxSemanticHints = await GetPromptIntAsync("MaxSemanticHints", 8, profileKey, ct);
+        var maxSchemas = await GetPromptIntAsync("MaxSchemas", 3, profileKey, ct);
+        var maxExamples = await GetPromptIntAsync("MaxExamples", 2, profileKey, ct);
+        var systemPersona = await GetPromptTextAsync("SystemPersona", "Eres un desarrollador experto en T-SQL para SQL Server.", profileKey, ct);
+        var taskInstruction = await GetPromptTextAsync("TaskInstruction", "Tu tarea es generar SOLO codigo SQL valido para SQL Server.", profileKey, ct);
+        var contextInstruction = await GetPromptTextAsync("ContextInstruction", "Debes basarte estrictamente en los objetos SQL permitidos, reglas, esquemas y ejemplos proporcionados.", profileKey, ct);
         var sqlSyntaxRules = await GetPromptTextAsync(
             "SqlSyntaxRules",
             """
@@ -386,6 +390,7 @@ public class AskUseCase(
             4. Si necesitas cruzar objetos SQL permitidos, prefiere joins por IDs y OperationDate.
             5. Devuelve SOLO el SQL, sin comentarios y sin bloques markdown.
             """,
+            profileKey,
             ct);
         var timeInterpretationRules = await GetPromptTextAsync(
             "TimeInterpretationRules",
@@ -396,13 +401,14 @@ public class AskUseCase(
             - Semana actual: YearNumber = YEAR(GETDATE()) AND WeekOfYear = DATEPART(ISO_WEEK, GETDATE())
             - Cuando el usuario diga 'turno actual' o 'del turno', filtra explicitamente por un unico ShiftId calculado como el mas reciente del dia dentro de la vista consultada.
             """,
+            profileKey,
             ct);
-        var rulesHeader = await GetPromptTextAsync("BusinessRulesHeader", "REGLAS DE NEGOCIO IMPORTANTES:", ct);
-        var semanticHintsHeader = await GetPromptTextAsync("SemanticHintsHeader", "PISTAS SEMANTICAS DEL DOMINIO:", ct);
-        var allowedObjectsHeader = await GetPromptTextAsync("AllowedObjectsHeader", "OBJETOS SQL PERMITIDOS:", ct);
-        var schemasHeader = await GetPromptTextAsync("SchemasHeader", "ESQUEMAS RELEVANTES RECUPERADOS:", ct);
-        var examplesHeader = await GetPromptTextAsync("ExamplesHeader", "EJEMPLOS RELEVANTES:", ct);
-        var questionHeader = await GetPromptTextAsync("QuestionHeader", "Pregunta actual:", ct);
+        var rulesHeader = await GetPromptTextAsync("BusinessRulesHeader", "REGLAS DE NEGOCIO IMPORTANTES:", profileKey, ct);
+        var semanticHintsHeader = await GetPromptTextAsync("SemanticHintsHeader", "PISTAS SEMANTICAS DEL DOMINIO:", profileKey, ct);
+        var allowedObjectsHeader = await GetPromptTextAsync("AllowedObjectsHeader", "OBJETOS SQL PERMITIDOS:", profileKey, ct);
+        var schemasHeader = await GetPromptTextAsync("SchemasHeader", "ESQUEMAS RELEVANTES RECUPERADOS:", profileKey, ct);
+        var examplesHeader = await GetPromptTextAsync("ExamplesHeader", "EJEMPLOS RELEVANTES:", profileKey, ct);
+        var questionHeader = await GetPromptTextAsync("QuestionHeader", "Pregunta actual:", profileKey, ct);
 
         var normalizedAllowedObjects = allowedObjectNames
             .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -520,15 +526,15 @@ public class AskUseCase(
         return TrimToMax(sb.ToString(), maxPromptChars);
     }
 
-    private async Task<int> GetPromptIntAsync(string key, int fallback, CancellationToken ct)
+    private async Task<int> GetPromptIntAsync(string key, int fallback, string? profileKey, CancellationToken ct)
     {
-        var value = await systemConfigProvider.GetIntAsync("Prompting", key, ct);
+        var value = await systemConfigProvider.GetIntAsync("Prompting", key, profileKey, ct);
         return value.HasValue && value.Value > 0 ? value.Value : fallback;
     }
 
-    private async Task<string> GetPromptTextAsync(string key, string fallback, CancellationToken ct)
+    private async Task<string> GetPromptTextAsync(string key, string fallback, string? profileKey, CancellationToken ct)
     {
-        var value = await systemConfigProvider.GetValueAsync("Prompting", key, ct);
+        var value = await systemConfigProvider.GetValueAsync("Prompting", key, profileKey, ct);
         return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
     }
 

@@ -207,10 +207,19 @@ public class AdminController(
 
         try
         {
+            var job = await jobStore.GetJobAsync(jobId, ct);
+            if (job is null)
+                return NotFound(new { Error = "No se encontró el job a actualizar en runtime." });
+
             await useCase.TrainAsync(
                 request.Question,
                 request.SqlText,
-                await systemConfigProvider.GetRequiredValueAsync("Retrieval", "Domain", ct),
+                new AskExecutionContext
+                {
+                    TenantKey = job.TenantKey,
+                    Domain = job.Domain,
+                    ConnectionName = job.ConnectionName
+                },
                 isVerified: true,
                 ct);
 
@@ -318,59 +327,99 @@ public class AdminController(
     [HttpGet("history")]
     public async Task<IActionResult> GetHistory(CancellationToken ct)
     {
-        // FIX: Forzamos el modo "Data" (SQL).
-        // El Admin de RAG NUNCA debe ver las predicciones de ML.NET.
-        var jobs = await jobStore.GetRecentJobsAsync(100, "Data", ct);
-        return Ok(jobs);
+        try
+        {
+            // FIX: Forzamos el modo "Data" (SQL).
+            // El Admin de RAG NUNCA debe ver las predicciones de ML.NET.
+            var jobs = await jobStore.GetRecentJobsAsync(100, "Data", ct);
+            return Ok(jobs);
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpGet("system-config")]
     public async Task<IActionResult> GetSystemConfig([FromQuery] string? section, CancellationToken ct)
     {
-        var profile = await GetActiveSystemConfigProfileAsync(ct);
-        if (profile is null)
-            return NotFound(new { Error = "No hay perfil activo de SystemConfig." });
-
-        var entries = await systemConfigStore.GetEntriesAsync(profile.Id, ct);
-        var filtered = string.IsNullOrWhiteSpace(section)
-            ? entries
-            : entries.Where(x => string.Equals(x.Section, section, StringComparison.OrdinalIgnoreCase)).ToList();
-
-        return Ok(new
+        try
         {
-            Profile = profile,
-            Entries = filtered
-        });
+            var profile = await GetActiveSystemConfigProfileAsync(ct);
+            if (profile is null)
+                return NotFound(new { Error = "No hay perfil activo de SystemConfig." });
+
+            var entries = await systemConfigStore.GetEntriesAsync(profile.Id, ct);
+            var filtered = string.IsNullOrWhiteSpace(section)
+                ? entries
+                : entries.Where(x => string.Equals(x.Section, section, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            return Ok(new
+            {
+                Profile = profile,
+                Entries = filtered
+            });
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpGet("onboarding/bootstrap")]
     public async Task<IActionResult> GetOnboardingBootstrap(CancellationToken ct)
     {
-        var environmentName = configuration["SystemStartup:EnvironmentName"] ?? "Development";
-        var defaultSystemProfile = configuration["SystemStartup:DefaultSystemProfile"] ?? "default";
-        var profile = await GetActiveSystemConfigProfileAsync(ct);
-        var connections = await connectionProfileStore.GetAllAsync(environmentName, ct);
-        var tenants = await tenantStore.GetAllAsync(ct);
-
-        var defaultTenantKey = (await systemConfigProvider.GetValueAsync("TenantDefaults", "TenantKey", ct))?.Trim();
-        var defaultConnectionName = (await systemConfigProvider.GetValueAsync("TenantDefaults", "ConnectionName", ct))?.Trim();
-        var defaultDomain = (await systemConfigProvider.GetValueAsync("UiDefaults", "AdminDomain", ct))?.Trim()
-            ?? (await systemConfigProvider.GetValueAsync("Retrieval", "Domain", ct))?.Trim();
-
-        return Ok(new
+        try
         {
-            EnvironmentName = environmentName,
-            Profile = profile,
-            Defaults = new
+            var environmentName = configuration["SystemStartup:EnvironmentName"] ?? "Development";
+            var defaultSystemProfile = configuration["SystemStartup:DefaultSystemProfile"] ?? "default";
+            var profile = await GetActiveSystemConfigProfileAsync(ct);
+            var connections = await connectionProfileStore.GetAllAsync(environmentName, ct);
+            var tenants = await tenantStore.GetAllAsync(ct);
+            var runtimeContexts = new List<object>();
+            foreach (var tenant in tenants.Where(t => t.IsActive))
             {
-                TenantKey = string.IsNullOrWhiteSpace(defaultTenantKey) ? "default" : defaultTenantKey,
-                Domain = string.IsNullOrWhiteSpace(defaultDomain) ? string.Empty : defaultDomain,
-                ConnectionName = string.IsNullOrWhiteSpace(defaultConnectionName) ? "OperationalDb" : defaultConnectionName,
-                SystemProfileKey = defaultSystemProfile
-            },
-            Tenants = tenants,
-            Connections = connections
-        });
+                var mappings = await tenantDomainStore.GetAllByTenantAsync(tenant.TenantKey, ct);
+                foreach (var mapping in mappings.Where(m => m.IsActive))
+                {
+                    runtimeContexts.Add(new
+                    {
+                        tenantKey = tenant.TenantKey,
+                        tenantDisplayName = tenant.DisplayName,
+                        domain = mapping.Domain,
+                        connectionName = mapping.ConnectionName,
+                        systemProfileKey = string.IsNullOrWhiteSpace(mapping.SystemProfileKey) ? "default" : mapping.SystemProfileKey,
+                        isDefault = mapping.IsDefault,
+                        label = $"{tenant.DisplayName} · {mapping.Domain} · {mapping.ConnectionName}"
+                    });
+                }
+            }
+
+            var defaultTenantKey = (await systemConfigProvider.GetValueAsync("TenantDefaults", "TenantKey", ct: ct))?.Trim();
+            var defaultConnectionName = (await systemConfigProvider.GetValueAsync("TenantDefaults", "ConnectionName", ct: ct))?.Trim();
+            var defaultDomain = (await systemConfigProvider.GetValueAsync("UiDefaults", "AdminDomain", ct: ct))?.Trim()
+                ?? (await systemConfigProvider.GetValueAsync("Retrieval", "Domain", ct: ct))?.Trim();
+
+            return Ok(new
+            {
+                EnvironmentName = environmentName,
+                Profile = profile,
+                Defaults = new
+                {
+                    TenantKey = string.IsNullOrWhiteSpace(defaultTenantKey) ? "default" : defaultTenantKey,
+                    Domain = string.IsNullOrWhiteSpace(defaultDomain) ? string.Empty : defaultDomain,
+                    ConnectionName = string.IsNullOrWhiteSpace(defaultConnectionName) ? "OperationalDb" : defaultConnectionName,
+                    SystemProfileKey = defaultSystemProfile
+                },
+                Tenants = tenants,
+                Connections = connections,
+                RuntimeContexts = runtimeContexts
+            });
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpPost("connections/validate")]
@@ -556,16 +605,6 @@ public class AdminController(
             },
             ct);
 
-        var profile = await GetActiveSystemConfigProfileAsync(ct);
-        if (profile is null)
-            return NotFound(new { Error = "No hay perfil activo de SystemConfig." });
-
-        await UpsertSystemConfigValueAsync(profile.Id, "TenantDefaults", "TenantKey", normalizedTenantKey, "string", "Tenant por defecto del runtime y onboarding inicial.", now, ct);
-        await UpsertSystemConfigValueAsync(profile.Id, "TenantDefaults", "ConnectionName", normalizedConnectionName, "string", "Nombre de conexión por defecto para runtime y onboarding inicial.", now, ct);
-        await UpsertSystemConfigValueAsync(profile.Id, "UiDefaults", "AdminTenant", normalizedTenantKey, "string", "Tenant por defecto para pantallas administrativas.", now, ct);
-        await UpsertSystemConfigValueAsync(profile.Id, "UiDefaults", "AdminDomain", request.Domain.Trim(), "string", "Dominio por defecto para pantallas administrativas.", now, ct);
-        await UpsertSystemConfigValueAsync(profile.Id, "Retrieval", "Domain", request.Domain.Trim(), "string", "Dominio operativo para retrieval y validación.", now, ct);
-
         return Ok(new
         {
             Message = "Paso 1 del onboarding guardado correctamente.",
@@ -587,39 +626,50 @@ public class AdminController(
         if (string.IsNullOrWhiteSpace(domain))
             return BadRequest(new { Error = "El parámetro domain es requerido." });
 
-        var sqlServerConnString = await operationalConnectionResolver.ResolveConnectionStringAsync(connectionName.Trim(), ct);
-        var schema = await schemaIngestor.ReadSchemaAsync(sqlServerConnString, ct);
-        var existingAllowed = await allowedObjectStore.GetAllObjectsAsync(domain.Trim(), ct);
+        try
+        {
+            var sqlServerConnString = await operationalConnectionResolver.ResolveConnectionStringAsync(connectionName.Trim(), ct);
+            var schema = await schemaIngestor.ReadSchemaAsync(sqlServerConnString, ct);
+            var existingAllowed = await allowedObjectStore.GetAllObjectsAsync(domain.Trim(), ct);
 
-        var existingLookup = existingAllowed.ToDictionary(
-            x => $"{x.SchemaName}.{x.ObjectName}".ToLowerInvariant(),
-            x => x);
+            var existingLookup = existingAllowed.ToDictionary(
+                x => $"{x.SchemaName}.{x.ObjectName}".ToLowerInvariant(),
+                x => x);
 
-        var candidates = schema
-            .Select(item =>
-            {
-                var key = $"{item.Schema}.{item.Name}".ToLowerInvariant();
-                var hasExisting = existingLookup.TryGetValue(key, out var allowed);
-
-                return new SchemaObjectCandidate
+            var candidates = schema
+                .Select(item =>
                 {
-                    SchemaName = item.Schema,
-                    ObjectName = item.Name,
-                    ObjectType = InferObjectType(item),
-                    Description = item.Description,
-                    ColumnCount = item.Columns.Count,
-                    PrimaryKeyCount = item.PrimaryKeyColumns.Count,
-                    ForeignKeyCount = item.ForeignKeys.Count,
-                    IsCurrentlyAllowed = hasExisting && (allowed?.IsActive ?? false),
-                    IsSuggested = true
-                };
-            })
-            .OrderByDescending(x => x.IsCurrentlyAllowed)
-            .ThenBy(x => x.SchemaName)
-            .ThenBy(x => x.ObjectName)
-            .ToList();
+                    var key = $"{item.Schema}.{item.Name}".ToLowerInvariant();
+                    var hasExisting = existingLookup.TryGetValue(key, out var allowed);
 
-        return Ok(candidates);
+                    return new SchemaObjectCandidate
+                    {
+                        SchemaName = item.Schema,
+                        ObjectName = item.Name,
+                        ObjectType = InferObjectType(item),
+                        Description = item.Description,
+                        ColumnCount = item.Columns.Count,
+                        PrimaryKeyCount = item.PrimaryKeyColumns.Count,
+                        ForeignKeyCount = item.ForeignKeys.Count,
+                        IsCurrentlyAllowed = hasExisting && (allowed?.IsActive ?? false),
+                        IsSuggested = true
+                    };
+                })
+                .OrderByDescending(x => x.IsCurrentlyAllowed)
+                .ThenBy(x => x.SchemaName)
+                .ThenBy(x => x.ObjectName)
+                .ToList();
+
+            return Ok(candidates);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpPost("onboarding/allowed-objects")]
@@ -719,12 +769,23 @@ public class AdminController(
         if (string.IsNullOrWhiteSpace(domain))
             return BadRequest(new { Error = "El parámetro domain es requerido." });
 
-        var status = await BuildOnboardingStatusAsync(
-            domain.Trim(),
-            string.IsNullOrWhiteSpace(connectionName) ? "OperationalDb" : connectionName.Trim(),
-            ct);
+        try
+        {
+            var status = await BuildOnboardingStatusAsync(
+                domain.Trim(),
+                string.IsNullOrWhiteSpace(connectionName) ? "OperationalDb" : connectionName.Trim(),
+                ct);
 
-        return Ok(status);
+            return Ok(status);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpPost("system-config")]
@@ -843,8 +904,19 @@ public class AdminController(
     [HttpGet("tenants")]
     public async Task<IActionResult> GetTenants(CancellationToken ct)
     {
-        var tenants = await tenantStore.GetAllAsync(ct);
-        return Ok(tenants);
+        try
+        {
+            var tenants = await tenantStore.GetAllAsync(ct);
+            return Ok(tenants);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpPost("tenants")]
@@ -888,8 +960,19 @@ public class AdminController(
         if (string.IsNullOrWhiteSpace(tenantKey))
             return BadRequest(new { Error = "El parámetro tenantKey es requerido." });
 
-        var mappings = await tenantDomainStore.GetAllByTenantAsync(tenantKey.Trim(), ct);
-        return Ok(mappings);
+        try
+        {
+            var mappings = await tenantDomainStore.GetAllByTenantAsync(tenantKey.Trim(), ct);
+            return Ok(mappings);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpPost("tenant-domains")]
@@ -1025,7 +1108,9 @@ public class AdminController(
         }
 
         var trainingExamples = (await trainingStore.GetAllTrainingExamplesAsync(sqliteOptions.DbPath, ct))
+            .Where(x => string.Equals(x.TenantKey, tenant.TenantKey, StringComparison.OrdinalIgnoreCase))
             .Where(x => string.Equals(x.Domain, normalizedDomain, StringComparison.OrdinalIgnoreCase))
+            .Where(x => string.Equals(x.ConnectionName, mapping.ConnectionName, StringComparison.OrdinalIgnoreCase))
             .Select(x => new DomainPackTrainingExampleDto(
                 x.Question,
                 x.Sql,
@@ -1263,7 +1348,9 @@ public class AdminController(
                 new TrainingExampleUpsert(
                     example.Question.Trim(),
                     example.Sql,
+                    normalizedTenantKey,
                     normalizedDomain,
+                    normalizedConnectionName,
                     string.IsNullOrWhiteSpace(example.IntentName) ? null : example.IntentName.Trim(),
                     example.IsVerified,
                     example.Priority),
@@ -1344,8 +1431,19 @@ public class AdminController(
         if (string.IsNullOrWhiteSpace(domain))
             return BadRequest(new { Error = "El parámetro domain es requerido." });
 
-        var items = await allowedObjectStore.GetAllObjectsAsync(domain, ct);
-        return Ok(items);
+        try
+        {
+            var items = await allowedObjectStore.GetAllObjectsAsync(domain, ct);
+            return Ok(items);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpPost("allowed-objects")]
@@ -1411,12 +1509,19 @@ public class AdminController(
         if (string.IsNullOrWhiteSpace(domain))
             return BadRequest(new { Error = "El parámetro domain es requerido." });
 
-        var rules = await businessRuleStore.GetAllRulesAsync(
-            sqliteOptions.DbPath,
-            domain,
-            ct);
+        try
+        {
+            var rules = await businessRuleStore.GetAllRulesAsync(
+                sqliteOptions.DbPath,
+                domain,
+                ct);
 
-        return Ok(rules);
+            return Ok(rules);
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpPost("business-rules")]
@@ -1490,12 +1595,19 @@ public class AdminController(
         if (string.IsNullOrWhiteSpace(domain))
             return BadRequest(new { Error = "El parámetro domain es requerido." });
 
-        var hints = await semanticHintStore.GetAllHintsAsync(
-            sqliteOptions.DbPath,
-            domain,
-            ct);
+        try
+        {
+            var hints = await semanticHintStore.GetAllHintsAsync(
+                sqliteOptions.DbPath,
+                domain,
+                ct);
 
-        return Ok(hints);
+            return Ok(hints);
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpPost("semantic-hints")]
@@ -1576,8 +1688,19 @@ public class AdminController(
         if (string.IsNullOrWhiteSpace(domain))
             return BadRequest(new { Error = "El parámetro domain es requerido." });
 
-        var patterns = await queryPatternStore.GetAllAsync(domain, ct);
-        return Ok(patterns);
+        try
+        {
+            var patterns = await queryPatternStore.GetAllAsync(domain, ct);
+            return Ok(patterns);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpPost("query-patterns")]
@@ -1650,12 +1773,23 @@ public class AdminController(
     [HttpGet("query-patterns/{patternId:long}/terms")]
     public async Task<IActionResult> GetQueryPatternTerms(long patternId, CancellationToken ct)
     {
-        var pattern = await queryPatternStore.GetByIdAsync(patternId, ct);
-        if (pattern is null)
-            return NotFound(new { Error = "QueryPattern no encontrado." });
+        try
+        {
+            var pattern = await queryPatternStore.GetByIdAsync(patternId, ct);
+            if (pattern is null)
+                return NotFound(new { Error = "QueryPattern no encontrado." });
 
-        var terms = await queryPatternTermStore.GetAllByPatternIdAsync(patternId, ct);
-        return Ok(terms);
+            var terms = await queryPatternTermStore.GetAllByPatternIdAsync(patternId, ct);
+            return Ok(terms);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
     }
 
     [HttpPost("query-pattern-terms")]

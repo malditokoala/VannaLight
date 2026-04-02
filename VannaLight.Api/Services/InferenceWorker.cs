@@ -29,22 +29,32 @@ public class InferenceWorker(
 
         while (!ct.IsCancellationRequested)
         {
+            Guid currentJobId = Guid.Empty;
+            string currentConnectionId = string.Empty;
+            IJobStore? currentJobStore = null;
+
             try
             {
                 var workItem = await queue.DequeueAsync(ct);
 
                 Guid jobId = (Guid)workItem.JobId;
                 string connectionId = workItem.ConnectionId?.ToString() ?? string.Empty;
+                currentJobId = jobId;
+                currentConnectionId = connectionId;
                 string mode = workItem.Mode.ToString();
                 string question = workItem.Question.ToString();
                 var domain = workItem.Domain.Trim();
                 var connectionName = string.IsNullOrWhiteSpace(workItem.ConnectionName)
                     ? "OperationalDb"
                     : workItem.ConnectionName.Trim();
+                var systemProfileKey = string.IsNullOrWhiteSpace(workItem.SystemProfileKey)
+                    ? "default"
+                    : workItem.SystemProfileKey.Trim();
                 var sqlServerConnString = await operationalConnectionResolver.ResolveConnectionStringAsync(connectionName, ct);
 
                 using var scope = scopeFactory.CreateScope();
                 var jobStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
+                currentJobStore = jobStore;
 
                 await jobStore.UpdateStatusAsync(jobId, "Analyzing", ct);
 
@@ -147,7 +157,13 @@ public class InferenceWorker(
                     memoryDbPath,
                     runtimeDbPath,
                     sqlServerConnString,
-                    domain,
+                    new VannaLight.Core.Models.AskExecutionContext
+                    {
+                        TenantKey = workItem.TenantKey,
+                        Domain = domain,
+                        ConnectionName = connectionName,
+                        SystemProfileKey = systemProfileKey
+                    },
                     ct);
 
                 if (!sqlResult.Success)
@@ -243,6 +259,26 @@ public class InferenceWorker(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Error crítico procesando inferencia.");
+
+                if (currentJobId != Guid.Empty && currentJobStore is not null)
+                {
+                    await currentJobStore.SetErrorAsync(
+                        currentJobId,
+                        $"Error crítico en el worker: {ex.Message}",
+                        "Failed",
+                        ct);
+
+                    if (!string.IsNullOrWhiteSpace(currentConnectionId))
+                    {
+                        await hubContext.Clients.Client(currentConnectionId)
+                            .SendAsync("JobFailed", new
+                            {
+                                JobId = currentJobId,
+                                Error = $"Error crítico en el worker: {ex.Message}",
+                                Status = "Failed"
+                            }, ct);
+                    }
+                }
             }
         }
     }

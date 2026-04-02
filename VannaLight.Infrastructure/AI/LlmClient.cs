@@ -15,6 +15,7 @@ public class LlmClient : ILlmClient, IDisposable
     private readonly LLamaWeights _weights;
     private readonly LLamaContext _context;
     private readonly AppSettings _settings;
+    private readonly SemaphoreSlim _inferenceLock = new(1, 1);
 
     public LlmClient(AppSettings settings)
     {
@@ -44,33 +45,43 @@ public class LlmClient : ILlmClient, IDisposable
     // Método centralizado que contiene el motor de LlamaSharp (DRY)
     private async Task<string> ExecuteLlamaInferenceAsync(string prompt, CancellationToken ct)
     {
-        var executor = new StatelessExecutor(_weights, _context.Params);
-
-        var inferenceParams = new InferenceParams
+        await _inferenceLock.WaitAsync(ct);
+        try
         {
-            MaxTokens = _settings.Llm.MaxTokens,
-            AntiPrompts = new List<string> { "User:", "Pregunta:" },
-            // Los parámetros de temperatura y "Top" ahora van dentro del Pipeline de Muestreo:
-            SamplingPipeline = new DefaultSamplingPipeline
+            var executor = new StatelessExecutor(_weights, _context.Params);
+
+            var inferenceParams = new InferenceParams
             {
-                Temperature = _settings.Llm.Temperature,
-                TopP = _settings.Llm.TopP,
-                TopK = _settings.Llm.TopK
+                MaxTokens = _settings.Llm.MaxTokens,
+                AntiPrompts = new List<string> { "User:", "Pregunta:" },
+                // LLamaSharp no es thread-safe con el contexto/pesos compartidos.
+                // Serializamos inferencias para evitar crashes nativos intermitentes.
+                SamplingPipeline = new DefaultSamplingPipeline
+                {
+                    Temperature = _settings.Llm.Temperature,
+                    TopP = _settings.Llm.TopP,
+                    TopK = _settings.Llm.TopK
+                }
+            };
+
+            var sb = new StringBuilder();
+
+            await foreach (var text in executor.InferAsync(prompt, inferenceParams, cancellationToken: ct))
+            {
+                sb.Append(text);
             }
-        };
 
-        var sb = new StringBuilder();
-
-        await foreach (var text in executor.InferAsync(prompt, inferenceParams, cancellationToken: ct))
-        {
-            sb.Append(text);
+            return sb.ToString().Trim();
         }
-
-        return sb.ToString().Trim();
+        finally
+        {
+            _inferenceLock.Release();
+        }
     }
 
     public void Dispose()
     {
+        _inferenceLock.Dispose();
         _context.Dispose();
         _weights.Dispose();
     }

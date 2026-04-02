@@ -1,6 +1,7 @@
 using Dapper;
 using LLama.Native;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Data.SqlClient;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using VannaLight.Api.Hubs;
@@ -181,6 +182,11 @@ await EnsureSystemConfigDatabaseSetupAsync(
     builder.Configuration,
     environmentName,
     defaultSystemProfile);
+await EnsureSeededConnectionProfilesAndContextMappingsAsync(
+    sqlitePath,
+    builder.Configuration,
+    environmentName,
+    defaultSystemProfile);
 await EnsureRuntimeDatabaseSetupAsync(app.Services);
 await EnsureQueryPatternTimeScopeSeedsAsync(app.Services);
 
@@ -189,6 +195,28 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+    {
+        if (!context.Response.HasStarted)
+        {
+            context.Response.StatusCode = StatusCodes.Status499ClientClosedRequest;
+        }
+    }
+    catch (TaskCanceledException) when (context.RequestAborted.IsCancellationRequested)
+    {
+        if (!context.Response.HasStarted)
+        {
+            context.Response.StatusCode = StatusCodes.Status499ClientClosedRequest;
+        }
+    }
+});
 
 app.UseStaticFiles();
 app.UseAuthorization();
@@ -365,7 +393,8 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
         ("Retrieval", "MinExampleScore", "2.5", "double", "Score mínimo para considerar un training example relevante."),
         ("Retrieval", "TopSchemaDocs", configuration["Settings:Retrieval:TopSchemaDocs"] ?? "6", "int", "Cantidad de schema docs relevantes a incluir."),
         ("Retrieval", "FallbackSchemaDocs", configuration["Settings:Retrieval:FallbackSchemaDocs"] ?? "15", "int", "Cantidad de schema docs de fallback cuando no hay match fuerte."),
-        ("Retrieval", "Domain", configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot", "string", "Dominio operativo para retrieval y validación."),
+        ("Retrieval", "Domain", configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot", "string", "Dominio operativo para retrieval y validación."),
+
         ("TenantDefaults", "TenantKey", "default", "string", "Tenant por defecto del runtime y onboarding inicial."),
         ("TenantDefaults", "ConnectionName", "OperationalDb", "string", "Nombre de conexión por defecto para runtime y onboarding inicial."),
         ("Prompting", "MaxPromptChars", "9000", "int", "Presupuesto total del prompt SQL en caracteres."),
@@ -511,6 +540,147 @@ static async Task EnsureRuntimeDatabaseSetupAsync(IServiceProvider services)
     await connection.ExecuteAsync(sql);
 }
 
+static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
+    string sqlitePath,
+    IConfiguration configuration,
+    string environmentName,
+    string defaultSystemProfile)
+{
+    using var connection = new SqliteConnection($"Data Source={sqlitePath};");
+    await connection.OpenAsync();
+
+    var now = DateTime.UtcNow.ToString("o");
+
+    async Task UpsertConnectionProfileFromConfigAsync(string connectionName, string? description = null)
+    {
+        var connectionString = configuration.GetConnectionString(connectionName);
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return;
+
+        var builder = new SqlConnectionStringBuilder(connectionString);
+        var encryptOption = builder.Encrypt.ToString();
+        var encryptFlag = !string.Equals(encryptOption, "Optional", StringComparison.OrdinalIgnoreCase);
+
+        const string upsertProfileSql = @"
+            INSERT INTO ConnectionProfiles
+                (EnvironmentName, ProfileKey, ConnectionName, ProviderKind, ConnectionMode, ServerHost, DatabaseName, UserName,
+                 IntegratedSecurity, Encrypt, TrustServerCertificate, CommandTimeoutSec, SecretRef, IsActive, Description, CreatedUtc, UpdatedUtc)
+            VALUES
+                (@EnvironmentName, @ProfileKey, @ConnectionName, @ProviderKind, @ConnectionMode, @ServerHost, @DatabaseName, @UserName,
+                 @IntegratedSecurity, @Encrypt, @TrustServerCertificate, @CommandTimeoutSec, @SecretRef, @IsActive, @Description, @CreatedUtc, @UpdatedUtc)
+            ON CONFLICT(EnvironmentName, ProfileKey, ConnectionName)
+            DO UPDATE SET
+                ProviderKind = excluded.ProviderKind,
+                ConnectionMode = excluded.ConnectionMode,
+                ServerHost = excluded.ServerHost,
+                DatabaseName = excluded.DatabaseName,
+                UserName = excluded.UserName,
+                IntegratedSecurity = excluded.IntegratedSecurity,
+                Encrypt = excluded.Encrypt,
+                TrustServerCertificate = excluded.TrustServerCertificate,
+                CommandTimeoutSec = excluded.CommandTimeoutSec,
+                SecretRef = excluded.SecretRef,
+                IsActive = excluded.IsActive,
+                Description = excluded.Description,
+                UpdatedUtc = excluded.UpdatedUtc;";
+
+        await connection.ExecuteAsync(
+            upsertProfileSql,
+            new
+            {
+                EnvironmentName = environmentName,
+                ProfileKey = defaultSystemProfile,
+                ConnectionName = connectionName,
+                ProviderKind = "SqlServer",
+                ConnectionMode = "FullStringRef",
+                ServerHost = builder.DataSource,
+                DatabaseName = builder.InitialCatalog,
+                UserName = string.IsNullOrWhiteSpace(builder.UserID) ? null : builder.UserID,
+                IntegratedSecurity = builder.IntegratedSecurity,
+                Encrypt = encryptFlag,
+                TrustServerCertificate = builder.TrustServerCertificate,
+                CommandTimeoutSec = builder.ConnectTimeout <= 0 ? 30 : builder.ConnectTimeout,
+                SecretRef = $"config:ConnectionStrings:{connectionName}",
+                IsActive = true,
+                Description = description ?? $"{connectionName} configurada desde ConnectionStrings.",
+                CreatedUtc = now,
+                UpdatedUtc = now
+            });
+    }
+
+    async Task RemapTenantDomainAsync(string tenantKey, string domain, string connectionName)
+    {
+        var tenantId = await connection.ExecuteScalarAsync<long?>(
+            """
+            SELECT Id
+            FROM Tenants
+            WHERE TenantKey = @tenantKey
+            LIMIT 1;
+            """,
+            new { tenantKey });
+
+        if (tenantId is null)
+            return;
+
+        var existing = await connection.QueryFirstOrDefaultAsync<TenantDomain>(
+            """
+            SELECT *
+            FROM TenantDomains
+            WHERE TenantId = @tenantId
+              AND Domain = @domain
+            LIMIT 1;
+            """,
+            new { tenantId, domain });
+
+        const string upsertTenantDomainSql = @"
+            UPDATE TenantDomains
+            SET IsDefault = 0,
+                UpdatedUtc = @UpdatedUtc
+            WHERE TenantId = @TenantId
+              AND Domain <> @Domain
+              AND @IsDefault = 1;
+
+            INSERT INTO TenantDomains
+                (TenantId, Domain, ConnectionName, SystemProfileKey, IsDefault, IsActive, CreatedUtc, UpdatedUtc)
+            VALUES
+                (@TenantId, @Domain, @ConnectionName, @SystemProfileKey, @IsDefault, @IsActive, @CreatedUtc, @UpdatedUtc)
+            ON CONFLICT(TenantId, Domain)
+            DO UPDATE SET
+                ConnectionName = excluded.ConnectionName,
+                SystemProfileKey = excluded.SystemProfileKey,
+                IsDefault = excluded.IsDefault,
+                IsActive = excluded.IsActive,
+                UpdatedUtc = excluded.UpdatedUtc;";
+
+        await connection.ExecuteAsync(
+            upsertTenantDomainSql,
+            new
+            {
+                TenantId = tenantId.Value,
+                Domain = domain,
+                ConnectionName = connectionName,
+                SystemProfileKey = defaultSystemProfile,
+                IsDefault = existing?.IsDefault ?? true,
+                IsActive = existing?.IsActive ?? true,
+                CreatedUtc = existing?.CreatedUtc ?? now,
+                UpdatedUtc = now
+            });
+    }
+
+    await UpsertConnectionProfileFromConfigAsync("ErpDb", "ERP VerificationProcess");
+    await UpsertConnectionProfileFromConfigAsync("NorthwindDb", "Northwind local SQL Server");
+
+    if (!string.IsNullOrWhiteSpace(configuration.GetConnectionString("ErpDb")))
+    {
+        await RemapTenantDomainAsync("default", "erp-kpi-pilot", "ErpDb");
+    }
+
+    if (!string.IsNullOrWhiteSpace(configuration.GetConnectionString("NorthwindDb")))
+    {
+        await RemapTenantDomainAsync("northwind-demo", "northwind-sales", "NorthwindDb");
+    }
+}
+
 static async Task EnsureQueryPatternTimeScopeSeedsAsync(IServiceProvider services)
 {
     using var scope = services.CreateScope();
@@ -519,7 +689,7 @@ static async Task EnsureQueryPatternTimeScopeSeedsAsync(IServiceProvider service
     var queryPatternStore = scope.ServiceProvider.GetRequiredService<IQueryPatternStore>();
     var queryPatternTermStore = scope.ServiceProvider.GetRequiredService<IQueryPatternTermStore>();
 
-    var domain = await systemConfigProvider.GetValueAsync("Retrieval", "Domain", CancellationToken.None);
+    var domain = await systemConfigProvider.GetValueAsync("Retrieval", "Domain", ct: CancellationToken.None);
     if (string.IsNullOrWhiteSpace(domain))
         domain = "erp-kpi-pilot";
 

@@ -8,15 +8,17 @@ public sealed class SqlServerSchemaIngestor : ISchemaIngestor
 {
     public async Task<IReadOnlyList<TableSchema>> ReadSchemaAsync(string sqlServerConnectionString, CancellationToken ct)
     {
-        await using var c = new SqlConnection(sqlServerConnectionString);
-        await c.OpenAsync(ct);
-
-        var schemas = new List<TableSchema>();
-
-        var objects = new List<(string Schema, string Name, string? Description, string Type)>();
-        await using (var cmd = c.CreateCommand())
+        try
         {
-            cmd.CommandText = @"
+            await using var c = new SqlConnection(sqlServerConnectionString);
+            await c.OpenAsync(ct);
+
+            var schemas = new List<TableSchema>();
+
+            var objects = new List<(string Schema, string Name, string? Description, string Type)>();
+            await using (var cmd = c.CreateCommand())
+            {
+                cmd.CommandText = @"
                 SELECT 
                     s.name AS SchemaName, 
                     o.name AS ObjectName, 
@@ -33,33 +35,42 @@ public sealed class SqlServerSchemaIngestor : ISchemaIngestor
                   AND o.is_ms_shipped = 0
                 ORDER BY s.name, o.name;";
 
-            await using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
-            {
-                objects.Add((
-                    r.GetString(0),
-                    r.GetString(1),
-                    r.IsDBNull(2) ? null : r.GetString(2),
-                    r.GetString(3)
-                ));
+                await using var r = await cmd.ExecuteReaderAsync(ct);
+                while (await r.ReadAsync(ct))
+                {
+                    objects.Add((
+                        r.GetString(0),
+                        r.GetString(1),
+                        r.IsDBNull(2) ? null : r.GetString(2),
+                        r.GetString(3)
+                    ));
+                }
             }
-        }
 
-        foreach (var o in objects)
+            foreach (var o in objects)
+            {
+                var cols = await ReadColumnsAsync(c, o.Schema, o.Name, ct);
+                var pks = o.Type == "U"
+                    ? await ReadPrimaryKeysAsync(c, o.Schema, o.Name, ct)
+                    : new List<string>();
+
+                var fks = o.Type == "U"
+                    ? await ReadForeignKeysAsync(c, o.Schema, o.Name, ct)
+                    : new List<ForeignKeyInfo>();
+
+                schemas.Add(new TableSchema(o.Schema, o.Name, o.Description, cols, pks, fks));
+            }
+
+            return schemas;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            var cols = await ReadColumnsAsync(c, o.Schema, o.Name, ct);
-            var pks = o.Type == "U"
-                ? await ReadPrimaryKeysAsync(c, o.Schema, o.Name, ct)
-                : new List<string>();
-
-            var fks = o.Type == "U"
-                ? await ReadForeignKeysAsync(c, o.Schema, o.Name, ct)
-                : new List<ForeignKeyInfo>();
-
-            schemas.Add(new TableSchema(o.Schema, o.Name, o.Description, cols, pks, fks));
+            return [];
         }
-
-        return schemas;
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            return [];
+        }
     }
 
     private async Task<List<ColumnSchema>> ReadColumnsAsync(SqlConnection c, string schema, string table, CancellationToken ct)

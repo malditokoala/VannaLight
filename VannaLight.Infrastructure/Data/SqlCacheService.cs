@@ -6,6 +6,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using VannaLight.Core.Abstractions;
+using VannaLight.Core.Models;
 using VannaLight.Core.Settings;
 
 namespace VannaLight.Infrastructure.Data;
@@ -17,22 +18,24 @@ namespace VannaLight.Infrastructure.Data;
 public class SqlCacheService : ISqlCacheService
 {
     private readonly RuntimeDbOptions _runtimeOptions;
-    private readonly string _operationalConn;
 
-    public SqlCacheService(RuntimeDbOptions runtimeOptions, OperationalDbOptions operationalDbOptions)
+    public SqlCacheService(RuntimeDbOptions runtimeOptions)
     {
         _runtimeOptions = runtimeOptions ?? throw new ArgumentNullException(nameof(runtimeOptions));
-        _operationalConn = string.IsNullOrWhiteSpace(operationalDbOptions.ConnectionString)
-            ? throw new InvalidOperationException("OperationalDbOptions.ConnectionString no está configurado.")
-            : operationalDbOptions.ConnectionString;
     }
 
     /// <summary>
     /// Intenta obtener un resultado cacheado para una pregunta y usuario específicos.
     /// </summary>
-    public async Task<(string? Sql, IEnumerable<dynamic>? Data)> TryGetCachedResultAsync(string question, string userId, CancellationToken ct)
+    public async Task<(string? Sql, IEnumerable<dynamic>? Data)> TryGetCachedResultAsync(
+        string question,
+        string userId,
+        AskExecutionContext executionContext,
+        string sqlServerConnectionString,
+        CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(question)) return (null, null);
+        if (string.IsNullOrWhiteSpace(question) || executionContext is null || string.IsNullOrWhiteSpace(sqlServerConnectionString))
+            return (null, null);
 
         // 1. Conexión a la base de datos de estado (SQLite Runtime)
         using var sqliteConn = new SqliteConnection($"Data Source={_runtimeOptions.DbPath};");
@@ -43,6 +46,9 @@ public class SqlCacheService : ISqlCacheService
             FROM QuestionJobs
             WHERE UserId = @userId
               AND Question = @q
+              AND TenantKey = @tenantKey
+              AND Domain = @domain
+              AND ConnectionName = @connectionName
               AND Status = 'Completed'
               AND SqlText IS NOT NULL
             ORDER BY UpdatedUtc DESC
@@ -51,7 +57,10 @@ public class SqlCacheService : ISqlCacheService
         var cached = await sqliteConn.QueryFirstOrDefaultAsync<dynamic>(sqlSearch, new
         {
             userId,
-            q = question.Trim()
+            q = question.Trim(),
+            tenantKey = executionContext.TenantKey,
+            domain = executionContext.Domain,
+            connectionName = executionContext.ConnectionName
         });
 
         if (cached == null || string.IsNullOrEmpty((string)cached.SqlText))
@@ -62,7 +71,7 @@ public class SqlCacheService : ISqlCacheService
         // 2. Si hay coincidencia, ejecutamos el SQL contra el ERP (SQL Server) para traer datos actualizados
         try
         {
-            using var sqlServerConn = new SqlConnection(_operationalConn);
+            using var sqlServerConn = new SqlConnection(sqlServerConnectionString);
             var results = await sqlServerConn.QueryAsync(sqlToExecute);
             return (sqlToExecute, results);
         }

@@ -30,7 +30,7 @@ public interface ITrainingStore
 // Interfaz para el motor RAG Híbrido
 public interface IRetriever
 {
-    Task<RetrievalContext> RetrieveAsync(string sqlitePath, string question, string domain, string? intentName, CancellationToken ct);
+    Task<RetrievalContext> RetrieveAsync(string sqlitePath, string question, AskExecutionContext executionContext, string? intentName, CancellationToken ct);
 }
 
 // Interfaz para el LLM Local (LLamaSharp)
@@ -44,7 +44,7 @@ public interface ILlmClient
 public interface ISqlValidator
 {
     // Valida seguridad y formato (SELECT-only, 1 statement, sin peligrosos, sin SELECT *)
-    bool TryValidate(string sql, out string error);
+    bool TryValidate(string sql, string domain, out string error);
 }
 
 // Interfaz para probar la compilación sin afectar los datos

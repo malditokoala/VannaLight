@@ -11,7 +11,8 @@ public record AskWorkItem(
     AskMode Mode,
     string TenantKey,
     string Domain,
-    string ConnectionName);
+    string ConnectionName,
+    string SystemProfileKey);
 
 public interface IAskRequestQueue
 {

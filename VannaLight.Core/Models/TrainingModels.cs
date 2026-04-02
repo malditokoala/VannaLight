@@ -5,7 +5,9 @@ public sealed record TrainingExample
     public long Id { get; init; }
     public string Question { get; init; } = string.Empty;
     public string Sql { get; init; } = string.Empty;
+    public string TenantKey { get; init; } = string.Empty;
     public string? Domain { get; init; }
+    public string ConnectionName { get; init; } = string.Empty;
     public string? IntentName { get; init; }
     public bool IsVerified { get; init; }
     public int Priority { get; init; }
@@ -17,7 +19,9 @@ public sealed record TrainingExample
 public sealed record TrainingExampleUpsert(
     string Question,
     string Sql,
+    string? TenantKey,
     string? Domain,
+    string? ConnectionName,
     string? IntentName,
     bool IsVerified,
     int Priority

@@ -38,27 +38,45 @@ public class LocalRetriever : IRetriever
         _cache = cache;
     }
 
-    public async Task<RetrievalContext> RetrieveAsync(string sqlitePath, string question, string domain, string? intentName, CancellationToken ct)
+    public async Task<RetrievalContext> RetrieveAsync(
+        string sqlitePath,
+        string question,
+        AskExecutionContext executionContext,
+        string? intentName,
+        CancellationToken ct)
     {
-        var retrievalTopExamples = await _systemConfigProvider.GetIntAsync("Retrieval", "TopExamples", ct)
+        var normalizedDomain = string.IsNullOrWhiteSpace(executionContext?.Domain)
+            ? string.Empty
+            : executionContext.Domain.Trim();
+        var normalizedTenantKey = string.IsNullOrWhiteSpace(executionContext?.TenantKey)
+            ? string.Empty
+            : executionContext.TenantKey.Trim();
+        var normalizedConnectionName = string.IsNullOrWhiteSpace(executionContext?.ConnectionName)
+            ? string.Empty
+            : executionContext.ConnectionName.Trim();
+        var systemProfileKey = string.IsNullOrWhiteSpace(executionContext?.SystemProfileKey)
+            ? null
+            : executionContext.SystemProfileKey.Trim();
+
+        var retrievalTopExamples = await _systemConfigProvider.GetIntAsync("Retrieval", "TopExamples", systemProfileKey, ct)
             ?? _settings.Retrieval.TopExamples;
-        var retrievalMinExampleScore = await _systemConfigProvider.GetDoubleAsync("Retrieval", "MinExampleScore", ct)
+        var retrievalMinExampleScore = await _systemConfigProvider.GetDoubleAsync("Retrieval", "MinExampleScore", systemProfileKey, ct)
             ?? _settings.Retrieval.MinExampleScore;
-        var retrievalTopSchemaDocs = await _systemConfigProvider.GetIntAsync("Retrieval", "TopSchemaDocs", ct)
+        var retrievalTopSchemaDocs = await _systemConfigProvider.GetIntAsync("Retrieval", "TopSchemaDocs", systemProfileKey, ct)
             ?? _settings.Retrieval.TopSchemaDocs;
-        var retrievalFallbackSchemaDocs = await _systemConfigProvider.GetIntAsync("Retrieval", "FallbackSchemaDocs", ct)
+        var retrievalFallbackSchemaDocs = await _systemConfigProvider.GetIntAsync("Retrieval", "FallbackSchemaDocs", systemProfileKey, ct)
             ?? _settings.Retrieval.FallbackSchemaDocs;
-        var synonyms = await LoadSynonymsAsync(sqlitePath, domain, ct);
+        var synonyms = await LoadSynonymsAsync(sqlitePath, normalizedDomain, systemProfileKey, ct);
 
         var strictQueryTokens = TokenizeStrict(question);
         var expandedQueryTokens = TokenizeWithSynonyms(strictQueryTokens, synonyms);
 
         var allExamples = await _trainingStore.GetAllTrainingExamplesAsync(sqlitePath, ct);
-        var normalizedDomain = string.IsNullOrWhiteSpace(domain) ? null : domain.Trim();
         var normalizedIntent = string.IsNullOrWhiteSpace(intentName) ? null : intentName.Trim();
         var rankedExamples = allExamples
-            .Where(ex => string.IsNullOrWhiteSpace(ex.Domain) ||
-                         string.Equals(ex.Domain, normalizedDomain, StringComparison.OrdinalIgnoreCase))
+            .Where(ex => string.Equals(ex.TenantKey, normalizedTenantKey, StringComparison.OrdinalIgnoreCase))
+            .Where(ex => string.Equals(ex.Domain ?? string.Empty, normalizedDomain, StringComparison.OrdinalIgnoreCase))
+            .Where(ex => string.Equals(ex.ConnectionName, normalizedConnectionName, StringComparison.OrdinalIgnoreCase))
             .Select(ex => new RetrievedExample(ex, CalculateExampleScore(ex, strictQueryTokens, normalizedDomain, normalizedIntent)))
             .Where(r => r.Score >= retrievalMinExampleScore)
             .OrderByDescending(r => r.Score)
@@ -89,9 +107,9 @@ public class LocalRetriever : IRetriever
         return new RetrievalContext(rankedExamples, topSchemaDocs);
     }
 
-    private async Task<Dictionary<string, string[]>> LoadSynonymsAsync(string sqlitePath, string domain, CancellationToken ct)
+    private async Task<Dictionary<string, string[]>> LoadSynonymsAsync(string sqlitePath, string domain, string? systemProfileKey, CancellationToken ct)
     {
-        var configuredDomain = await _systemConfigProvider.GetValueAsync("Retrieval", "Domain", ct);
+        var configuredDomain = await _systemConfigProvider.GetValueAsync("Retrieval", "Domain", systemProfileKey, ct);
         var effectiveDomain = !string.IsNullOrWhiteSpace(domain)
             ? domain.Trim()
             : configuredDomain?.Trim() ?? _settings.Retrieval.Domain ?? "global";

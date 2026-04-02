@@ -21,28 +21,22 @@ public sealed class StaticSqlValidator : ISqlValidator
 
     private readonly IAllowedObjectStore _allowedObjectStore;
     private readonly ILogger<StaticSqlValidator> _logger;
-    private readonly string _domain;
 
     public StaticSqlValidator(
         IAllowedObjectStore allowedObjectStore,
-        ISystemConfigProvider systemConfigProvider,
         ILogger<StaticSqlValidator> logger)
     {
         _allowedObjectStore = allowedObjectStore ?? throw new ArgumentNullException(nameof(allowedObjectStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-        _domain = systemConfigProvider.GetRequiredValueAsync("Retrieval", "Domain")
-            .GetAwaiter()
-            .GetResult()
-            ?.Trim()
-            ?? string.Empty;
     }
 
-    public bool TryValidate(string sql, out string error)
+    public bool TryValidate(string sql, string domain, out string error)
     {
         error = string.Empty;
 
-        if (string.IsNullOrWhiteSpace(_domain))
+        var effectiveDomain = domain?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(effectiveDomain))
         {
             error = "No hay dominio configurado para validación SQL.";
             return false;
@@ -106,12 +100,12 @@ public sealed class StaticSqlValidator : ISqlValidator
             return false;
         }
 
-        var allowedObjectKeys = LoadAllowedObjectKeys();
+        var allowedObjectKeys = LoadAllowedObjectKeys(effectiveDomain);
         if (allowedObjectKeys.Count == 0)
         {
             _logger.LogWarning(
                 "Validation blocked because no allowed SQL objects were loaded for domain {Domain}.",
-                _domain);
+                effectiveDomain);
 
             error = "No hay objetos permitidos configurados para validar la consulta.";
             return false;
@@ -149,7 +143,7 @@ public sealed class StaticSqlValidator : ISqlValidator
             {
                 _logger.LogWarning(
                     "Blocked SQL for domain {Domain}. Referenced object: {Object}.",
-                    _domain,
+                    effectiveDomain,
                     rawObject);
 
                 error = $"La consulta referencia un objeto no permitido: {rawObject}.";
@@ -160,12 +154,12 @@ public sealed class StaticSqlValidator : ISqlValidator
         return true;
     }
 
-    private HashSet<string> LoadAllowedObjectKeys()
+    private HashSet<string> LoadAllowedObjectKeys(string domain)
     {
         try
         {
             var rows = _allowedObjectStore
-                .GetActiveObjectsAsync(_domain, CancellationToken.None)
+                .GetActiveObjectsAsync(domain, CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();
 
@@ -177,7 +171,7 @@ public sealed class StaticSqlValidator : ISqlValidator
             _logger.LogInformation(
                 "Loaded {Count} allowed SQL object keys for domain {Domain}.",
                 allowedKeys.Count,
-                _domain);
+                domain);
 
             return allowedKeys;
         }
@@ -186,7 +180,7 @@ public sealed class StaticSqlValidator : ISqlValidator
             _logger.LogError(
                 ex,
                 "Error loading allowed SQL objects for domain {Domain}.",
-                _domain);
+                domain);
 
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
