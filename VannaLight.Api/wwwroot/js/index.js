@@ -19,6 +19,10 @@
         let runtimeContexts = [];
         let currentRuntimeContext = null;
         const RUNTIME_CONTEXT_STORAGE_KEY = 'vannalight.runtimeContext';
+        const QUERY_HISTORY_STORAGE_KEY = 'vannalight.queryHistory';
+        const QUERY_HISTORY_LIMIT = 10;
+        let queryHistory = [];
+        let activeHistoryEntryId = '';
 
         // datos del último chart para poder redibujar al cambiar tipo
         let lastChartModel = null;   // { labels, values, labelColumn, valueColumn }
@@ -51,12 +55,69 @@
             return [item.tenantKey, item.domain, item.connectionName].join('|');
         }
 
+        function getContextDisplayLabel(item) {
+            if (!item) return 'Sin contexto';
+            return item.label || [
+                item.tenantDisplayName || item.tenantKey,
+                item.domain,
+                item.connectionName
+            ].filter(Boolean).join(' · ');
+        }
+
+        function getContextHeroMeta(item) {
+            if (!item) return 'Selecciona una base antes de consultar.';
+            return `${item.tenantDisplayName || item.tenantKey} / ${item.domain || 'Sin dominio'} / ${item.connectionName || 'Sin conexion'}`;
+        }
+
+        function safeStorageGet(key) {
+            try {
+                return window.localStorage.getItem(key);
+            } catch {
+                return null;
+            }
+        }
+
+        function safeStorageSet(key, value) {
+            try {
+                window.localStorage.setItem(key, value);
+            } catch {
+                // ignorar restricciones del navegador
+            }
+        }
+
+        function safeStorageRemove(key) {
+            try {
+                window.localStorage.removeItem(key);
+            } catch {
+                // ignorar restricciones del navegador
+            }
+        }
+
+        function renderRuntimeContextHero(message) {
+            const hero = document.getElementById('runtimeContextHero');
+            const value = document.getElementById('runtimeContextHeroValue');
+            const meta = document.getElementById('runtimeContextHeroMeta');
+            if (!hero || !value || !meta) return;
+
+            if (!currentRuntimeContext) {
+                hero.classList.add('is-empty');
+                value.textContent = 'Sin contexto seleccionado';
+                meta.textContent = message || 'Selecciona una base antes de consultar.';
+                return;
+            }
+
+            hero.classList.remove('is-empty');
+            value.textContent = getContextHeroMeta(currentRuntimeContext);
+            meta.textContent = message || `Etiqueta de contexto: ${getContextDisplayLabel(currentRuntimeContext)}`;
+        }
+
         function updateRuntimeContextState(message) {
             const state = document.getElementById('runtimeContextState');
             if (!state) return;
 
             if (message) {
                 state.textContent = message;
+                renderRuntimeContextHero(message);
                 return;
             }
 
@@ -64,17 +125,19 @@
                 state.textContent = currentMode === 'sql'
                     ? 'Selecciona una base antes de consultar.'
                     : 'El contexto seleccionado se reutiliza cuando aplique.';
+                renderRuntimeContextHero();
                 return;
             }
 
-            state.textContent = `Activo: ${currentRuntimeContext.tenantDisplayName || currentRuntimeContext.tenantKey} · ${currentRuntimeContext.domain} · ${currentRuntimeContext.connectionName}`;
+            state.textContent = `Activo: ${getContextDisplayLabel(currentRuntimeContext)}`;
+            renderRuntimeContextHero();
         }
 
         function applyRuntimeContext(item, shouldLog = true) {
             currentRuntimeContext = item || null;
 
             if (currentRuntimeContext) {
-                window.localStorage.setItem(RUNTIME_CONTEXT_STORAGE_KEY, getContextStorageKey(currentRuntimeContext));
+                safeStorageSet(RUNTIME_CONTEXT_STORAGE_KEY, getContextStorageKey(currentRuntimeContext));
                 if (shouldLog) {
                     logLine(`Contexto activo → ${currentRuntimeContext.label}`, 'sys');
                 }
@@ -109,7 +172,7 @@
 
             select.disabled = false;
 
-            const savedKey = window.localStorage.getItem(RUNTIME_CONTEXT_STORAGE_KEY);
+            const savedKey = safeStorageGet(RUNTIME_CONTEXT_STORAGE_KEY);
             const initialContext = runtimeContexts.find(item => getContextStorageKey(item) === savedKey)
                 || runtimeContexts.find(item => item.isDefault)
                 || runtimeContexts[0];
@@ -155,14 +218,302 @@
             logLine('Lista de contextos actualizada.', 'sys');
         }
 
+        function getModeLabel(modeKey) {
+            return MODES[modeKey]?.label || String(modeKey || '').toUpperCase();
+        }
+
+        function formatHistoryTime(timestamp) {
+            if (!timestamp) return 'Sin fecha';
+            const date = new Date(timestamp);
+            if (Number.isNaN(date.getTime())) return 'Sin fecha';
+
+            const diffMs = Date.now() - date.getTime();
+            const diffMinutes = Math.max(0, Math.round(diffMs / 60000));
+            if (diffMinutes < 1) return 'Hace un momento';
+            if (diffMinutes < 60) return `Hace ${diffMinutes} min`;
+            const diffHours = Math.round(diffMinutes / 60);
+            if (diffHours < 24) return `Hace ${diffHours} h`;
+            return date.toLocaleString('es-MX', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function getHistoryStatusLabel(status) {
+            switch (status) {
+                case 'completed':
+                    return 'completada';
+                case 'review':
+                    return 'revision';
+                case 'failed':
+                    return 'fallida';
+                default:
+                    return 'pendiente';
+            }
+        }
+
+        function getHistorySignature(entry) {
+            return [
+                entry.mode || '',
+                entry.question || '',
+                entry.tenantKey || '',
+                entry.domain || '',
+                entry.connectionName || ''
+            ].join('|').toLowerCase();
+        }
+
+        function persistQueryHistory() {
+            safeStorageSet(QUERY_HISTORY_STORAGE_KEY, JSON.stringify(queryHistory.slice(0, QUERY_HISTORY_LIMIT)));
+        }
+
+        function renderQueryHistory() {
+            const list = document.getElementById('queryHistoryList');
+            if (!list) return;
+
+            list.innerHTML = '';
+
+            if (!queryHistory.length) {
+                const empty = document.createElement('div');
+                empty.className = 'history-empty';
+                empty.textContent = 'Aun no hay consultas guardadas en este navegador.';
+                list.appendChild(empty);
+                return;
+            }
+
+            queryHistory.forEach(entry => {
+                const item = document.createElement('div');
+                item.className = 'history-item';
+
+                const main = document.createElement('div');
+                main.className = 'history-main';
+
+                const question = document.createElement('div');
+                question.className = 'history-question';
+                question.textContent = entry.question || 'Consulta sin texto';
+
+                const meta = document.createElement('div');
+                meta.className = 'history-meta';
+
+                const status = document.createElement('span');
+                status.className = `history-status ${entry.status || 'pending'}`;
+                status.textContent = getHistoryStatusLabel(entry.status);
+
+                const mode = document.createElement('span');
+                mode.textContent = getModeLabel(entry.mode);
+
+                const context = document.createElement('span');
+                context.textContent = entry.contextLabel || 'Sin contexto';
+
+                const time = document.createElement('span');
+                time.textContent = formatHistoryTime(entry.timestamp);
+
+                meta.appendChild(status);
+                meta.appendChild(mode);
+                meta.appendChild(context);
+                meta.appendChild(time);
+
+                main.appendChild(question);
+                main.appendChild(meta);
+
+                const actions = document.createElement('div');
+                actions.className = 'history-item-actions';
+
+                const useBtn = document.createElement('button');
+                useBtn.type = 'button';
+                useBtn.className = 'history-action-btn';
+                useBtn.textContent = 'USAR';
+                useBtn.onclick = () => reuseHistoryEntry(entry.id, false);
+
+                const rerunBtn = document.createElement('button');
+                rerunBtn.type = 'button';
+                rerunBtn.className = 'history-action-btn';
+                rerunBtn.textContent = 'RE-EJECUTAR';
+                rerunBtn.onclick = () => reuseHistoryEntry(entry.id, true);
+
+                actions.appendChild(useBtn);
+                actions.appendChild(rerunBtn);
+
+                item.appendChild(main);
+                item.appendChild(actions);
+                list.appendChild(item);
+            });
+        }
+
+        function loadQueryHistory() {
+            const raw = safeStorageGet(QUERY_HISTORY_STORAGE_KEY);
+            if (!raw) {
+                queryHistory = [];
+                renderQueryHistory();
+                return;
+            }
+
+            try {
+                const parsed = JSON.parse(raw);
+                queryHistory = Array.isArray(parsed) ? parsed.slice(0, QUERY_HISTORY_LIMIT) : [];
+            } catch {
+                queryHistory = [];
+            }
+
+            renderQueryHistory();
+        }
+
+        function updateQueryHistoryEntry(entryId, patch) {
+            if (!entryId) return;
+            const index = queryHistory.findIndex(item => item.id === entryId);
+            if (index < 0) return;
+
+            queryHistory[index] = {
+                ...queryHistory[index],
+                ...patch
+            };
+
+            persistQueryHistory();
+            renderQueryHistory();
+        }
+
+        function beginQueryHistoryEntry(question) {
+            const entry = {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                question: question,
+                mode: currentMode,
+                timestamp: new Date().toISOString(),
+                status: 'pending',
+                tenantKey: currentRuntimeContext?.tenantKey || '',
+                domain: currentRuntimeContext?.domain || '',
+                connectionName: currentRuntimeContext?.connectionName || '',
+                contextKey: currentRuntimeContext ? getContextStorageKey(currentRuntimeContext) : '',
+                contextLabel: currentRuntimeContext ? getContextDisplayLabel(currentRuntimeContext) : 'Sin contexto',
+                sql: '',
+                rowCount: 0,
+                error: ''
+            };
+
+            const signature = getHistorySignature(entry);
+            queryHistory = queryHistory.filter(item => getHistorySignature(item) !== signature);
+            queryHistory.unshift(entry);
+            queryHistory = queryHistory.slice(0, QUERY_HISTORY_LIMIT);
+            activeHistoryEntryId = entry.id;
+            persistQueryHistory();
+            renderQueryHistory();
+        }
+
+        function finalizeActiveHistoryEntry(status, patch = {}) {
+            if (!activeHistoryEntryId) return;
+            updateQueryHistoryEntry(activeHistoryEntryId, {
+                status,
+                ...patch
+            });
+            activeHistoryEntryId = '';
+        }
+
+        function clearQueryHistory() {
+            queryHistory = [];
+            activeHistoryEntryId = '';
+            safeStorageRemove(QUERY_HISTORY_STORAGE_KEY);
+            renderQueryHistory();
+            logLine('Historial local limpiado.', 'sys');
+        }
+
+        function reuseHistoryEntry(entryId, shouldRun) {
+            const entry = queryHistory.find(item => item.id === entryId);
+            if (!entry) return;
+
+            if (entry.mode && MODES[entry.mode]) {
+                setMode(entry.mode);
+            }
+
+            if (entry.mode === 'sql' && entry.contextKey) {
+                const select = document.getElementById('runtimeContextSelect');
+                const selectedContext = runtimeContexts.find(item => getContextStorageKey(item) === entry.contextKey);
+                if (selectedContext && select) {
+                    select.value = entry.contextKey;
+                    applyRuntimeContext(selectedContext, true);
+                } else {
+                    applyRuntimeContext(null, false);
+                    if (select) {
+                        select.value = '';
+                    }
+                    updateRuntimeContextState('El contexto guardado ya no esta disponible. Revisa la base activa antes de consultar.');
+                }
+            }
+
+            const txt = document.getElementById('txtQuestion');
+            if (txt) {
+                txt.value = entry.question || '';
+                txt.focus();
+                txt.setSelectionRange(txt.value.length, txt.value.length);
+            }
+
+            if (shouldRun) {
+                sendQuestion();
+            }
+        }
+
+        function setQueryStatus(type, title, message) {
+            const banner = document.getElementById('queryStatusBanner');
+            const kicker = document.getElementById('queryStatusKicker');
+            const titleNode = document.getElementById('queryStatusTitle');
+            const messageNode = document.getElementById('queryStatusMessage');
+            if (!banner || !kicker || !titleNode || !messageNode) return;
+
+            banner.className = `query-status-banner is-visible ${type || 'info'}`;
+            kicker.textContent = type === 'error'
+                ? 'Error de consulta'
+                : type === 'warning'
+                    ? 'Consulta requiere revision'
+                    : type === 'success'
+                        ? 'Consulta completada'
+                        : 'Estado de consulta';
+            titleNode.textContent = title || 'Estado de consulta';
+            messageNode.textContent = message || '';
+        }
+
+        function clearQueryStatus() {
+            const banner = document.getElementById('queryStatusBanner');
+            if (!banner) return;
+            banner.className = 'query-status-banner';
+        }
+
+        function dismissQueryStatus() {
+            clearQueryStatus();
+        }
+
+        function getPayloadRows(payload) {
+            if (Array.isArray(payload?.data)) return payload.data;
+            if (Array.isArray(payload?.rows)) return payload.rows;
+            return [];
+        }
+
         // ═══════════════════════════════════════════════════════════
         // SIGNALR
         // ═══════════════════════════════════════════════════════════
         const connection = new signalR.HubConnectionBuilder()
             .withUrl('/hub/assistant').withAutomaticReconnect().build();
 
-        connection.on('JobStatusUpdated', d => logLine(`⏳ ${d.status}`, 'sys'));
-        connection.on('JobFailed', d => { logLine(`❌ ${d.error}`, 'err'); resetUI(); resetFeedbackPanel(); });
+        connection.on('JobStatusUpdated', d => {
+            logLine(`⏳ ${d.status}`, 'sys');
+            if (String(d?.status || '').toLowerCase().includes('analy')) {
+                setQueryStatus('info', 'Analizando consulta', `Estamos procesando la pregunta en ${getContextDisplayLabel(currentRuntimeContext)}.`);
+            }
+        });
+        connection.on('JobFailed', d => {
+            const errorMessage = d?.error || 'No se pudo procesar la consulta.';
+            const status = String(d?.status || '').toLowerCase();
+            const requiresReview = status.includes('review');
+            logLine(`❌ ${errorMessage}`, 'err');
+            setQueryStatus(
+                requiresReview ? 'warning' : 'error',
+                requiresReview ? 'La consulta requiere revision' : 'La consulta fallo',
+                errorMessage
+            );
+            finalizeActiveHistoryEntry(requiresReview ? 'review' : 'failed', {
+                error: errorMessage
+            });
+            resetUI();
+            resetFeedbackPanel();
+        });
         connection.on('JobCompleted', payload => {
             logLine('Completado', 'ok');
             resetUI();
@@ -171,6 +522,20 @@
             if (payload.resultJson) {
                 try { data = JSON.parse(payload.resultJson); } catch { }
             }
+
+            const rows = getPayloadRows(data);
+            finalizeActiveHistoryEntry('completed', {
+                sql: data?.sql || data?.sqlText || '',
+                rowCount: rows.length,
+                error: ''
+            });
+            setQueryStatus(
+                'success',
+                'Consulta completada',
+                rows.length
+                    ? `Se recuperaron ${rows.length} filas en ${getContextDisplayLabel(currentRuntimeContext)}.`
+                    : `La consulta termino correctamente en ${getContextDisplayLabel(currentRuntimeContext)}.`
+            );
 
             if (data?.IsPredictionRequest === true || data?.type === 'prediction') {
                 renderPred(data);
@@ -204,6 +569,7 @@
             if (currentMode === 'sql' && !currentRuntimeContext) {
                 logLine('Selecciona una base activa antes de consultar.', 'err');
                 updateRuntimeContextState('Selecciona una base antes de consultar.');
+                setQueryStatus('warning', 'Selecciona una base activa', 'Necesitamos un contexto SQL activo antes de enviar la consulta.');
                 return;
             }
 
@@ -214,6 +580,8 @@
             resetFeedbackPanel();
             logLine(`→ ${q}`, 'user');
             lastAskedQuestion = q;
+            beginQueryHistoryEntry(q);
+            setQueryStatus('info', 'Consulta enviada', `Trabajando en ${currentMode === 'sql' ? getContextDisplayLabel(currentRuntimeContext) : getModeLabel(currentMode)}.`);
             txt.value = '';
             txt.focus();
 
@@ -237,6 +605,10 @@
                 }
             } catch (e) {
                 logLine(`Error red: ${e.message}`, 'err');
+                setQueryStatus('error', 'No se pudo enviar la consulta', e.message);
+                finalizeActiveHistoryEntry('failed', {
+                    error: e.message
+                });
                 resetUI();
                 txt.value = q;
             }
@@ -927,5 +1299,6 @@
         }
 
         // INIT
+        loadQueryHistory();
         document.getElementById('runtimeContextSelect')?.addEventListener('change', onRuntimeContextChange);
         setMode('sql');

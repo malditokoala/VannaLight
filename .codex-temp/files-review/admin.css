@@ -2179,48 +2179,6 @@ input[type="checkbox"] {
     margin-top: 1px;
 }
 
-.context-active-banner {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    margin: 0 0 14px;
-    border-radius: var(--radius);
-    background: color-mix(in srgb, var(--onboarding-c) 7%, var(--surface));
-    border: 1px solid color-mix(in srgb, var(--onboarding-c) 18%, var(--border));
-    font-family: var(--sans);
-    font-size: .78rem;
-    color: color-mix(in srgb, var(--dim) 55%, var(--text));
-    line-height: 1.45;
-}
-
-.context-active-banner::before {
-    content: "Contexto activo";
-    flex-shrink: 0;
-    font-family: var(--mono);
-    font-size: .54rem;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    color: var(--onboarding-c);
-    padding: 3px 6px;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--onboarding-c) 24%, transparent);
-    background: color-mix(in srgb, var(--onboarding-c) 12%, transparent);
-}
-
-.context-active-banner.is-empty {
-    color: color-mix(in srgb, var(--muted) 55%, var(--text));
-    background: color-mix(in srgb, var(--surface) 88%, black);
-    border-color: var(--border);
-}
-
-.context-active-banner.is-empty::before {
-    content: "Sin contexto";
-    color: color-mix(in srgb, var(--muted) 65%, var(--text));
-    border-color: var(--border2);
-    background: transparent;
-}
-
 /* ── PANEL HEADER IMPROVEMENTS ───────────────────────────── */
 .panel-header {
     padding: 14px 18px;
@@ -2423,44 +2381,6 @@ input[type="checkbox"] {
     font-size: .72rem;
     color: var(--muted);
     line-height: 1.4;
-}
-
-/* ── CONTRAST TUNING (legibility on carbon surfaces) ───── */
-.tab-btn {
-    color: color-mix(in srgb, var(--muted) 55%, var(--text));
-}
-
-.tab-btn:hover:not([class*="active"]) {
-    color: color-mix(in srgb, var(--dim) 55%, var(--text));
-}
-
-.sh-sub {
-    color: color-mix(in srgb, var(--muted) 52%, var(--text));
-}
-
-.field-label {
-    color: color-mix(in srgb, var(--dim) 55%, var(--text));
-}
-
-.field-hint {
-    color: color-mix(in srgb, var(--muted) 42%, var(--text));
-}
-
-.subpanel-desc,
-.step-callout-desc,
-.step-sub,
-.hero-sub {
-    color: color-mix(in srgb, var(--muted) 48%, var(--text));
-}
-
-.onboarding-list-heading {
-    color: color-mix(in srgb, var(--muted) 42%, var(--text));
-    opacity: 1;
-}
-
-.tb-admin-tag,
-.btn-back {
-    color: color-mix(in srgb, var(--muted) 48%, var(--text));
 }
 
 /* ── RESPONSIVE ─────────────────────────────────────────── */

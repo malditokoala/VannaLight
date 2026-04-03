@@ -135,6 +135,7 @@ function getAdminScopedTabConfig(tabKey) {
             filterId: 'txtAllowedDomainFilter',
             editorDomainId: 'txtAllowedDomain',
             hintId: 'allowedContextHint',
+            contextBannerId: 'allowedActiveContextBanner',
             bannerId: 'allowedBanner',
             load: loadAllowedObjects,
             reset: resetAllowedObjectForm
@@ -146,6 +147,7 @@ function getAdminScopedTabConfig(tabKey) {
             filterId: 'txtBusinessRuleDomainFilter',
             editorDomainId: 'txtBusinessRuleDomain',
             hintId: 'businessRuleContextHint',
+            contextBannerId: 'businessRuleActiveContextBanner',
             bannerId: 'businessRuleBanner',
             load: loadBusinessRules,
             reset: resetBusinessRuleForm
@@ -157,6 +159,7 @@ function getAdminScopedTabConfig(tabKey) {
             filterId: 'txtSemanticHintDomainFilter',
             editorDomainId: 'txtSemanticHintDomain',
             hintId: 'semanticHintContextHint',
+            contextBannerId: 'semanticHintActiveContextBanner',
             bannerId: 'semanticHintBanner',
             load: loadSemanticHints,
             reset: resetSemanticHintForm
@@ -168,6 +171,7 @@ function getAdminScopedTabConfig(tabKey) {
             filterId: 'txtQueryPatternDomainFilter',
             editorDomainId: 'txtQueryPatternDomain',
             hintId: 'queryPatternContextHint',
+            contextBannerId: 'queryPatternActiveContextBanner',
             bannerId: 'queryPatternBanner',
             load: loadQueryPatterns,
             reset: resetQueryPatternForm
@@ -209,6 +213,14 @@ function setScopedTabHint(config, message) {
     if (!config?.hintId) return;
     const hint = document.getElementById(config.hintId);
     if (hint) hint.textContent = message;
+}
+
+function setScopedTabContextBanner(config, message, isEmpty = false) {
+    if (!config?.contextBannerId) return;
+    const banner = document.getElementById(config.contextBannerId);
+    if (!banner) return;
+    banner.textContent = message;
+    banner.classList.toggle('is-empty', !!isEmpty);
 }
 
 function renderScopedTabEmptyState(config, message) {
@@ -266,8 +278,10 @@ function syncAdminScopedFiltersToContext(context) {
 
         if (domain) {
             setScopedTabHint(config, `Contexto activo: ${tenantDisplayName} / ${domain} / ${connectionName}`);
+            setScopedTabContextBanner(config, `${tenantDisplayName} / ${domain} / ${connectionName}`);
         } else {
             setScopedTabHint(config, `Selecciona un contexto en Onboarding para ver ${config.label}.`);
+            setScopedTabContextBanner(config, 'Selecciona un workspace y un contexto válido en Onboarding.', true);
         }
     });
 }
@@ -281,6 +295,7 @@ function renderContextRequiredState(tabKey, message = 'Selecciona primero un con
     setValue(config.filterId, '');
     setValue(config.editorDomainId, '');
     setScopedTabHint(config, message);
+    setScopedTabContextBanner(config, message, true);
     renderScopedTabEmptyState(config, message);
 }
 

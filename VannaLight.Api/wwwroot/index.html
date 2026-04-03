@@ -461,6 +461,236 @@
             color: var(--muted);
         }
 
+        .context-hero {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid color-mix(in srgb,var(--a) 22%,var(--border));
+            border-radius: var(--radius);
+            background: color-mix(in srgb,var(--a) 10%,var(--surface));
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .context-hero-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .context-hero-label {
+            font-family: var(--mono);
+            font-size: .56rem;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: var(--a);
+        }
+
+        .context-hero-value {
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: .74rem;
+        }
+
+        .context-hero-meta {
+            color: var(--dim);
+            font-size: .74rem;
+        }
+
+        .context-hero.is-empty {
+            border-color: var(--border2);
+            background: var(--surface);
+        }
+
+        .context-hero.is-empty .context-hero-label {
+            color: var(--dim);
+        }
+
+        .history-strip {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface);
+            overflow: hidden;
+        }
+
+        .history-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, rgba(255,255,255,.01), rgba(255,255,255,0));
+            flex-wrap: wrap;
+        }
+
+        .history-list {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .history-empty {
+            padding: 18px 14px;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: .68rem;
+        }
+
+        .history-item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            padding: 12px 14px;
+            border-top: 1px solid var(--border);
+            align-items: center;
+        }
+
+        .history-item:first-child {
+            border-top: none;
+        }
+
+        .history-main {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .history-question {
+            color: var(--text);
+            font-size: .86rem;
+            line-height: 1.35;
+        }
+
+        .history-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            color: var(--dim);
+            font-family: var(--mono);
+            font-size: .62rem;
+        }
+
+        .history-status {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--border2);
+            background: var(--panel);
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        .history-status.completed {
+            color: #4ade80;
+            border-color: rgba(74, 222, 128, 0.28);
+        }
+
+        .history-status.failed {
+            color: #f87171;
+            border-color: rgba(248, 113, 113, 0.28);
+        }
+
+        .history-status.review {
+            color: #fbbf24;
+            border-color: rgba(251, 191, 36, 0.28);
+        }
+
+        .history-status.pending {
+            color: #fbbf24;
+            border-color: rgba(251, 191, 36, 0.28);
+        }
+
+        .history-item-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .history-action-btn {
+            background: var(--panel);
+            border: 1px solid var(--border2);
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: .58rem;
+            padding: 6px 10px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: border-color .2s, color .2s, background .2s;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        .history-action-btn:hover {
+            border-color: var(--a);
+            color: var(--a);
+        }
+
+        .query-status-banner {
+            display: none;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border2);
+            background: var(--surface);
+        }
+
+        .query-status-banner.is-visible {
+            display: flex;
+        }
+
+        .query-status-banner.info {
+            border-color: rgba(34, 211, 238, 0.24);
+            background: rgba(10, 31, 46, 0.72);
+        }
+
+        .query-status-banner.success {
+            border-color: rgba(74, 222, 128, 0.24);
+            background: rgba(6, 18, 12, 0.82);
+        }
+
+        .query-status-banner.warning {
+            border-color: rgba(251, 191, 36, 0.24);
+            background: rgba(31, 24, 9, 0.86);
+        }
+
+        .query-status-banner.error {
+            border-color: rgba(248, 113, 113, 0.24);
+            background: rgba(36, 11, 16, 0.86);
+        }
+
+        .query-status-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .query-status-kicker {
+            font-family: var(--mono);
+            font-size: .58rem;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: var(--dim);
+        }
+
+        .query-status-title {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .query-status-message {
+            color: var(--dim);
+            font-size: .86rem;
+            line-height: 1.45;
+        }
+
             .mc-shortcut kbd {
                 background: var(--panel);
                 border: 1px solid var(--border2);
@@ -1212,6 +1442,26 @@
                     <button class="sql-toggle-btn" type="button" onclick="reloadRuntimeContexts()">RECARGAR</button>
                 </div>
                 <div class="context-state" id="runtimeContextState">Cargando contextos...</div>
+                <div class="context-hero is-empty" id="runtimeContextHero">
+                    <div class="context-hero-copy">
+                        <div class="context-hero-label">Contexto activo</div>
+                        <div class="context-hero-value" id="runtimeContextHeroValue">Sin contexto seleccionado</div>
+                    </div>
+                    <div class="context-hero-meta" id="runtimeContextHeroMeta">Selecciona una base antes de consultar.</div>
+                </div>
+            </div>
+
+            <div class="history-strip">
+                <div class="history-head">
+                    <div class="context-copy">
+                        <div class="context-title">Ultimas 10 consultas</div>
+                        <div class="context-subtitle">Reusa una consulta reciente, vuelve a ejecutarla o toma una como base.</div>
+                    </div>
+                    <button class="sql-toggle-btn" type="button" onclick="clearQueryHistory()">LIMPIAR HISTORIAL</button>
+                </div>
+                <div class="history-list" id="queryHistoryList">
+                    <div class="history-empty">Aun no hay consultas guardadas en este navegador.</div>
+                </div>
             </div>
 
             <div class="input-panel">
@@ -1240,6 +1490,15 @@
             <div class="log-wrap">
                 <div class="log-bar"><span class="log-bar-label">Consola del sistema</span></div>
                 <div id="logArea"></div>
+            </div>
+
+            <div class="query-status-banner" id="queryStatusBanner">
+                <div class="query-status-copy">
+                    <div class="query-status-kicker" id="queryStatusKicker">Estado de consulta</div>
+                    <div class="query-status-title" id="queryStatusTitle">Sin actividad reciente</div>
+                    <div class="query-status-message" id="queryStatusMessage">Cuando una consulta falle o requiera revision, lo veras aqui con mas contexto.</div>
+                </div>
+                <button class="sql-toggle-btn" type="button" onclick="dismissQueryStatus()">OCULTAR</button>
             </div>
 
             <div id="resultArea">
