@@ -2,20 +2,18 @@
 using System.Collections.Generic;
 using System.Linq;
 using VannaLight.Api.Contracts;
-using VannaLight.Api.Services; // Asegúrate de incluir el namespace donde vive DocTypeSchema
+using VannaLight.Api.Services;
 
 namespace VannaLight.Api.Services.Docs;
 
 public static class WiAnswerBuilder
 {
-    // NUEVO: Agregamos DocTypeSchema a la firma del método
     public static string Build(Dictionary<string, string> facts, DocsIntent intent, DocTypeSchema schema)
     {
         if (facts is null || facts.Count == 0)
             return "Encontré páginas relevantes, pero no pude extraer el dato de forma confiable.";
 
-        // --- 1. MODO NUEVO (Schema-Driven) ---
-        // Se ejecuta solo si el Router LLM detectó campos específicos o solicitó ver todo
+        // Modo guiado por schema: prioriza los campos pedidos explícitamente por el router.
         if ((intent.RequestedFields != null && intent.RequestedFields.Count > 0) || intent.ShowAll)
         {
             var newLines = new List<string> { "Ficha solicitada:" };
@@ -29,20 +27,17 @@ public static class WiAnswerBuilder
             {
                 if (facts.TryGetValue(field.Key, out var val) && !string.IsNullOrWhiteSpace(val))
                 {
-                    // Reutilizamos tu método NormalizeEmpaque si el campo es de tipo lista
                     var finalVal = field.IsList ? NormalizeEmpaque(val) : val;
                     newLines.Add($"- {field.DisplayLabel}: {finalVal}");
                     addedAnyNew = true;
                 }
             }
 
-            // Si logró extraer al menos un dato del modo nuevo, retorna aquí
             if (addedAnyNew)
                 return string.Join(Environment.NewLine, newLines);
         }
 
-        // --- 2. MODO LEGACY (Fallback determinístico original) ---
-        // Si llegamos aquí, es porque el LLM falló, devolvió campos vacíos, o no encontró los datos del Schema
+        // Fallback determinístico para documentos/routers legacy.
         var periodo = intent.Periodo; // "Turno" | "2 Horas" | null
         var lines = new List<string> { "Necesitas:" };
 
@@ -68,21 +63,15 @@ public static class WiAnswerBuilder
         return string.Join(Environment.NewLine, lines);
     }
 
-    // =====================================================================
-    // TODOS TUS MÉTODOS PRIVADOS ORIGINALES (INTACTOS PARA EL FALLBACK)
-    // =====================================================================
-
     private static void AddResinaPorPeriodo(List<string> lines, Dictionary<string, string> facts, string? periodo)
     {
         if (periodo is null)
         {
-            // ✅ sin periodo: muestra ambos (si existen)
             if (TryGetAny(facts, out var turno, "ResinaTurno", "Resina por Turno"))
                 lines.Add($"- Resina por turno: {turno}");
             if (TryGetAny(facts, out var dosH, "Resina2Horas", "Resina por 2 Horas", "Resina por Dos Horas"))
                 lines.Add($"- Resina por 2 horas: {dosH}");
 
-            // fallback ultra: schema viejo
             if (!TryHasAny(lines, "- Resina por turno:", "- Resina por 2 horas:") &&
                 TryGet(facts, out var legacy, "ResinaLbs"))
                 lines.Add($"- Resina: {legacy}");
@@ -102,7 +91,6 @@ public static class WiAnswerBuilder
         }
         else
         {
-            // periodo desconocido: fallback
             if (TryGet(facts, out var legacy, "ResinaLbs"))
                 lines.Add($"- Resina: {legacy}");
         }
@@ -112,7 +100,6 @@ public static class WiAnswerBuilder
     {
         if (string.IsNullOrWhiteSpace(s)) return s ?? string.Empty;
 
-        // Orden deseado: Cajas primero, luego Separadores, luego el resto.
         var parts = s.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                      .Where(p => !string.IsNullOrWhiteSpace(p))
                      .ToList();
@@ -145,7 +132,6 @@ public static class WiAnswerBuilder
             if (TryGetAny(facts, out var dosH, "Empaque2Horas", "Empaque por 2 Horas", "Empaque por Dos Horas"))
                 lines.Add($"- Empaque por 2 horas: {NormalizeEmpaque(dosH)}");
 
-            // fallback schema viejo
             if (!TryHasAny(lines, "- Empaque por turno:", "- Empaque por 2 horas:") &&
                 TryGet(facts, out var legacy, "Empaque"))
                 lines.Add($"- Empaque: {NormalizeEmpaque(legacy)}");
@@ -169,7 +155,6 @@ public static class WiAnswerBuilder
             return;
         }
 
-        // periodo desconocido
         if (TryGet(facts, out var legacy2, "Empaque"))
             lines.Add($"- Empaque: {NormalizeEmpaque(legacy2)}");
     }

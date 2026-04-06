@@ -34,6 +34,9 @@ var runtimeDbPath = ResolvePath(apiPath, configuration["Paths:RuntimeDb"] ?? "Da
 var domain = (configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot").Trim();
 var environmentName = (configuration["SystemStartup:EnvironmentName"] ?? "Development").Trim();
 var defaultProfileKey = (configuration["SystemStartup:DefaultSystemProfile"] ?? "default").Trim();
+var productionViewName = ResolveQualifiedObjectName(configuration["KpiViews:ProductionViewName"], "dbo.vw_KpiProduction_v1");
+var scrapViewName = ResolveQualifiedObjectName(configuration["KpiViews:ScrapViewName"], "dbo.vw_KpiScrap_v1");
+var downtimeViewName = ResolveQualifiedObjectName(configuration["KpiViews:DowntimeViewName"], "dbo.vw_KpiDownTime_v1");
 
 Console.WriteLine($"Runtime DB: {runtimeDbPath}");
 Console.WriteLine($"Memory DB:  {memoryDbPath}");
@@ -890,7 +893,7 @@ SELECT TOP ({top})
     s.PressId,
     s.PressName,
     SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty
-FROM dbo.vw_KpiScrap_v1 s
+FROM {scrapViewName} s
 WHERE {BuildTimeFilter("s", evaluation.TimeScope, false)}
 GROUP BY s.PressId, s.PressName
 ORDER BY TotalScrapQty DESC, s.PressName;".Trim();
@@ -901,7 +904,7 @@ static string BuildTotalProduction(PatternEvaluation evaluation)
     return $@"
 SELECT
     SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty
-FROM dbo.vw_KpiProduction_v1 p
+FROM {productionViewName} p
 WHERE {BuildTimeFilter("p", evaluation.TimeScope, false)};".Trim();
 }
 
@@ -913,7 +916,7 @@ SELECT TOP ({top})
     d.FailureName,
     SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
     SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
-FROM dbo.vw_KpiDownTime_v1 d
+FROM {downtimeViewName} d
 WHERE {BuildTimeFilter("d", evaluation.TimeScope, true)}
 GROUP BY d.FailureName
 ORDER BY TotalDownTimeMinutes DESC, d.FailureName;".Trim();
@@ -928,7 +931,7 @@ SELECT TOP ({top})
     d.PressName,
     SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
     SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
-FROM dbo.vw_KpiDownTime_v1 d
+FROM {downtimeViewName} d
 WHERE {BuildTimeFilter("d", evaluation.TimeScope, true)}
 GROUP BY d.PressId, d.PressName
 ORDER BY TotalDownTimeMinutes DESC, d.PressName;".Trim();
@@ -942,7 +945,7 @@ SELECT {topClause}
     d.DepartmentName,
     SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
     SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
-FROM dbo.vw_KpiDownTime_v1 d
+FROM {downtimeViewName} d
 WHERE {BuildTimeFilter("d", evaluation.TimeScope, true)}
 GROUP BY d.DepartmentName
 ORDER BY TotalDownTimeMinutes DESC, d.DepartmentName;".Trim();
@@ -956,7 +959,7 @@ SELECT TOP ({top})
     s.MoldId,
     s.MoldName,
     SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost
-FROM dbo.vw_KpiScrap_v1 s
+FROM {scrapViewName} s
 WHERE {BuildTimeFilter("s", evaluation.TimeScope, false)}
 GROUP BY s.MoldId, s.MoldName
 ORDER BY TotalScrapCost DESC, s.MoldName;".Trim();
@@ -990,11 +993,20 @@ static string ResolveViewForAlias(string alias)
 {
     return alias switch
     {
-        "p" => "dbo.vw_KpiProduction_v1",
-        "s" => "dbo.vw_KpiScrap_v1",
-        "d" => "dbo.vw_KpiDownTime_v1",
-        _ => "dbo.vw_KpiProduction_v1"
+        "p" => productionViewName,
+        "s" => scrapViewName,
+        "d" => downtimeViewName,
+        _ => productionViewName
     };
+}
+
+static string ResolveQualifiedObjectName(string? configuredValue, string fallback)
+{
+    if (string.IsNullOrWhiteSpace(configuredValue))
+        return fallback;
+
+    var trimmed = configuredValue.Trim();
+    return Regex.IsMatch(trimmed, @"^[\[\]\w\.]+$") ? trimmed : fallback;
 }
 
 static bool HasBlockedQuestionIntent(string question)
@@ -1571,10 +1583,10 @@ static IReadOnlyList<CuratedTrainingExample> BuildCuratedExamples(string domain)
     [
         new CuratedTrainingExample(
             "¿Qué prensas llevan más tiempo caído en el turno actual?",
-            """
+            $$"""
 WITH CurrentShift AS (
     SELECT MAX(d.ShiftId) AS ShiftId
-    FROM dbo.vw_KpiDownTime_v1 d
+    FROM {downtimeViewName} d
     WHERE CAST(d.OperationDate AS date) = CAST(GETDATE() AS date)
 )
 SELECT TOP (5)
@@ -1582,7 +1594,7 @@ SELECT TOP (5)
     d.PressName,
     SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
     SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
-FROM dbo.vw_KpiDownTime_v1 d
+FROM {downtimeViewName} d
 INNER JOIN CurrentShift cs
     ON d.ShiftId = cs.ShiftId
 WHERE CAST(d.OperationDate AS date) = CAST(GETDATE() AS date)
@@ -1596,10 +1608,10 @@ ORDER BY TotalDownTimeMinutes DESC, d.PressName;
             30),
         new CuratedTrainingExample(
             "¿Cuánto producimos hoy en total?",
-            """
+            $$"""
 SELECT
     SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty
-FROM dbo.vw_KpiProduction_v1 p
+FROM {productionViewName} p
 WHERE CAST(p.OperationDate AS date) = CAST(GETDATE() AS date);
 """.Trim(),
             domain,
@@ -1608,12 +1620,12 @@ WHERE CAST(p.OperationDate AS date) = CAST(GETDATE() AS date);
             28),
         new CuratedTrainingExample(
             "¿Cuáles fueron las 5 prensas con mayor volumen de producción real el día de ayer?",
-            """
+            $$"""
 SELECT TOP (5)
     p.PressId,
     p.PressName,
     SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty
-FROM dbo.vw_KpiProduction_v1 p
+FROM {productionViewName} p
 WHERE CAST(p.OperationDate AS date) = DATEADD(DAY, -1, CAST(GETDATE() AS date))
 GROUP BY p.PressId, p.PressName
 ORDER BY TotalProducedQty DESC, p.PressName;
@@ -1624,12 +1636,12 @@ ORDER BY TotalProducedQty DESC, p.PressName;
             20),
         new CuratedTrainingExample(
             "¿Qué prensas generaron menos scrap hoy?",
-            """
+            $$"""
 SELECT
     s.PressId,
     s.PressName,
     SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty
-FROM dbo.vw_KpiScrap_v1 s
+FROM {scrapViewName} s
 WHERE CAST(s.OperationDate AS date) = CAST(GETDATE() AS date)
 GROUP BY s.PressId, s.PressName
 ORDER BY TotalScrapQty ASC, s.PressName;
@@ -1640,12 +1652,12 @@ ORDER BY TotalScrapQty ASC, s.PressName;
             18),
         new CuratedTrainingExample(
             "¿Qué cliente acumuló más valor de producción este mes?",
-            """
+            $$"""
 SELECT TOP (1)
     p.CustomerId,
     p.CustomerName,
     SUM(ISNULL(p.ProductionValue, 0)) AS TotalProductionValue
-FROM dbo.vw_KpiProduction_v1 p
+FROM {productionViewName} p
 WHERE p.YearMonth = CONVERT(char(7), GETDATE(), 120)
 GROUP BY p.CustomerId, p.CustomerName
 ORDER BY TotalProductionValue DESC, p.CustomerName;
@@ -1656,13 +1668,13 @@ ORDER BY TotalProductionValue DESC, p.CustomerName;
             22),
         new CuratedTrainingExample(
             "¿Qué moldes tuvieron más tiempo caído hoy y cuántos minutos acumularon?",
-            """
+            $$"""
 SELECT TOP (10)
     d.MoldId,
     MAX(d.MoldName) AS MoldName,
     SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
     SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
-FROM dbo.vw_KpiDownTime_v1 d
+FROM {downtimeViewName} d
 WHERE CAST(d.OperationDate AS date) = CAST(GETDATE() AS date)
   AND d.IsOpen = 0
 GROUP BY d.MoldId
@@ -1674,13 +1686,13 @@ ORDER BY TotalDownTimeMinutes DESC, MoldName;
             22),
         new CuratedTrainingExample(
             "¿Qué prensas con producción hoy también tuvieron scrap hoy, y cuánto scrap generó cada una?",
-            """
+            $$"""
 WITH ProductionToday AS (
     SELECT
         p.PressId,
         MAX(p.PressName) AS PressName,
         SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty
-    FROM dbo.vw_KpiProduction_v1 p
+    FROM {productionViewName} p
     WHERE CAST(p.OperationDate AS date) = CAST(GETDATE() AS date)
     GROUP BY p.PressId
 ),
@@ -1689,7 +1701,7 @@ ScrapToday AS (
         s.PressId,
         SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty,
         SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost
-    FROM dbo.vw_KpiScrap_v1 s
+    FROM {scrapViewName} s
     WHERE CAST(s.OperationDate AS date) = CAST(GETDATE() AS date)
     GROUP BY s.PressId
 )
@@ -1710,13 +1722,13 @@ ORDER BY s.TotalScrapQty DESC, p.TotalProducedQty DESC, p.PressName;
             24),
         new CuratedTrainingExample(
             "¿Dónde estamos perdiendo más dinero este mes: en scrap o en tiempo caído?",
-            """
+            $$"""
 WITH ScrapByPress AS (
     SELECT
         s.PressId,
         MAX(s.PressName) AS PressName,
         SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost
-    FROM dbo.vw_KpiScrap_v1 s
+    FROM {scrapViewName} s
     WHERE s.YearMonth = CONVERT(char(7), GETDATE(), 120)
     GROUP BY s.PressId
 ),
@@ -1725,7 +1737,7 @@ DownTimeByPress AS (
         d.PressId,
         MAX(d.PressName) AS PressName,
         SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
-    FROM dbo.vw_KpiDownTime_v1 d
+    FROM {downtimeViewName} d
     WHERE d.YearMonth = CONVERT(char(7), GETDATE(), 120)
       AND d.IsOpen = 0
     GROUP BY d.PressId
@@ -1747,7 +1759,7 @@ ORDER BY TotalLossCost DESC, PressName;
             24),
         new CuratedTrainingExample(
             "Muéstrame el top 5 de números de parte con menor eficiencia en la última semana.",
-            """
+            $$"""
 SELECT TOP (5)
     p.PartId,
     p.PartNumber,
@@ -1759,7 +1771,7 @@ SELECT TOP (5)
         / NULLIF(SUM(ISNULL(p.TargetQty, 0)), 0)
         AS DECIMAL(18,2)
     ) AS EfficiencyPct
-FROM dbo.vw_KpiProduction_v1 p
+FROM {productionViewName} p
 WHERE CAST(p.OperationDate AS date) >= DATEADD(DAY, -6, CAST(GETDATE() AS date))
   AND CAST(p.OperationDate AS date) <= CAST(GETDATE() AS date)
 GROUP BY p.PartId, p.PartNumber, p.PartName
@@ -1772,7 +1784,7 @@ ORDER BY EfficiencyPct ASC, p.PartNumber;
             20),
         new CuratedTrainingExample(
             "Muéstrame el top 5 de números de parte con mayor eficiencia en la última semana.",
-            """
+            $$"""
 SELECT TOP (5)
     p.PartId,
     p.PartNumber,
@@ -1784,7 +1796,7 @@ SELECT TOP (5)
         / NULLIF(SUM(ISNULL(p.TargetQty, 0)), 0)
         AS DECIMAL(18,2)
     ) AS EfficiencyPct
-FROM dbo.vw_KpiProduction_v1 p
+FROM {productionViewName} p
 WHERE CAST(p.OperationDate AS date) >= DATEADD(DAY, -6, CAST(GETDATE() AS date))
   AND CAST(p.OperationDate AS date) <= CAST(GETDATE() AS date)
 GROUP BY p.PartId, p.PartNumber, p.PartName
@@ -1797,12 +1809,12 @@ ORDER BY EfficiencyPct DESC, p.PartNumber;
             20),
         new CuratedTrainingExample(
             "Cuáles son las 3 prensas con más scrap de la semana?",
-            """
+            $$"""
 SELECT TOP (3)
     s.PressId,
     s.PressName,
     SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty
-FROM dbo.vw_KpiScrap_v1 s
+FROM {scrapViewName} s
 WHERE s.YearNumber = YEAR(GETDATE())
   AND s.WeekOfYear = DATEPART(ISO_WEEK, GETDATE())
 GROUP BY s.PressId, s.PressName

@@ -11,7 +11,7 @@ public class QuestionJob
     public string Role { get; set; } = string.Empty;
     public string TenantKey { get; set; } = "default";
     public string Domain { get; set; } = string.Empty;
-    public string ConnectionName { get; set; } = "OperationalDb";
+    public string ConnectionName { get; set; } = string.Empty;
     public string Question { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
 

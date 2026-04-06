@@ -32,7 +32,7 @@ public class SqliteJobStore : IJobStore
         TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN Mode TEXT DEFAULT 'Data';");
         TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN TenantKey TEXT DEFAULT 'default';");
         TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN Domain TEXT;");
-        TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN ConnectionName TEXT DEFAULT 'OperationalDb';");
+        TryAddColumn(conn, "ALTER TABLE QuestionJobs ADD COLUMN ConnectionName TEXT DEFAULT '';");
     }
 
     private static void TryAddColumn(SqliteConnection conn, string sql)
@@ -184,6 +184,9 @@ public class SqliteJobStore : IJobStore
     public async Task<IEnumerable<QuestionJob>> GetRecentJobsAsync(
     int limit = 20,
     string? mode = null,
+    string? tenantKey = null,
+    string? domain = null,
+    string? connectionName = null,
     CancellationToken ct = default)
     {
         using var conn = new SqliteConnection(_connString);
@@ -197,13 +200,19 @@ public class SqliteJobStore : IJobStore
                     CreatedUtc, UpdatedUtc
                 FROM QuestionJobs
                 WHERE (@Mode IS NULL OR Mode = @Mode)
+                  AND (@TenantKey IS NULL OR @TenantKey = '' OR TenantKey = @TenantKey)
+                  AND (@Domain IS NULL OR @Domain = '' OR Domain = @Domain)
+                  AND (@ConnectionName IS NULL OR @ConnectionName = '' OR ConnectionName = @ConnectionName)
                 ORDER BY CreatedUtc DESC
                 LIMIT @Limit
              """,
             new
             {
                 Limit = limit,
-                Mode = mode
+                Mode = mode,
+                TenantKey = tenantKey,
+                Domain = domain,
+                ConnectionName = connectionName
             },
             cancellationToken: ct);
 
@@ -268,7 +277,7 @@ public class SqliteJobStore : IJobStore
             Role = raw.Role ?? string.Empty,
             TenantKey = raw.TenantKey ?? "default",
             Domain = raw.Domain ?? string.Empty,
-            ConnectionName = raw.ConnectionName ?? "OperationalDb",
+            ConnectionName = raw.ConnectionName ?? string.Empty,
             Question = raw.Question ?? string.Empty,
             Status = raw.Status ?? "Unknown",
             Mode = raw.Mode ?? "Data",

@@ -91,6 +91,14 @@ public class AssistantController(
         var sqlServerConnectionString = string.Empty;
         if (request.Mode == AskMode.Data)
         {
+            if (string.IsNullOrWhiteSpace(executionContext.ConnectionName))
+            {
+                return BadRequest(new
+                {
+                    Error = "No hay una conexión configurada para este contexto. Guarda una conexión y asígnala al workspace antes de consultar datos."
+                });
+            }
+
             sqlServerConnectionString = await operationalConnectionResolver.ResolveConnectionStringAsync(
                 executionContext.ConnectionName,
                 HttpContext.RequestAborted);
@@ -188,7 +196,7 @@ public class AssistantController(
         try
         {
             // El frontend de chat pasará '?mode=Data' o '?mode=Predict' según el tab activo
-            var jobs = await jobStore.GetRecentJobsAsync(50, mode, ct);
+            var jobs = await jobStore.GetRecentJobsAsync(50, mode, ct: ct);
             return Ok(jobs);
         }
         catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)

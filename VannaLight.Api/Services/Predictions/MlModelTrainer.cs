@@ -6,62 +6,27 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using VannaLight.Core.Settings;
 
 namespace VannaLight.Api.Services.Predictions;
 
 public static class MlModelTrainer
 {
     public static readonly string ModelPath = Path.Combine(Environment.CurrentDirectory, "Data", "Models", "ScrapShiftForecast_v1.zip");
+    public static readonly string MetadataPath = Path.Combine(Environment.CurrentDirectory, "Data", "Models", "ScrapShiftForecast_v1.meta.json");
 
-    public static void TrainAndSaveModel(string connectionString)
+    public static void TrainAndSaveModel(string connectionString, MlTrainingProfile profile)
     {
         var mlContext = new MLContext(seed: 0);
         Console.WriteLine("[ML.NET] Extrayendo dataset SHIFT-LEVEL de scrap...");
 
-        List<ShiftScrapRow> rawRows;
+        List<TemporalObservationRow> rawRows;
 
         using (var connection = new SqlConnection(connectionString))
         {
-            // OBTENEMOS TURNOS ACTIVOS Y CURAMOS LOS DATOS EN UNA SOLA CONSULTA
-            const string sql = @"
-            WITH TurnosActivos AS (
-                SELECT Id AS ShiftId, nombre AS ShiftName, inicio AS TicksInicio, fin AS TicksFin
-                FROM [dbo].[Turnos]
-                WHERE disponibleProduccion = 1
-            ),
-            BaseTimeline AS (
-                SELECT LTRIM(RTRIM(p.PartNumber)) AS PartNumber, p.OperationDate, p.ShiftId
-                FROM dbo.vw_KpiProduction_v1 p
-                JOIN TurnosActivos t ON p.ShiftId = t.ShiftId
-                WHERE p.OperationDate IS NOT NULL AND p.PartNumber IS NOT NULL
-                UNION
-                SELECT LTRIM(RTRIM(s.PartNumber)) AS PartNumber, s.OperationDate, s.ShiftId
-                FROM dbo.vw_KpiScrap_v1 s
-                JOIN TurnosActivos t ON s.ShiftId = t.ShiftId
-                WHERE s.OperationDate IS NOT NULL AND s.PartNumber IS NOT NULL
-            ),
-            ScrapShift AS (
-                SELECT LTRIM(RTRIM(s.PartNumber)) AS PartNumber, s.OperationDate, s.ShiftId, 
-                       SUM(CAST(ISNULL(s.ScrapQty, 0) AS float)) AS ScrapQty
-                FROM dbo.vw_KpiScrap_v1 s
-                JOIN TurnosActivos t ON s.ShiftId = t.ShiftId
-                WHERE s.OperationDate IS NOT NULL AND s.PartNumber IS NOT NULL
-                GROUP BY LTRIM(RTRIM(s.PartNumber)), s.OperationDate, s.ShiftId
-            )
-            SELECT 
-                b.PartNumber, 
-                b.OperationDate, 
-                b.ShiftId, 
-                t.ShiftName,
-                t.TicksInicio,
-                t.TicksFin,
-                CAST(ISNULL(s.ScrapQty, 0) AS float) AS ScrapQty
-            FROM BaseTimeline b
-            JOIN TurnosActivos t ON b.ShiftId = t.ShiftId
-            LEFT JOIN ScrapShift s ON b.PartNumber = s.PartNumber AND b.OperationDate = s.OperationDate AND b.ShiftId = s.ShiftId
-            ORDER BY b.PartNumber, b.OperationDate, t.TicksInicio;";
-
-            rawRows = connection.Query<ShiftScrapRow>(sql).ToList();
+            var sql = MlTrainingSqlBuilder.BuildTrainingDatasetSql(profile);
+            rawRows = connection.Query<TemporalObservationRow>(sql).ToList();
         }
 
         if (rawRows.Count == 0) return;
@@ -69,14 +34,14 @@ public static class MlModelTrainer
         var trainingRows = BuildTrainingRows(rawRows);
         var dataView = mlContext.Data.LoadFromEnumerable(trainingRows);
 
-        var pipeline = mlContext.Transforms.Categorical.OneHotEncoding("PartNumberEncoded", nameof(ModelInput.PartNumber))
+        var pipeline = mlContext.Transforms.Categorical.OneHotEncoding("SeriesKeyEncoded", nameof(ForecastModelInput.SeriesKey))
             .Append(mlContext.Transforms.Concatenate("Features",
-                "PartNumberEncoded", nameof(ModelInput.ShiftId), nameof(ModelInput.DayOfWeekIso),
-                nameof(ModelInput.Lag1ScrapQty), nameof(ModelInput.Avg3ScrapQty)))
+                "SeriesKeyEncoded", nameof(ForecastModelInput.BucketKey), nameof(ForecastModelInput.DayOfWeekIso),
+                nameof(ForecastModelInput.Lag1Value), nameof(ForecastModelInput.Avg3Value)))
             .Append(mlContext.Regression.Trainers.FastTree(
                 new FastTreeRegressionTrainer.Options
                 {
-                    LabelColumnName = nameof(ModelInput.ScrapQty),
+                    LabelColumnName = nameof(ForecastModelInput.TargetValue),
                     FeatureColumnName = "Features",
                     NumberOfTrees = 200,
                     NumberOfLeaves = 40,
@@ -86,39 +51,85 @@ public static class MlModelTrainer
         var model = pipeline.Fit(dataView);
         Directory.CreateDirectory(Path.GetDirectoryName(ModelPath)!);
         mlContext.Model.Save(model, dataView.Schema, ModelPath);
+        SaveMetadata(profile);
     }
 
-    internal static List<ModelInput> BuildTrainingRows(List<ShiftScrapRow> rawRows)
+    public static MlModelArtifactMetadata? LoadMetadata()
     {
-        var result = new List<ModelInput>();
-        var groups = rawRows.GroupBy(x => x.PartNumber).ToList();
+        if (!File.Exists(MetadataPath))
+            return null;
 
-        // Obtenemos los turnos distintos para saber cómo rellenar huecos
-        var availableShifts = rawRows.Select(x => new { x.ShiftId, x.TicksInicio }).Distinct().OrderBy(x => x.TicksInicio).ToList();
+        try
+        {
+            var json = File.ReadAllText(MetadataPath);
+            return JsonSerializer.Deserialize<MlModelArtifactMetadata>(json);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static bool IsModelAlignedWithProfile(MlTrainingProfile profile)
+    {
+        var metadata = LoadMetadata();
+        return metadata is not null
+            && !string.IsNullOrWhiteSpace(metadata.ProfileSignature)
+            && string.Equals(metadata.ProfileSignature, profile.GetSignature(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void SaveMetadata(MlTrainingProfile profile)
+    {
+        var metadata = new MlModelArtifactMetadata
+        {
+            ProfileSignature = profile.GetSignature(),
+            TrainedUtc = DateTime.UtcNow.ToString("O"),
+            SourceMode = profile.NormalizedSourceMode,
+            ConnectionName = profile.ConnectionName,
+            DisplayName = profile.DisplayName
+        };
+
+        var json = JsonSerializer.Serialize(metadata, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+
+        Directory.CreateDirectory(Path.GetDirectoryName(MetadataPath)!);
+        File.WriteAllText(MetadataPath, json);
+    }
+
+    internal static List<ForecastModelInput> BuildTrainingRows(List<TemporalObservationRow> rawRows)
+    {
+        var result = new List<ForecastModelInput>();
+        var groups = rawRows.GroupBy(x => x.SeriesKey).ToList();
+
+        var availableBuckets = rawRows.Select(x => new { x.BucketKey, x.BucketStartTick, x.BucketLabel, x.BucketEndTick }).Distinct().OrderBy(x => x.BucketStartTick).ToList();
 
         foreach (var group in groups)
         {
-            var ordered = group.OrderBy(x => x.OperationDate).ThenBy(x => x.TicksInicio).ToList();
+            var ordered = group.OrderBy(x => x.ObservedOn).ThenBy(x => x.BucketStartTick).ToList();
             if (ordered.Count == 0) continue;
 
-            var firstDate = ordered.First().OperationDate;
-            var lastDate = ordered.Last().OperationDate;
-            var historyDict = ordered.ToDictionary(x => $"{x.OperationDate:yyyyMMdd}-{x.ShiftId}", x => x.ScrapQty);
+            var firstDate = ordered.First().ObservedOn;
+            var lastDate = ordered.Last().ObservedOn;
+            var historyDict = ordered.ToDictionary(x => $"{x.ObservedOn:yyyyMMdd}-{x.BucketKey}", x => x.TargetValue);
 
-            var continuousHistory = new List<ShiftScrapRow>();
+            var continuousHistory = new List<TemporalObservationRow>();
 
-            // Rellenado de huecos estricto por Turno
             for (var d = firstDate; d <= lastDate; d = d.AddDays(1))
             {
-                foreach (var shift in availableShifts)
+                foreach (var bucket in availableBuckets)
                 {
-                    var key = $"{d:yyyyMMdd}-{shift.ShiftId}";
-                    continuousHistory.Add(new ShiftScrapRow
+                    var key = $"{d:yyyyMMdd}-{bucket.BucketKey}";
+                    continuousHistory.Add(new TemporalObservationRow
                     {
-                        PartNumber = ordered.First().PartNumber,
-                        OperationDate = d,
-                        ShiftId = shift.ShiftId,
-                        ScrapQty = historyDict.ContainsKey(key) ? historyDict[key] : 0
+                        SeriesKey = ordered.First().SeriesKey,
+                        ObservedOn = d,
+                        BucketKey = bucket.BucketKey,
+                        BucketLabel = bucket.BucketLabel,
+                        BucketStartTick = bucket.BucketStartTick,
+                        BucketEndTick = bucket.BucketEndTick,
+                        TargetValue = historyDict.ContainsKey(key) ? historyDict[key] : 0
                     });
                 }
             }
@@ -129,16 +140,16 @@ public static class MlModelTrainer
                 var current = continuousHistory[i];
 
                 // DayOfWeekIso (1=Lunes, 7=Domingo)
-                int dow = current.OperationDate.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)current.OperationDate.DayOfWeek;
+                int dow = current.ObservedOn.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)current.ObservedOn.DayOfWeek;
 
-                result.Add(new ModelInput
+                result.Add(new ForecastModelInput
                 {
-                    PartNumber = current.PartNumber,
-                    ShiftId = current.ShiftId,
+                    SeriesKey = current.SeriesKey,
+                    BucketKey = current.BucketKey,
                     DayOfWeekIso = dow,
-                    Lag1ScrapQty = history.Last().ScrapQty,
-                    Avg3ScrapQty = history.TakeLast(3).Average(x => x.ScrapQty),
-                    ScrapQty = current.ScrapQty
+                    Lag1Value = history.Last().TargetValue,
+                    Avg3Value = history.TakeLast(3).Average(x => x.TargetValue),
+                    TargetValue = current.TargetValue
                 });
             }
         }

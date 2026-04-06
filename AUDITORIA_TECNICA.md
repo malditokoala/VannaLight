@@ -1,6 +1,6 @@
-# Auditoría Técnica Completa - VannaLight
+# Auditoría Técnica Completa - VannaLight (v3)
 
-**Fecha:** 14 de marzo de 2026  
+**Fecha:** 3 de abril de 2026  
 **Auditor:** opencode  
 **Proyecto:** VannaLight - Asistente Industrial de IA
 
@@ -8,284 +8,250 @@
 
 ## 1. Resumen Ejecutivo
 
-| Área | Estado | Puntuación |
-|------|--------|------------|
-| Arquitectura | 🟡 Necesita mejora | 6/10 |
-| Seguridad | 🟢 Bien | 8/10 |
-| Dependencias | 🟡 Actualizar | 5/10 |
-| Código | 🟡 Deuda técnica | 5/10 |
-| Logging/Monitoring | 🔴 Deficiente | 3/10 |
-| Testing | 🔴 No existe | 0/10 |
-| Documentación | 🔴 Incompleta | 2/10 |
+| Área | Estado | Puntuación | Cambio vs v2 |
+|------|--------|------------|--------------|
+| Arquitectura | 🟡 Necesita mejora | 7/10 | - |
+| Seguridad | 🟢 Bien | 8/10 | - |
+| Dependencias | 🟢 Mayormente al día | 8/10 | - |
+| Código | 🟡 Deuda técnica | 5/10 | - |
+| Logging/Monitoring | 🔴 Deficiente | 3/10 | - |
+| Testing | 🔴 No existe | 0/10 | - |
+| Documentación | 🟡 Mejorada | 6/10 | - |
+| **Multi-tenancy** | 🟡 En desarrollo | 5/10 | **🆕** |
+| **WhatsApp Integration** | 🟡 Spike | 5/10 | **🆕** |
 
-**Puntuación Global:** 4.9/10 🔴
+**Puntuación Global:** 5.8/10 🟡
 
 ---
 
-## 2. Arquitectura
+## 2. Cambios Detectados desde v2
 
-### 2.1 Estructura de Proyectos ✅
+### 2.1 Nuevos Componentes ✅
+
+| Componente | Descripción | Estado |
+|------------|-------------|--------|
+| `Tenant` / `TenantDomain` | Modelos para multi-tenancy | ✅ Implementado |
+| `ITenantStore` / `SqliteTenantStore` | Persistencia de tenants | ✅ Implementado |
+| `IExecutionContextResolver` | Resuelve contexto de ejecución | ✅ Implementado |
+| `AskExecutionContext` | Contexto con TenantKey, Domain, Connection | ✅ Implementado |
+
+### 2.2 Nuevo Proyecto Detectado ⚠️
+
+| Proyecto | Descripción | Integración |
+|----------|-------------|-------------|
+| `UltraMsgWebhookSpike` | Integración WhatsApp (UltraMsg API) | ❌ No integrado |
+
+### 2.3 Progreso General
+
+| Ítem | Estado |
+|------|--------|
+| Archivos sin uso | ✅ 0 |
+| Empty catch blocks | ✅ 0 |
+| Vistas SQL hardcodeadas | ⚠️ 18+ (sin cambios) |
+| Excepciones genéricas | ⚠️ 2 (sin cambios) |
+| Magic numbers | ⚠️ 5 (sin cambios) |
+| Autenticación | ❌ Pendiente |
+| Tests | ❌ No existe |
+
+---
+
+## 3. Arquitectura Actualizada
+
+### 3.1 Estructura de Proyectos
+
 ```
 VannaLight.slnx
-├── VannaLight.Core           (Dominio - Sin dependencias)
+├── VannaLight.Api           (Web API + Frontend)
+├── VannaLight.Core         (Dominio - Sin dependencias)
 ├── VannaLight.Infrastructure (Implementaciones)
-├── VannaLight.Api            (Web API + Frontend)
-└── VannaLight.ConsoleApp    (CLI)
+├── VannaLight.ConsoleApp   (CLI)
+├── UltraMsgWebhookSpike    (⚠️ No integrado en solución)
+└── .codex-build/RuntimeJobAuditor (⚠️ No integrado)
 ```
 
-**优点 (Pros):**
-- Separación clara de responsabilidades
-- Core sin dependencias externas
-- Inyección de dependencias configurada
+### 3.2 Arquitectura Multi-Tenant (Nueva)
 
-**改善点 (A mejorar):**
-- Mezcla de responsabilidades en `DocsAnswerService` (extracción, scoring, respuesta)
-- `InferenceWorker` con ~270 líneas maneja múltiples modos (SQL, Docs, Predict)
-- Lógica de dominio en capa de infraestructura
+```
+┌─────────────────────────────────────────────────────┐
+│                  AskExecutionContext                 │
+├─────────────────────────────────────────────────────┤
+│  TenantKey      → "empresa_xyz"                    │
+│  Domain         → "erp-kpi-pilot"                  │
+│  ConnectionName → "OperationalDb"                   │
+│  SystemProfile  → "default"                         │
+└─────────────────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────┐
+│           ExecutionContextResolver                   │
+├─────────────────────────────────────────────────────┤
+│  1. Resolve tenant (from DB or default)            │
+│  2. Resolve domain (from DB or config)              │
+│  3. Resolve connection (from DB or config)           │
+│  4. Resolve system profile (from DB or config)      │
+└─────────────────────────────────────────────────────┘
+```
 
-### 2.2 Patrones Utilizados
+### 3.3 Flujo Multi-Tenant
 
-| Patrón | Uso | Estado |
-|--------|-----|--------|
-| Repository | SqliteXxxStore | ✅ |
-| Unit of Work | No | ❌ |
-| CQRS | No | ❌ |
-| Mediator | No | ❌ |
-| Factory | AppSettingsFactory | ✅ |
-
----
-
-## 3. Dependencias y Versiones
-
-### 3.1 Paquetes NuGet
-
-| Paquete | Versión Actual | Latest | Riesgo |
-|---------|----------------|--------|--------|
-| **LLamaSharp** | 0.26.0 | 17.x | 🔴 Obsoleto |
-| **Microsoft.ML** | 5.0.0 | 5.0.1 | 🟢 |
-| **Dapper** | 2.1.66 | 2.1.35 | 🟡 |
-| **Microsoft.Data.Sqlite** | 10.0.3 | 10.0.x | 🟢 |
-| **UglyToad.PdfPig** | 1.7.0-custom-5 | 0.1.9 | 🔴 Pre-release |
-| **Microsoft.Data.SqlClient** | 6.1.4 | 6.1.4 | 🟢 |
-
-### 3.2 Problemas Críticos
-
-1. **LLamaSharp 0.26.0** está muy desactualizado (latest: 17.x)
-   - Sin soporte para nuevos modelos
-   - Posibles bugs de memoria
-   - Recomendación: Migrar a 0.17.x
-
-2. **UglyToad.PdfPig 1.7.0-custom-5** es una versión custom/pre-release
-   - Inestable para producción
-   - Usar versión estable 0.1.9
-
-3. **Framework .NET 10** (preview)
-   - Usar .NET 8 LTS para producción
+```
+Solicitud API
+     │
+     ├── /api/assistant/ask?tenant=xyz&domain=kpi
+     │         │
+     │         ▼
+     │   ExecutionContextResolver.ResolveAsync()
+     │         │
+     │         ├──► Busca Tenant en SQLite
+     │         ├──► Busca TenantDomain mapping
+     │         ├──► Resuelve ConnectionString correcto
+     │         └──► Retorna AskExecutionContext
+     │                   │
+     │                   ▼
+     │         Usa connection del tenant específico
+     │
+     └── /api/assistant/ask (sin params)
+              │
+              ▼
+        Usa defaults del sistema
+```
 
 ---
 
-## 4. Seguridad
+## 4. Nuevas Funcionalidades
 
-### 4.1 Validaciones SQL ✅
+### 4.1 Multi-Tenancy
 
-| Archivo | Implementación |
-|---------|----------------|
-| `StaticSqlValidator.cs` | ✅ Bloquea INSERT/UPDATE/DELETE/DROP/etc |
-| `SqlServerDryRunner.cs` | ✅ Dry-run con NOEXEC |
+| Feature | Implementado | Funcional |
+|---------|-------------|-----------|
+| Tenant model | ✅ | ✅ |
+| TenantDomain mapping | ✅ | ✅ |
+| ExecutionContextResolver | ✅ | ✅ |
+| Tenant-specific connections | ✅ | ✅ |
+| Tenant-specific configs | ✅ | ✅ |
 
-### 4.2 Mejores Prácticas
+**Beneficio:** Un deployment puede servir a múltiples clientes/empresas.
 
-| Aspecto | Estado |
+### 4.2 WhatsApp Integration (UltraMsgWebhookSpike)
+
+| Feature | Estado |
 |---------|--------|
-| Secrets en appsettings | ✅ UserSecretsId configurado |
-| Parámetros en queries | ✅ Dapper previene SQL injection |
-| Validación de entrada | 🟡 Parcial |
-| Rate limiting | ❌ No implementado |
-| CORS | ❌ No configurado |
+| Polling Worker | ✅ |
+| Webhook endpoint | ✅ |
+| UltraMsg API client | ✅ |
+| Request inspector | ✅ |
+
+**Nota:** Proyecto separado, no integrado en solución principal.
 
 ---
 
-## 5. Calidad de Código
+## 5. Deuda Técnica Actual
 
-### 5.1 Métricas
+### 5.1 Sin Cambios desde v2
 
-| Métrica | Valor | Umbral |
-|---------|-------|--------|
-| Líneas de código (~) | 5000 | - |
-| Archivos .cs | 60 | - |
-| Complejidad ciclomática | Alta | - |
-| Acoplamiento | Alto | - |
+| Problema | Ubicación | Severidad |
+|---------|-----------|-----------|
+| Vistas SQL hardcodeadas | 18+ lugares | Alta |
+| Magic numbers | DocsAnswerService.cs | Media |
+| Excepciones genéricas | ForecastingService.cs:45,79 | Baja |
+| TODO explícito | DocsAnswerService.cs:10 | Baja |
 
-### 5.2 Code Smells
+### 5.2 Code Smells Principales
 
 | # | Problema | Severidad | Ubicación |
 |---|----------|-----------|-----------|
-| 1 | God Object | Alta | `DocsAnswerService.cs` (330 líneas) |
-| 2 | Método largo | Alta | `InferenceWorker.cs` (268 líneas) |
-| 3 | Método largo | Alta | `AskUseCase.cs` (405 líneas) |
-| 4 | Magic numbers | Media | `DocsAnswerService.cs` |
-| 5 | Empty catch | Alta | `InferenceWorker.cs:205` |
-| 6 | Vistas hardcodeadas | Alta | 10+ ubicaciones |
-| 7 | Duplicación | Media | 19x connection strings |
-
-### 5.3 Convenciones de Nombre
-
-| Problema | Ejemplo |
-|----------|---------|
-| Campos privados sin `_` | `logger`, `_log` (mezclado) |
-| Clases no selladas | `DocsAnswerService` podría ser `sealed` |
-| Métodos async sin CT | Algunos endpoints ignoran CancellationToken |
+| 1 | Vistas SQL hardcodeadas | Alta | 18+ ubicaciones |
+| 2 | God Object | Media | DocsAnswerService.cs (330 líneas) |
+| 3 | Lógica de dominio embebida | Alta | PatternMatcherService.cs |
+| 4 | Sin tests unitarios | Alta | Proyecto completo |
+| 5 | Logging insuficiente | Alta | Servicios críticos sin log |
 
 ---
 
-## 6. Logging y Monitoreo
+## 6. Proyectos Externos Detectados
 
-### 6.1 Estado Actual ❌
+### 6.1 UltraMsgWebhookSpike ⚠️
 
-```csharp
-// Solo 2 servicios usan ILogger:
-- InferenceWorker
-- DocsAnswerService
-```
+| Atributo | Valor |
+|----------|-------|
+| Propósito | Integración WhatsApp via UltraMsg API |
+| Líneas | ~135 |
+| Estado | **No integrado** en VannaLight.slnx |
+| ¿Se usará? | Desconocido |
 
-**Problemas:**
-- ❌ Sin logging en servicios críticos:
-  - `SqliteJobStore`
-  - `SqliteTrainingStore`
-  - `SqliteSchemaStore`
-  - `LlmClient`
-  - `LocalRetriever`
-  - `AskUseCase`
-- ❌ Sin métricas (Application Insights, Prometheus)
-- ❌ Sin health checks
-- ❌ Sin distributed tracing
+**Preguntas:**
+- ¿Es para permitir chatting via WhatsApp?
+- ¿Se integrará con VannaLight.Api?
+- ¿Es un experimento que se descartará?
 
-### 6.2 Recomendaciones
+### 6.2 .codex-build/RuntimeJobAuditor ⚠️
 
-1. Agregar `ILogger` a todos los servicios de infraestructura
-2. Implementar health checks para:
-   - SQL Server
-   - SQLite
-   - Modelo LLM
-3. Agregar métricas de rendimiento
+| Atributo | Valor |
+|----------|-------|
+| Propósito | Auditoría de jobs runtime |
+| Líneas | ~1957 |
+| Estado | **No integrado** en VannaLight.slnx |
 
 ---
 
-## 7. Testing
+## 7. Recomendaciones Actualizadas
 
-### 7.1 Estado: NO EXISTE ❌
+### Fase 1: Crítico
+- [ ] Implementar autenticación (Propuesta 1)
+- [ ] Mover vistas SQL a configuración
 
-```
-Directorios de test: 0 archivos
-```
+### Fase 2: Importante
+- [ ] Evaluar destino de UltraMsgWebhookSpike
+  - ¿Integrar con VannaLight.Api?
+  - ¿Descartar?
+- [ ] Evaluar destino de .codex-build
+- [ ] Agregar tests unitarios
+- [ ] Implementar SymSpell para corrección de typos
 
-### 7.2 Prioridades para Tests
-
-| Prioridad | Servicio/Clase | Tipo de Test |
-|-----------|----------------|--------------|
-| 🔴 Alta | `StaticSqlValidator` | Unit |
-| 🔴 Alta | `PatternMatcherService` | Unit |
-| 🔴 Alta | `TemplateSqlBuilder` | Unit |
-| 🟡 Media | `AskUseCase` | Integration |
-| 🟡 Media | `LlmClient` | Integration |
-| 🟢 Baja | UI (frontend) | E2E |
-
----
-
-## 8. Documentación
-
-### 8.1 Estado
-
-| Tipo | Estado |
-|------|--------|
-| README | ❌ No existe |
-| API Docs | ❌ No existe |
-| Arquitectura | ❌ No existe |
-| Changelog | ❌ No existe |
-| Código (XML Docs) | ❌ No existe |
-
-### 8.2 Archivos de Configuración
-
-| Archivo | Contenido |
-|---------|-----------|
-| `appsettings.json` | ⚠️ No está en repo (contiene secrets) |
-| `.gitignore` | ✅ Adecuado |
+### Fase 3: Mejora
+- [ ] Evaluar embeddings vectoriales (lazy)
+- [ ] Documentar arquitectura multi-tenant
+- [ ] Actualizar UglyToad.PdfPig a versión estable (0.1.9+)
 
 ---
 
-## 9. Performance
+## 8. Preguntas Abiertas
 
-### 9.1 Puntos de Atención
-
-| Área | Problema | Impacto |
-|------|----------|---------|
-| **LLM** | Carga en startup | ~30 segundos |
-| **ML.NET** | Entrenamiento en runtime | Si no existe modelo |
-| **SQL** | Sin cache de resultados | Alta latencia |
-| **PDF** | Parsing línea a línea | Lento para PDFs grandes |
-
-### 9.2 Optimizaciones Sugeridas
-
-1. Lazy loading del modelo LLM
-2. Pre-entrenar modelo ML y打包
-3. Agregar Redis para caché de queries
-4. Procesamiento paralelo de PDFs
+| # | Pregunta | Prioridad |
+|---|----------|-----------|
+| 1 | ¿UltraMsgWebhookSpike se integrará o se descarta? | 🔴 |
+| 2 | ¿El soporte multi-tenant está listo para producción? | 🟡 |
+| 3 | ¿Se implementará autenticación antes de clientes externos? | 🔴 |
+| 4 | ¿Cuál es el roadmap para los proyectos externos? | 🟡 |
 
 ---
 
-## 10. Configuración y Despliegue
+## 9. Comparativa Histórica
 
-### 10.1 Hardcoding Encontrado
+| Versión | Fecha | Puntuación | Cambios |
+|---------|-------|------------|---------|
+| v1 | 14/03 | 4.9/10 | Baseline |
+| v2 | 26/03 | 5.4/10 | +Configuración, -Empty catch |
+| **v3** | 03/04 | **5.8/10** | +Multi-tenant, +WhatsApp spike, +Dependencias corregidas |
 
-| Valor | Ubicación | Tipo |
-|-------|-----------|------|
-| `C:\Modelos\qwen2.5-coder-7b-instruct-q4_k_m.gguf` | Program.cs:45 | Crítico |
-| `C:\VannaLight\WI_DROP` | WiDocIngestor.cs:23 | Crítico |
-| `Data/vanna_memory.db` | 10+ lugares | Bajo |
-| Vistas SQL | 10+ lugares | Alto |
-
-### 10.2 Recomendaciones
-
-1. Mover todo a `appsettings.json`
-2. Usar variables de entorno en producción
-3. No hardcodear rutas absolutas
+**Tendencia:** 🟢 En evolución positiva, pero sin cambios críticos resueltos.
 
 ---
 
-## 11. Plan de Acción
+## 10. Conclusión
 
-### Fase 1: Crítico (Semana 1)
-- [ ] Actualizar LLamaSharp de 0.26.0 a 0.17.x
-- [ ] Reemplazar UglyToad.PdfPig con versión estable
-- [ ] Mover paths hardcodeados a configuración
-- [ ] Eliminar empty catch
-- [ ] Agregar logging a servicios críticos
+El proyecto ha evolucionado con **multi-tenancy** y **WhatsApp integration**, mostrando maduración hacia un producto comercial. Sin embargo:
 
-### Fase 2: Importante (Semana 2-3)
-- [ ] Agregar tests unitarios (validator, patterns)
-- [ ] Refactorizar DocsAnswerService
-- [ ] Implementar health checks
-- [ ] Agregar rate limiting
-- [ ] Configurar CORS
+**Pendiente crítico:**
+- ⚠️ Autenticación (necesario para vender)
+- ⚠️ Vistas SQL configurables (necesario para multi-cliente)
 
-### Fase 3: Mejora (Semana 4+)
-- [ ] Migrar a .NET 8 LTS
-- [ ] Agregar caché Redis
-- [ ] Documentar API con OpenAPI/Swagger
-- [ ] Crear README.md
+**Nuevo:**
+- ✅ Arquitectura multi-tenant preparada
+- ⚠️ WhatsApp integration en progreso
+
+**Recomendación:** Priorizar autenticación y configuración de BD antes de nuevas features.
 
 ---
 
-## 12. Conclusión
-
-El proyecto tiene una **arquitectura correcta** pero suffers de:
-1. **Deuda técnica acumulada** (hardcoding, magic numbers, god objects)
-2. **Dependencias obsoletas** (LLamaSharp, PdfPig)
-3. **Falta de testing** (riesgo alto para refactoring)
-4. **Logging insuficiente** (difícil debugging)
-
-**Recomendación:** Priorizar fase 1 antes de producción.
-
----
-
-*Informe generado automáticamente. Última actualización: 2026-03-14*
+*Informe generado automáticamente. Última actualización: 2026-04-03*

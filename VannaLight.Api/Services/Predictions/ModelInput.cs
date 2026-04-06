@@ -1,41 +1,32 @@
-﻿using Dapper;
-using Microsoft.Data.SqlClient;
-using Microsoft.ML;
-using Microsoft.ML.Data;
-using Microsoft.ML.Trainers.FastTree;
+﻿using Microsoft.ML.Data;
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 
 namespace VannaLight.Api.Services.Predictions;
 
-// 1. Clases de Datos
-public sealed class ModelInput
+// Canonical forecasting contracts for any time series domain.
+public sealed class ForecastModelInput
 {
-    public string PartNumber { get; set; } = string.Empty;
-    public float ShiftId { get; set; }        // Ej. 1 o 2
-    public float DayOfWeekIso { get; set; }   // 1=Lunes, 7=Domingo
-    public float Lag1ScrapQty { get; set; }   // Scrap del turno INMEDIATO anterior
-    public float Avg3ScrapQty { get; set; }   // Promedio de los últimos 3 turnos
-    public float ScrapQty { get; set; }       // Label (Target)
+    public string SeriesKey { get; set; } = string.Empty;
+    public float BucketKey { get; set; }
+    public float DayOfWeekIso { get; set; }
+    public float Lag1Value { get; set; }
+    public float Avg3Value { get; set; }
+    public float TargetValue { get; set; }
 }
 
-public sealed class ModelOutput
+public sealed class ForecastModelOutput
 {
     [ColumnName("Score")]
-    public float PredictedScrapQty { get; set; }
+    public float PredictedValue { get; set; }
 }
 
-// 2. Modelo de datos crudos del ERP
-internal sealed class ShiftScrapRow
+internal sealed class TemporalObservationRow
 {
-    public string PartNumber { get; set; } = string.Empty;
-    public DateTime OperationDate { get; set; }
-    public int ShiftId { get; set; }
-    public string ShiftName { get; set; } = string.Empty;
-    public long TicksInicio { get; set; }
-    public long TicksFin { get; set; }
-    public float ScrapQty { get; set; }
+    public string SeriesKey { get; set; } = string.Empty;
+    public DateTime ObservedOn { get; set; }
+    public int BucketKey { get; set; }
+    public string BucketLabel { get; set; } = string.Empty;
+    public long BucketStartTick { get; set; }
+    public long BucketEndTick { get; set; }
+    public float TargetValue { get; set; }
 }
-

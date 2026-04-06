@@ -1,206 +1,190 @@
-# Informe de Análisis de Código - VannaLight
+# Informe de Análisis - VannaLight (v3)
 
-**Fecha:** 14 de marzo de 2026  
-**Proyecto:** VannaLight - Asistente Industrial de IA para Consultas SQL
-
----
-
-## 1. Resumen del Proyecto
-
-VannaLight es un asistente industrial de IA que convierte preguntas en lenguaje natural a consultas SQL de forma segura, usando un modelo local de lenguaje (LLamaSharp) y un sistema de revisión para validar las consultas antes de ejecutarse.
-
-### Características principales:
-- Interfaz web con chat para hacer preguntas en lenguaje natural
-- Genera consultas SQL usando LLM local
-- Tres modos: SQL, Docs (documentación), Predicción (forecasting)
-- Sistema RAG híbrido para recuperación de contexto
-- Validación de seguridad SQL estática
-- Cola de revisión para validar queries
-- Almacenamiento en SQLite
-- Soporte para extraer esquema de SQL Server
-
-### Arquitectura:
-- **VannaLight.Core** - Abstracciones y casos de uso
-- **VannaLight.Infrastructure** - Implementaciones (SQLite, LLamaSharp, Retrieval)
-- **VannaLight.Api** - API web + frontend
-- **VannaLight.ConsoleApp** - Aplicación de consola
+**Fecha:** 26 de marzo de 2026  
+**Proyecto:** VannaLight - Asistente Industrial de IA
 
 ---
 
-## 2. Archivos Sin Uso Real
+## 1. Resumen Ejecutivo
 
-| Archivo | Problema |
-|---------|----------|
-| `VannaLight.Infrastructure/Class1.cs` | Clase vacía de placeholder, sin referencias |
-| `VannaLight.Api/Services/DocsIntentParser.cs` | Parser determinístico legacy no utilizado (el sistema usa `DocsIntentRouterLlm`) |
+| Categoría | Estado |
+|-----------|--------|
+| Archivos sin uso | ✅ 0 |
+| Hardcoding crítico | ⚠️ 1 |
+| Excepciones genéricas | ✅ 2 |
+| Proyecto externo sin integrar | ⚠️ 1 |
+| Sin tests | ⚠️ |
 
-**Estado:** ✅ Eliminados
+---
+
+## 2. Arquitectura - Mejoras Detectadas ✅
+
+Se han agregado nuevas abstracciones para configuración y secrets:
+
+### Nuevos Archivos (Infrastructure/Configuration/)
+
+| Archivo | Descripción |
+|---------|-------------|
+| `SystemConfigProvider.cs` | Proveedor de configuración con perfiles por entorno |
+| `OperationalConnectionResolver.cs` | Resolvedor de conexiones SQL Server con soporte multi-modo |
+
+### Nuevas Interfaces (Core/Abstractions/)
+
+| Interfaz | Propósito |
+|----------|-----------|
+| `ISystemConfigProvider` | Proveedor de configuración centralizado |
+| `ISystemConfigStore` | Almacén de perfiles de configuración |
+| `IOperationalConnectionResolver` | Resolvedor de conexiones operacionales |
+| `IConnectionProfileStore` | Almacén de perfiles de conexión |
+| `ISecretResolver` | Resolvedor de secretos (env:, config:) |
+| `ISemanticHintStore` | Almacén de hints semánticos |
+| `IQueryPatternTermStore` | Almacén de términos de patrones |
+
+### Nuevos Stores (Infrastructure/Data/)
+
+| Store | Propósito |
+|-------|-----------|
+| `SqliteSystemConfigStore` | Persistencia de configuración del sistema |
+| `SqliteConnectionProfileStore` | Persistencia de perfiles de conexión |
+| `SqliteSemanticHintStore` | Persistencia de hints semánticos |
+| `SqliteQueryPatternStore` | Persistencia de patrones de query |
+| `SqliteQueryPatternTermStore` | Persistencia de términos de patrones |
+
+### Nuevos Modelos (Core/Models/)
+
+| Modelo | Propósito |
+|--------|-----------|
+| `SystemConfigProfile` | Perfil de configuración |
+| `SystemConfigEntry` | Entrada individual de configuración |
+| `ConnectionProfile` | Perfil de conexión SQL Server |
+| `SemanticHint` | Hint semántico para queries |
+| `QueryPatternTerm` | Término de patrón de query |
+
+### Nuevos Componentes (Infrastructure/Security/)
+
+| Archivo | Descripción |
+|---------|-------------|
+| `CompositeSecretResolver.cs` | Resolvedor de secretos soporta `env:` y `config:` |
 
 ---
 
 ## 3. Hardcoding Encontrado
 
-| Archivo | Línea | Valor | Severidad |
-|---------|-------|-------|-----------|
-| `Program.cs` | 32 | `C:\Modelos\qwen2.5-coder-7b-instruct-q4_k_m.gguf` | Alta |
-| `WiDocIngestor.cs` | 23 | `C:\VannaLight\WI_DROP` | Alta |
-| `Program.cs` | 26, 29 | `Data/vanna_memory.db`, `Data/vanna_runtime.db` | Baja (fallbacks) |
+### 🔴 Crítico (1 осталось)
 
----
+| Archivo | Línea | Valor | Status |
+|---------|-------|-------|--------|
+| `Program.cs` | 49 | `C:\Modelos\qwen2.5-coder-7b-instruct-q4_k_m.gguf` | ⚠️ Pendiente |
 
-## 4. Deuda Técnica
+✅ **Eliminado:** La ruta `C:\VannaLight\WI_DROP` de WiDocIngestor.cs
 
-### 4.1 God Object
-**Ubicación:** `DocsAnswerService.cs:14` (330 líneas)
-
-Esta clase tiene múltiples responsabilidades:
-- Extracción de documentos
-- Scoring y ranking
-- Construcción de respuestas
-- Enrutamiento de intents
-- Gestión de configuración
-
-**Recomendación:** Extraer a servicios separados (DocExtractor, DocScorer, AnswerBuilder)
-
-### 4.2 Magic Numbers
-**Ubicación:** `DocsAnswerService.cs`
-
-```csharp
-score += 25;           // Línea 117
-score += 3;            // Línea 263
-score += 1;            // Línea 266
-score += 8;            // Línea 268
-score += 3;            // Línea 272
-```
-
-**Recomendación:** Crear constantes con nombres descriptivos
-
-### 4.3 Empty Catch Block
-**Ubicación:** `InferenceWorker.cs:205`
-
-```csharp
-catch { /* ignorar errores en el manejo de errores */ }
-```
-
-**Problema:** Oculta errores críticos y hace difícil el debugging.
-
-### 4.4 TODO Explícito
-**Ubicación:** `DocsAnswerService.cs:10-13`
-
-```csharp
-// TODO (Deuda Técnica - Fase de Testing): 
-// 1. Extraer lógicas de Dominio (Extracción/Scoring) a servicios de Core.
-// 2. Mover modelos (DocTypeSchema, DocsIntent) a VannaLight.Core.Models.
-// 3. Romper este God Object para facilitar testing unitario.
-```
-
-### 4.5 Código Comentado
-**Ubicación:** `DocsAnswerService.cs:3`
-```csharp
-// VannaLight.Api.Contracts;
-```
-
----
-
-## 5. Recomendaciones Prioritarias
-
-| Prioridad | Acción |
-|-----------|--------|
-| 🔴 Alta | Mover rutas hardcodeadas a configuración (appsettings.json) |
-| 🔴 Alta | Eliminar empty catch en InferenceWorker.cs |
-| 🟡 Media | Refactorizar DocsAnswerService (extraer responsabilidades) |
-| 🟡 Media | Reemplazar magic numbers por constantes |
-| 🟢 Baja | Eliminar comentarios comentados |
-
----
-
-## 6. Métricas del Proyecto
-
-- **Total archivos .cs:** ~60
-- **Líneas de código (aprox):** ~5000
-- **Proyectos:** 4 (Core, Infrastructure, Api, ConsoleApp)
-- **Frameworks:** .NET 10, LLamaSharp, SQLite, SignalR, ML.NET
-
----
-
-## 7. Nuevos Hallazgos (Análisis Extensivo)
-
-### 7.1 Vistas de Base de Datos Hardcodeadas
+### 🟡 Vistas SQL Hardcodeadas (18+ lugares)
 
 | Vista | Ubicaciones |
 |-------|-------------|
-| `dbo.vw_KpiProduction_v1` | 7 lugares |
-| `dbo.vw_KpiScrap_v1` | 6 lugares |
-| `dbo.vw_KpiDownTime_v1` | 5 lugares |
+| `vw_KpiProduction_v1` | 6 lugares |
+| `vw_KpiScrap_v1` | 6 lugares |
+| `vw_KpiDownTime_v1` | 6 lugares |
 
 **Archivos afectados:**
-- `TemplateSqlBuilder.cs:34,45,58,73,88,140-143`
-- `AskUseCase.cs:269,279-281`
-- `MlModelTrainer.cs:34,39,46`
-- `ForecastingService.cs:215,218,222`
-
-### 7.2 Descripciones de Esquema Hardcodeadas
-
-**Ubicación:** `AskUseCase.cs:279-281`
-
-```csharp
-@"Tabla: dbo.vw_KpiProduction_v1. Columnas clave: OperationDate, YearNumber..."
-```
-
-Estas descripciones de columnas están embebidas en el código y no se actualizan automáticamente.
-
-### 7.3 Lógica de Negocio del Dominio Hardcodeada
-
-**Archivo:** `PatternMatcherService.cs`
-
-Patrones de negocio específicos del dominio industrial:
-- "scrap", "prensa", "prensas", "más", "mayor", "top"
-- "producción total", "produccion total"
-- "downtime", "tiempo caído", "falla"
-- "molde", "moldes", "scrap cost"
-
-**Problema:** Si cambia el dominio (otro tipo de fábrica), hay que reescribir el código.
-
-### 7.4 Sin Tests Unitarios
-
-No existe ningún archivo de tests en el proyecto (`*Test*.cs`). Esto impide:
-- Refactoring seguro
-- Detección de regresiones
-- Validación de lógica de negocio
-
-### 7.5 Duplicación de Cadenas de Conexión SQLite
-
-**19 lugares** usan `new SqliteConnection($"Data Source=...")` con diferentes variaciones:
-- Con/sin punto y coma final
-- Con diferentes modos (ReadWriteCreate, Cache, Timeout)
-- Con y sin rutas normalizadas
-
-### 7.6 Excepciones Genéricas
-
-| Archivo | Línea | Problema |
-|---------|-------|----------|
-| `ForecastingService.cs` | 45, 79 | `throw new Exception("...")` en vez de excepciones tipadas |
-| `ExtractionEngine.cs` | 150 | `throw new InvalidOperationException` |
-
-### 7.7 Métodos Largos
-
-- `InferenceWorker.cs`: ~268 líneas (BackgroundService con múltiples responsabilidades)
-- `DocsAnswerService.cs`: 330 líneas (God Object)
-- `AskUseCase.cs`: 405 líneas (caso de uso con lógica embebida)
+- `TemplateSqlBuilder.cs` - 12 referencias
+- `MlModelTrainer.cs` - 3 referencias
+- `ForecastingService.cs` - 3 referencias
 
 ---
 
-## 8. Resumen de Deuda Técnica Total
+## 4. Proyecto Externo Detectado ⚠️
 
-| Categoría | Cantidad | Severidad |
-|-----------|----------|-----------|
-| Archivos sin uso | 2 | Baja |
-| Hardcoding paths | 4 | Alta |
-| Hardcoding vistas BD | 3 vistas × 10+ ubicaciones | Alta |
-| Magic numbers | 5+ | Media |
-| God Objects | 2 | Media |
-| Empty catch | 1 | Alta |
-| Código duplicado (conexiones) | 19 | Media |
-| Sin tests | 1 proyecto completo | Alta |
-| Excepciones genéricas | 3+ | Baja |
-| Lógica de dominio hardcodeada | 1 archivo completo | Alta |
+### `.codex-build/RuntimeJobAuditor/`
+
+| Atributo | Valor |
+|----------|-------|
+| Líneas de código | ~1957 |
+| Estado | **No integrado** en solución |
+| Duplicación | Alto (vistas SQL duplicadas) |
+
+**Problemas:**
+1. No está referenciado en `VannaLight.slnx`
+2. Código duplicado (vistas SQL hardcodeadas)
+3. nearly 2000 líneas en un solo archivo
+4. Propósito no claro (auditoría de jobs?)
+
+**Recomendación:** Evaluar si integrar o eliminar.
+
+---
+
+## 5. Deuda Técnica
+
+### 5.1 Métodos Largos
+
+| Archivo | Líneas | Problema |
+|---------|--------|----------|
+| `DocsAnswerService.cs` | 330 | God Object |
+| `InferenceWorker.cs` | ~270 | Lógica de 3 modos |
+| `AskUseCase.cs` | 405 | Lógica embebida |
+
+### 5.2 Magic Numbers
+
+```csharp
+score += 25;   // DocsAnswerService.cs:117
+score += 3;    // DocsAnswerService.cs:263
+score += 1;    // DocsAnswerService.cs:266
+score += 8;    // DocsAnswerService.cs:268
+score += 3;    // DocsAnswerService.cs:272
+```
+
+### 5.3 Excepciones Genéricas
+
+| Archivo | Línea |
+|---------|-------|
+| `ForecastingService.cs` | 45 |
+| `ForecastingService.cs` | 79 |
+
+### 5.4 TODO Explícito
+
+```csharp
+// DocsAnswerService.cs:10
+// TODO (Deuda Técnica - Fase de Testing): 
+// 1. Extraer lógicas de Dominio
+// 2. Mover modelos a Core
+// 3. Romper God Object
+```
+
+---
+
+## 6. Progreso Total
+
+### ✅ Corregido (desde inicio)
+
+| Categoría | Estado |
+|-----------|--------|
+| Empty catch blocks | ✅ Eliminado |
+| Class1.cs | ✅ Eliminado |
+| DocsIntentParser.cs | ✅ Eliminado |
+| Hardcoding WiRootPath | ✅ Eliminado |
+
+### ⚠️ Pendiente
+
+| Categoría | Cantidad |
+|-----------|----------|
+| Rutas absolutas | 1 |
+| Vistas SQL | 18+ |
+| Excepciones genéricas | 2 |
+| Magic numbers | 5 |
+| Sin tests | Sí |
+| Proyecto .codex-build | Evaluar |
+
+---
+
+## 7. Comparativa Histórica
+
+| Categoría | v1 (14/03) | v2 (20/03) | v3 (26/03) |
+|-----------|------------|------------|------------|
+| Archivos sin uso | 2 | 0 ✅ | 0 ✅ |
+| Empty catch | 1 | 0 ✅ | 0 ✅ |
+| Rutas hardcodeadas | 4 | 2 | 1 ✅ |
+| Excepciones genéricas | 3+ | 2 | 2 |
+| Proyecto externo | 0 | 0 | 1 ⚠️ |
+| Arquitectura config | básica | básica | **Mejorada** ✅ |
+
+**Tendencia:** 🟢 **En mejora continua**

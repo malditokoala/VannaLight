@@ -28,6 +28,14 @@ let defaultSemanticHintDomain = '';
 let globalQueryPatternTerms = [];
 let selectedQueryPatternTermId = null;
 
+let globalDocuments = [];
+let globalDocumentChunks = [];
+let selectedDocumentId = null;
+let globalMlStatus = null;
+let globalPredictionProfiles = [];
+let globalPredictionDomainPack = null;
+let selectedPredictionProfileId = 0;
+
 let globalProfiles = [];
 let selectedProfileIndex = -1;
 
@@ -38,6 +46,7 @@ let globalOnboardingRuntimeContexts = [];
 let globalOnboardingSchemaCandidates = [];
 let globalOnboardingStatus = null;
 let globalOnboardingValidation = null;
+let lastOnboardingCompletionJobId = null;
 let selectedOnboardingTenantKey = null;
 let globalAdminActiveContext = null;
 let onboardingBootstrap = null;
@@ -124,6 +133,17 @@ function getOnboardingDefaults() {
 
 function getOnboardingProfile() {
     return onboardingBootstrap?.profile || onboardingBootstrap?.Profile || {};
+}
+
+function needsInitialOnboardingSetup() {
+    return !!(onboardingBootstrap?.needsInitialSetup ?? onboardingBootstrap?.NeedsInitialSetup);
+}
+
+function hasOnboardingConnectionProfile(connectionName) {
+    const normalized = String(connectionName || '').trim().toLowerCase();
+    if (!normalized) return false;
+    return globalConnectionProfiles.some(profile =>
+        String(profile.connectionName || profile.ConnectionName || '').trim().toLowerCase() === normalized);
 }
 
 function getAdminScopedTabConfig(tabKey) {
@@ -223,6 +243,31 @@ function setScopedTabContextBanner(config, message, isEmpty = false) {
     banner.classList.toggle('is-empty', !!isEmpty);
 }
 
+function buildRagHistoryQuery() {
+    const context = getActiveAdminContext();
+    const params = new URLSearchParams();
+    if (context?.tenantKey) params.set('tenantKey', context.tenantKey);
+    if (context?.domain) params.set('domain', context.domain);
+    if (context?.connectionName) params.set('connectionName', context.connectionName);
+    const query = params.toString();
+    return query ? `?${query}` : '';
+}
+
+function renderRagContextBanner() {
+    const banner = document.getElementById('ragActiveContextBanner');
+    if (!banner) return;
+
+    const context = getActiveAdminContext();
+    if (!context?.tenantKey || !context?.domain || !context?.connectionName) {
+        banner.textContent = 'Sin contexto activo: muestra historial SQL global.';
+        banner.classList.add('is-empty');
+        return;
+    }
+
+    banner.textContent = `Contexto activo: ${context.tenantDisplayName} / ${context.domain} / ${context.connectionName}`;
+    banner.classList.remove('is-empty');
+}
+
 function renderScopedTabEmptyState(config, message) {
     const list = document.getElementById(config.listId);
     const count = document.getElementById(config.countId);
@@ -319,6 +364,7 @@ async function setAdminActiveContext(rawContext, options = {}) {
     const normalized = normalizeAdminContext(rawContext);
     globalAdminActiveContext = normalized;
     syncAdminScopedFiltersToContext(normalized);
+    renderRagContextBanner();
 
     const currentScopedTab = getCurrentAdminScopedTabKey();
     if (options.reloadCurrentTab && currentScopedTab) {
@@ -327,6 +373,10 @@ async function setAdminActiveContext(rawContext, options = {}) {
         } else {
             renderContextRequiredState(currentScopedTab, 'Selecciona primero un workspace y un contexto válido en Onboarding.');
         }
+    }
+
+    if (document.getElementById('pane-rag')?.classList.contains('active')) {
+        await loadHistory();
     }
 }
 
@@ -363,6 +413,16 @@ async function switchTab(t) {
     if (pane) pane.classList.add('active');
 
     await activateAdminScopedTab(t);
+
+    if (t === 'documents') {
+        await loadDocumentsAdmin();
+    }
+    if (t === 'ml') {
+        await loadMlAdmin();
+    }
+    if (t === 'rag') {
+        await loadHistory();
+    }
 }
 
 // -----------------------------------------------------------
@@ -379,7 +439,8 @@ async function loadOnboardingBootstrap() {
         onboardingBootstrap = await res.json();
         globalTenants = Array.isArray(onboardingBootstrap?.tenants) ? onboardingBootstrap.tenants : (Array.isArray(onboardingBootstrap?.Tenants) ? onboardingBootstrap.Tenants : []);
         globalConnectionProfiles = Array.isArray(onboardingBootstrap?.connections) ? onboardingBootstrap.connections : (Array.isArray(onboardingBootstrap?.Connections) ? onboardingBootstrap.Connections : []);
-        globalOnboardingRuntimeContexts = Array.isArray(onboardingBootstrap?.runtimeContexts) ? onboardingBootstrap.runtimeContexts : (Array.isArray(onboardingBootstrap?.RuntimeContexts) ? onboardingBootstrap.RuntimeContexts : []);
+        globalOnboardingRuntimeContexts = (Array.isArray(onboardingBootstrap?.runtimeContexts) ? onboardingBootstrap.runtimeContexts : (Array.isArray(onboardingBootstrap?.RuntimeContexts) ? onboardingBootstrap.RuntimeContexts : []))
+            .filter(item => hasOnboardingConnectionProfile(item?.connectionName || item?.ConnectionName || ''));
         globalTenantDomains = [];
 
         populateOnboardingSummary();
@@ -424,19 +485,28 @@ function populateOnboardingConnectionOptions() {
     if (!select) return;
 
     if (!globalConnectionProfiles.length) {
-        select.innerHTML = '<option value="OperationalDb">OperationalDb</option>';
+        select.innerHTML = '<option value="">Selecciona o crea una conexión</option>';
         renderOnboardingConnectionCatalog();
         return;
     }
 
-    select.innerHTML = globalConnectionProfiles.map(profile => {
-        const connectionName = profile.connectionName || profile.ConnectionName || 'OperationalDb';
+    const currentConnectionName = getValue('txtOnboardingConnectionName').trim();
+    const options = globalConnectionProfiles.map(profile => {
+        const connectionName = profile.connectionName || profile.ConnectionName || '';
         const profileKey = profile.profileKey || profile.ProfileKey || 'default';
         const databaseName = profile.databaseName || profile.DatabaseName || '—';
         const isActive = !!(profile.isActive || profile.IsActive);
         const label = `${connectionName} · ${databaseName} · ${profileKey}${isActive ? ' · activo' : ''}`;
         return `<option value="${escHtml(connectionName)}">${escHtml(label)}</option>`;
-    }).join('');
+    });
+
+    select.innerHTML = ['<option value="">Selecciona una conexión guardada</option>', ...options].join('');
+    if (currentConnectionName && globalConnectionProfiles.some(profile =>
+        String(profile.connectionName || profile.ConnectionName || '') === currentConnectionName)) {
+        select.value = currentConnectionName;
+    } else {
+        select.value = '';
+    }
 
     renderOnboardingConnectionCatalog();
 }
@@ -452,14 +522,14 @@ function renderOnboardingConnectionCatalog() {
                     <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
                     <path d="M5 5v14c0 1.66 3.1 3 7 3s7-1.34 7-3V5"></path>
                 </svg>
-                Aún no hay conexiones configuradas
+                ${needsInitialOnboardingSetup() ? 'Empieza creando tu primera conexión desde este panel' : 'Aún no hay conexiones configuradas'}
             </div>`;
         return;
     }
 
     const selectedConnectionName = getValue('txtOnboardingConnectionName').trim();
     list.innerHTML = globalConnectionProfiles.map(profile => {
-        const connectionName = profile.connectionName || profile.ConnectionName || 'OperationalDb';
+        const connectionName = profile.connectionName || profile.ConnectionName || '';
         const profileKey = profile.profileKey || profile.ProfileKey || 'default';
         const databaseName = profile.databaseName || profile.DatabaseName || '—';
         const serverHost = profile.serverHost || profile.ServerHost || '—';
@@ -511,7 +581,7 @@ function renderOnboardingRuntimeContexts() {
         const tenantKey = item.tenantKey || item.TenantKey || '';
         const tenantDisplayName = item.tenantDisplayName || item.TenantDisplayName || tenantKey;
         const domain = item.domain || item.Domain || '';
-        const connectionName = item.connectionName || item.ConnectionName || 'OperationalDb';
+        const connectionName = item.connectionName || item.ConnectionName || '';
         const profileKey = item.systemProfileKey || item.SystemProfileKey || 'default';
         const isDefault = !!(item.isDefault ?? item.IsDefault);
         const isSelected = tenantKey === selectedTenantKey && domain === selectedDomain && connectionName === selectedConnectionName;
@@ -583,7 +653,7 @@ function renderOnboardingTenantList() {
         const tenantKey = item.tenantKey || item.TenantKey || '';
         const tenantDisplayName = item.tenantDisplayName || item.TenantDisplayName || tenantKey;
         const domain = item.domain || item.Domain || '';
-        const connectionName = item.connectionName || item.ConnectionName || 'OperationalDb';
+        const connectionName = item.connectionName || item.ConnectionName || '';
         const profileKey = item.systemProfileKey || item.SystemProfileKey || 'default';
         const isDefault = !!(item.isDefault ?? item.IsDefault);
         const isSelected =
@@ -693,21 +763,22 @@ async function loadTenantDomains(tenantKey) {
         const res = await fetch(`/api/admin/tenant-domains?tenantKey=${encodeURIComponent(tenantKey)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        globalTenantDomains = await res.json();
+        globalTenantDomains = (await res.json()).filter(item =>
+            hasOnboardingConnectionProfile(item?.connectionName || item?.ConnectionName || ''));
         renderTenantDomains();
 
         const defaultMapping = globalTenantDomains.find(x => !!(x.isDefault ?? x.IsDefault)) || globalTenantDomains[0];
         if (defaultMapping) {
             setValue('txtOnboardingDomain', defaultMapping.domain || defaultMapping.Domain || '');
             const defaults = getOnboardingDefaults();
-            setValue('txtOnboardingConnectionName', defaultMapping.connectionName || defaultMapping.ConnectionName || defaults.connectionName || defaults.ConnectionName || 'OperationalDb');
+            setValue('txtOnboardingConnectionName', defaultMapping.connectionName || defaultMapping.ConnectionName || defaults.connectionName || defaults.ConnectionName || '');
             setValue('txtOnboardingSystemProfileKey', defaultMapping.systemProfileKey || defaultMapping.SystemProfileKey || defaults.systemProfileKey || defaults.SystemProfileKey || 'default');
             setOnboardingMeta(defaultMapping);
         } else {
             const persistedWorkspace = readOnboardingWorkspaceState();
             const defaults = getOnboardingDefaults();
             setValue('txtOnboardingDomain', persistedWorkspace?.domain || defaults.domain || defaults.Domain || defaultAllowedDomain || '');
-            setValue('txtOnboardingConnectionName', persistedWorkspace?.connectionName || defaults.connectionName || defaults.ConnectionName || 'OperationalDb');
+            setValue('txtOnboardingConnectionName', persistedWorkspace?.connectionName || defaults.connectionName || defaults.ConnectionName || '');
             setValue('txtOnboardingSystemProfileKey', persistedWorkspace?.systemProfileKey || defaults.systemProfileKey || defaults.SystemProfileKey || 'default');
             setOnboardingMeta(null);
         }
@@ -763,7 +834,7 @@ function renderTenantDomains() {
 
     list.innerHTML = globalTenantDomains.map(item => {
         const domain = item.domain || item.Domain || '';
-        const connectionName = item.connectionName || item.ConnectionName || 'OperationalDb';
+        const connectionName = item.connectionName || item.ConnectionName || '';
         const profileKey = item.systemProfileKey || item.SystemProfileKey || 'default';
         const isDefault = !!(item.isDefault ?? item.IsDefault);
         const isSelected =
@@ -785,7 +856,7 @@ function renderTenantDomains() {
 
 function applyOnboardingMapping(domain, connectionName, profileKey) {
     setValue('txtOnboardingDomain', domain || '');
-    setValue('txtOnboardingConnectionName', connectionName || 'OperationalDb');
+    setValue('txtOnboardingConnectionName', connectionName || '');
     setValue('txtOnboardingSystemProfileKey', profileKey || 'default');
     toggleOnboardingAdvancedOptions((getValue('txtOnboardingSystemProfileKey').trim() || 'default') !== 'default');
     persistOnboardingWorkspaceState();
@@ -814,7 +885,7 @@ async function applyOnboardingRuntimeContext(tenantKey, domain, connectionName, 
     }
 
     setValue('txtOnboardingDomain', domain || '');
-    setValue('txtOnboardingConnectionName', connectionName || 'OperationalDb');
+    setValue('txtOnboardingConnectionName', connectionName || '');
     setValue('txtOnboardingSystemProfileKey', profileKey || 'default');
     toggleOnboardingAdvancedOptions((getValue('txtOnboardingSystemProfileKey').trim() || 'default') !== 'default');
     persistOnboardingWorkspaceState();
@@ -844,7 +915,8 @@ async function applyOnboardingRuntimeContext(tenantKey, domain, connectionName, 
     await setAdminActiveContext(buildAdminContextFromOnboardingForm(), { reloadCurrentTab: true });
 }
 
-function resetOnboardingForm() {
+function resetOnboardingForm(options = {}) {
+    const useBootstrapDefaults = options.useBootstrapDefaults !== false;
     closeOnboardingTour();
     selectedOnboardingTenantKey = null;
     renderOnboardingTenantList();
@@ -858,11 +930,11 @@ function resetOnboardingForm() {
     hideOnboardingPackBanner();
 
     const defaults = getOnboardingDefaults();
-    setValue('txtOnboardingTenantKey', defaults.tenantKey || defaults.TenantKey || defaultAdminTenant || 'default');
+    setValue('txtOnboardingTenantKey', useBootstrapDefaults ? (defaults.tenantKey || defaults.TenantKey || defaultAdminTenant || 'default') : '');
     setValue('txtOnboardingDisplayName', '');
     setValue('txtOnboardingDescription', '');
-    setValue('txtOnboardingDomain', defaults.domain || defaults.Domain || defaultAllowedDomain || '');
-    setValue('txtOnboardingConnectionName', defaults.connectionName || defaults.ConnectionName || 'OperationalDb');
+    setValue('txtOnboardingDomain', useBootstrapDefaults ? (defaults.domain || defaults.Domain || defaultAllowedDomain || '') : '');
+    setValue('txtOnboardingConnectionName', useBootstrapDefaults ? (defaults.connectionName || defaults.ConnectionName || '') : '');
     setValue('txtOnboardingSystemProfileKey', defaults.systemProfileKey || defaults.SystemProfileKey || 'default');
     setValue('txtOnboardingDomainPackJson', '');
     toggleOnboardingAdvancedOptions(false);
@@ -885,6 +957,19 @@ function resetOnboardingForm() {
     clearOnboardingFieldError('validationQuestion');
     renderOnboardingActionGuidance();
     setAdminActiveContext(null, { reloadCurrentTab: true });
+}
+
+function clearOnboardingWorkspaceState() {
+    try {
+        localStorage.removeItem(onboardingWorkspaceStateKey);
+    } catch {
+        // no-op
+    }
+}
+
+function startNewOnboardingWorkspace() {
+    clearOnboardingWorkspaceState();
+    resetOnboardingForm({ useBootstrapDefaults: false });
 }
 
 function persistOnboardingWorkspaceState() {
@@ -1080,7 +1165,9 @@ function renderOnboardingActionGuidance() {
     const hasValidation = isOnboardingValidationSuccessful(globalOnboardingValidation);
 
     if (!hasWorkspace) {
-        meta.innerHTML = '<span class="meta-empty">Empieza guardando el workspace. Eso habilita el resto del wizard.</span>';
+        meta.innerHTML = needsInitialOnboardingSetup()
+            ? '<span class="meta-empty">Empieza creando una conexión y luego guarda el workspace. Eso habilita el resto del wizard.</span>'
+            : '<span class="meta-empty">Empieza guardando el workspace. Eso habilita el resto del wizard.</span>';
         return;
     }
 
@@ -1235,11 +1322,93 @@ function toggleOnboardingConnectionEditor(forceOpen = null) {
     if (shouldOpen) {
         const currentConnectionName = getValue('txtOnboardingConnectionName').trim();
         if (!getValue('txtOnboardingNewConnectionName').trim()) {
-            setValue('txtOnboardingNewConnectionName', currentConnectionName && currentConnectionName !== 'OperationalDb'
-                ? currentConnectionName
-                : '');
+            setValue('txtOnboardingNewConnectionName', currentConnectionName || '');
         }
+        initializeOnboardingConnectionWizard();
     }
+}
+
+function initializeOnboardingConnectionWizard() {
+    if (!getValue('txtOnboardingConnectionMode').trim()) {
+        setValue('txtOnboardingConnectionMode', 'wizard');
+    }
+
+    if (!getValue('txtOnboardingConnServer').trim()) {
+        setValue('txtOnboardingConnServer', 'localhost');
+    }
+
+    if (!getValue('txtOnboardingConnPort').trim()) {
+        setValue('txtOnboardingConnPort', '1433');
+    }
+
+    handleOnboardingConnectionModeChange();
+    handleOnboardingAuthModeChange();
+    buildOnboardingConnectionString();
+}
+
+function handleOnboardingConnectionModeChange() {
+    const mode = getValue('txtOnboardingConnectionMode').trim() || 'wizard';
+    const wizard = document.getElementById('onboardingConnectionWizard');
+    if (wizard) {
+        wizard.style.display = mode === 'wizard' ? 'block' : 'none';
+    }
+}
+
+function handleOnboardingAuthModeChange() {
+    const authMode = getValue('txtOnboardingConnAuthMode').trim() || 'sql';
+    const userInput = document.getElementById('txtOnboardingConnUser');
+    const passwordInput = document.getElementById('txtOnboardingConnPassword');
+    const isWindows = authMode === 'windows';
+
+    if (userInput) {
+        userInput.disabled = isWindows;
+        if (isWindows) userInput.value = '';
+    }
+
+    if (passwordInput) {
+        passwordInput.disabled = isWindows;
+        if (isWindows) passwordInput.value = '';
+    }
+
+    buildOnboardingConnectionString();
+}
+
+function buildOnboardingConnectionString(forceNotify = false) {
+    const mode = getValue('txtOnboardingConnectionMode').trim() || 'wizard';
+    if (mode !== 'wizard') return getValue('txtOnboardingNewConnectionString').trim();
+
+    const server = getValue('txtOnboardingConnServer').trim();
+    const port = getValue('txtOnboardingConnPort').trim();
+    const database = getValue('txtOnboardingConnDatabase').trim();
+    const authMode = getValue('txtOnboardingConnAuthMode').trim() || 'sql';
+    const user = getValue('txtOnboardingConnUser').trim();
+    const password = getValue('txtOnboardingConnPassword').trim();
+    const encrypt = getValue('txtOnboardingConnEncrypt').trim() || 'True';
+    const trustCert = getValue('txtOnboardingConnTrustCert').trim() || 'True';
+
+    const serverToken = port ? `${server},${port}` : server;
+    const parts = [];
+    if (serverToken) parts.push(`Server=${serverToken}`);
+    if (database) parts.push(`Database=${database}`);
+
+    if (authMode === 'windows') {
+        parts.push('Trusted_Connection=True');
+    } else {
+        if (user) parts.push(`User Id=${user}`);
+        if (password) parts.push(`Password=${password}`);
+    }
+
+    parts.push(`Encrypt=${encrypt}`);
+    parts.push(`TrustServerCertificate=${trustCert}`);
+
+    const connectionString = parts.length ? parts.join(';') + ';' : '';
+    setValue('txtOnboardingNewConnectionString', connectionString);
+
+    if (forceNotify && (!server || !database || (authMode === 'sql' && (!user || !password)))) {
+        showOnboardingConnectionBanner('warn', 'Completa servidor, base de datos y credenciales antes de generar la cadena completa.');
+    }
+
+    return connectionString;
 }
 
 function showOnboardingConnectionBanner(type, message) {
@@ -1264,7 +1433,7 @@ function setOnboardingConnectionMeta(message, cssClass = 'meta-empty') {
 }
 
 async function validateOnboardingConnection() {
-    const connectionString = getValue('txtOnboardingNewConnectionString').trim();
+    const connectionString = buildOnboardingConnectionString() || getValue('txtOnboardingNewConnectionString').trim();
     clearOnboardingConnectionErrors();
     if (!connectionString) {
         setOnboardingFieldError('connectionString', 'Pega la connection string completa antes de validarla.');
@@ -1302,7 +1471,7 @@ async function validateOnboardingConnection() {
 
 async function saveOnboardingConnection() {
     const connectionName = getValue('txtOnboardingNewConnectionName').trim();
-    const connectionString = getValue('txtOnboardingNewConnectionString').trim();
+    const connectionString = buildOnboardingConnectionString() || getValue('txtOnboardingNewConnectionString').trim();
     const description = getValue('txtOnboardingNewConnectionDescription').trim();
 
     const missing = validateOnboardingConnectionFields(true);
@@ -1592,7 +1761,7 @@ async function loadOnboardingStatus() {
     }
 
     try {
-        const res = await fetch(`/api/admin/onboarding/status?domain=${encodeURIComponent(domain)}&connectionName=${encodeURIComponent(connectionName || 'OperationalDb')}`);
+        const res = await fetch(`/api/admin/onboarding/status?domain=${encodeURIComponent(domain)}&connectionName=${encodeURIComponent(connectionName || '')}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         globalOnboardingStatus = await res.json();
     } catch {
@@ -1629,7 +1798,7 @@ function renderOnboardingStatus() {
         } else {
             meta.innerHTML = `
                 <span class="meta-chip status-ok">${escHtml(domain || '')}</span>
-                <span class="meta-chip training-no">${escHtml(connectionName || '')}</span>
+                <span class="meta-chip training-no">${escHtml(connectionName || 'sin-conexion')}</span>
                 <span class="meta-chip training-no">${allowedObjectsCount} tablas</span>
                 <span class="meta-chip training-no">${schemaDocsCount} schema docs</span>
                 <span class="meta-chip training-no">${semanticHintsCount} hints</span>`;
@@ -1666,6 +1835,10 @@ function updateOnboardingStepper() {
     setStepChipState('stepChip2', hasAllowed, hasWorkspace);
     setStepChipState('stepChip3', isInitialized, hasAllowed);
     setStepChipState('stepChip4', hasValidation, isInitialized);
+    setGuideItemState('guideItem1', hasWorkspace, true);
+    setGuideItemState('guideItem2', hasAllowed, hasWorkspace);
+    setGuideItemState('guideItem3', isInitialized, hasAllowed);
+    setGuideItemState('guideItem4', hasValidation, isInitialized);
 
     const discoverBtn = document.getElementById('btnOnboardingDiscoverSchema');
     const saveAllowedBtn = document.getElementById('btnOnboardingSaveAllowedObjects');
@@ -1687,6 +1860,19 @@ function setStepChipState(id, isComplete, isActive) {
     if (!el) return;
     el.classList.toggle('is-complete', !!isComplete);
     el.classList.toggle('is-active', !isComplete && !!isActive);
+}
+
+function setGuideItemState(id, isComplete, isActive) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('is-complete', !!isComplete);
+    el.classList.toggle('is-active', !isComplete && !!isActive);
+    el.classList.toggle('is-pending', !isComplete && !isActive);
+
+    const num = el.querySelector('.guide-item-num');
+    if (num) {
+        num.textContent = isComplete ? 'OK' : id.replace('guideItem', '');
+    }
 }
 
 async function saveOnboardingStep1() {
@@ -1765,13 +1951,14 @@ function setOnboardingMeta(mapping) {
 
     meta.innerHTML = `
         <span class="meta-chip status-ok">${escHtml(mapping.domain || mapping.Domain || '')}</span>
-        <span class="meta-chip training-no">${escHtml(mapping.connectionName || mapping.ConnectionName || 'OperationalDb')}</span>
+        <span class="meta-chip training-no">${escHtml(mapping.connectionName || mapping.ConnectionName || 'sin-conexion')}</span>
         <span class="meta-chip training-no">${escHtml(mapping.systemProfileKey || mapping.SystemProfileKey || 'default')}</span>`;
 }
 
 function resetOnboardingValidation(keepQuestion = false) {
     const currentQuestion = getValue('txtOnboardingValidationQuestion').trim();
     globalOnboardingValidation = null;
+    lastOnboardingCompletionJobId = null;
     clearOnboardingFieldError('validationQuestion');
 
     if (!keepQuestion) {
@@ -1781,6 +1968,7 @@ function resetOnboardingValidation(keepQuestion = false) {
     }
 
     hideOnboardingValidationBanner();
+    closeOnboardingCompletionModal();
     renderOnboardingValidation();
 }
 
@@ -1823,7 +2011,7 @@ function renderOnboardingValidation() {
         } else if (!globalOnboardingValidation) {
             meta.innerHTML = `
                 <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingDomain').trim() || 'sin-domain')}</span>
-                <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingConnectionName').trim() || 'OperationalDb')}</span>
+                <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingConnectionName').trim() || 'sin-conexion')}</span>
                 <span class="meta-empty">Ejecuta una pregunta real para cerrar este onboarding.</span>`;
         } else {
             const statusKey = String(globalOnboardingValidation.status || '').toLowerCase();
@@ -1984,6 +2172,7 @@ async function pollOnboardingValidationJob(jobId) {
         if (isTerminalOnboardingJobStatus(status)) {
             if (isOnboardingValidationSuccessful(globalOnboardingValidation)) {
                 showOnboardingValidationBanner('ok', 'La pregunta de prueba respondió correctamente. El dominio ya tiene un camino básico funcional.');
+                maybeCelebrateOnboardingCompletion(globalOnboardingValidation);
             } else if (String(status).toLowerCase() === 'requiresreview') {
                 showOnboardingValidationBanner('warn', 'La prueba llegó a revisión. El dominio necesita curación adicional antes de salir a usuarios.');
             } else {
@@ -2082,6 +2271,59 @@ function hideOnboardingValidationBanner() {
     el.className = 'rag-banner';
 }
 
+function maybeCelebrateOnboardingCompletion(validation) {
+    const jobId = String(validation?.jobId || '').trim();
+    if (!jobId || lastOnboardingCompletionJobId === jobId) {
+        return;
+    }
+
+    lastOnboardingCompletionJobId = jobId;
+    openOnboardingCompletionModal(validation);
+}
+
+function openOnboardingCompletionModal(validation = globalOnboardingValidation) {
+    const overlay = document.getElementById('onboardingCompletionOverlay');
+    const modal = document.getElementById('onboardingCompletionModal');
+    const title = document.getElementById('onboardingCompletionTitle');
+    const body = document.getElementById('onboardingCompletionBody');
+    const chips = document.getElementById('onboardingCompletionMeta');
+    if (!overlay || !modal || !title || !body || !chips) {
+        return;
+    }
+
+    const tenantKey = getValue('txtOnboardingTenantKey').trim() || 'sin-tenant';
+    const domain = getValue('txtOnboardingDomain').trim() || 'sin-domain';
+    const connectionName = getValue('txtOnboardingConnectionName').trim() || 'sin-conexion';
+    const question = String(validation?.question || getValue('txtOnboardingValidationQuestion').trim() || '').trim();
+    const resultCount = validation?.resultCount;
+
+    title.textContent = 'Configuración completada satisfactoriamente';
+    body.textContent = question
+        ? `La pregunta final respondió correctamente y este dominio ya quedó listo para empezar a usarse. Puedes seguir afinándolo, pero el onboarding básico ya quedó cerrado con éxito. Pregunta validada: "${question}".`
+        : 'La pregunta final respondió correctamente y este dominio ya quedó listo para empezar a usarse. Puedes seguir afinándolo, pero el onboarding básico ya quedó cerrado con éxito.';
+    chips.innerHTML = `
+        <span class="meta-chip status-ok">${escHtml(tenantKey)}</span>
+        <span class="meta-chip training-no">${escHtml(domain)}</span>
+        <span class="meta-chip training-no">${escHtml(connectionName)}</span>
+        ${resultCount !== null && resultCount !== undefined ? `<span class="meta-chip verify-ok">${escHtml(String(resultCount))} filas</span>` : '<span class="meta-chip verify-ok">Prueba superada</span>'}`;
+
+    overlay.style.display = 'block';
+    modal.style.display = 'flex';
+    document.body.classList.add('modal-open');
+}
+
+function closeOnboardingCompletionModal() {
+    const overlay = document.getElementById('onboardingCompletionOverlay');
+    const modal = document.getElementById('onboardingCompletionModal');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    document.body.classList.remove('modal-open');
+}
+
 function renderOnboardingReadiness() {
     const health = globalOnboardingStatus?.health ?? globalOnboardingStatus?.Health ?? null;
     const hasWorkspace = !!getValue('txtOnboardingTenantKey').trim() && !!getValue('txtOnboardingDomain').trim() && !!getValue('txtOnboardingConnectionName').trim();
@@ -2101,7 +2343,7 @@ function renderOnboardingReadiness() {
         meta.innerHTML = `
             <span class="meta-chip verify-ok">Dominio listo</span>
             <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingDomain').trim() || 'sin-domain')}</span>
-            <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingConnectionName').trim() || 'OperationalDb')}</span>
+            <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingConnectionName').trim() || 'sin-conexion')}</span>
             <span class="meta-chip status-ok">Onboarding básico completado</span>`;
         return;
     }
@@ -2792,9 +3034,10 @@ function applyAdminDomainDefault() {
 async function loadHistory() {
     const list = document.getElementById('historyList');
     if (!list) return;
+    renderRagContextBanner();
 
     try {
-        const res = await fetch('/api/admin/history');
+        const res = await fetch(`/api/admin/history${buildRagHistoryQuery()}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const jobs = await res.json();
@@ -4650,6 +4893,971 @@ function hideAlert() {
 }
 
 // -----------------------------------------------------------
+// DOCUMENTS TAB
+// -----------------------------------------------------------
+function getDocumentsDomainFilter() {
+    return getValue('txtDocumentDomainFilter').trim();
+}
+
+function showDocumentsBanner(type, message) {
+    const el = document.getElementById('documentsBanner');
+    if (!el) return;
+    el.className = 'rag-banner ' + type;
+    el.textContent = message;
+    el.style.display = 'block';
+}
+
+function hideDocumentsBanner() {
+    const el = document.getElementById('documentsBanner');
+    if (!el) return;
+    el.style.display = 'none';
+    el.className = 'rag-banner';
+    el.textContent = '';
+}
+
+function ensureDocumentsDomainPrefill() {
+    const input = document.getElementById('txtDocumentDomainFilter');
+    if (!input || String(input.value || '').trim()) return;
+    const contextDomain = getActiveAdminContext()?.domain?.trim();
+    if (contextDomain) {
+        input.value = contextDomain;
+    }
+}
+
+function formatAdminDateTime(value) {
+    if (!value) return '';
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return String(value);
+    return dt.toLocaleString('es-MX', {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function renderDocumentsList() {
+    const list = document.getElementById('documentList');
+    const count = document.getElementById('documentCount');
+    if (count) count.textContent = String(globalDocuments.length);
+    if (!list) return;
+
+    if (!globalDocuments.length) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M8 3h7l5 5v13a1 1 0 0 1-1 1H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
+                    <path d="M15 3v6h6"></path>
+                </svg>
+                No hay documentos indexados para este dominio todavía.
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = globalDocuments.map(doc => {
+        const docId = String(doc.docId || doc.DocId || '');
+        const fileName = String(doc.fileName || doc.FileName || docId || 'Documento');
+        const title = String(doc.title || doc.Title || fileName);
+        const pageCount = Number(doc.pageCount || doc.PageCount || 0);
+        const chunkCount = Number(doc.chunkCount || doc.ChunkCount || 0);
+        const documentType = String(doc.documentType || doc.DocumentType || 'pdf');
+        const updatedUtc = String(doc.updatedUtc || doc.UpdatedUtc || '').trim();
+        const selectedClass = docId === selectedDocumentId ? ' is-selected' : '';
+
+        return `
+            <div class="document-item${selectedClass}" onclick="selectDocumentAdmin('${jsString(docId)}')">
+                <div class="document-item-head">
+                    <div>
+                        <div class="document-item-title">${escHtml(title)}</div>
+                        <div class="document-item-sub">${escHtml(fileName)}</div>
+                    </div>
+                    <span class="hi-verify verified">${escHtml(documentType.toUpperCase())}</span>
+                </div>
+                <div class="document-item-meta">
+                    <span class="meta-chip status-ok">${pageCount} págs</span>
+                    <span class="meta-chip training-no">${chunkCount} chunks</span>
+                    ${updatedUtc ? `<span class="meta-chip training-no">${escHtml(formatAdminDateTime(updatedUtc))}</span>` : ''}
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function renderDocumentChunks() {
+    const list = document.getElementById('documentChunkList');
+    const nameEl = document.getElementById('txtDocumentSelectedName');
+    const metaEl = document.getElementById('txtDocumentSelectedMeta');
+    const chunkCountEl = document.getElementById('txtDocumentChunkCount');
+    const pageCountEl = document.getElementById('txtDocumentPageCount');
+
+    const selected = globalDocuments.find(doc => String(doc.docId || doc.DocId || '') === String(selectedDocumentId || '')) || null;
+    if (nameEl) nameEl.textContent = selected ? String(selected.title || selected.Title || selected.fileName || selected.FileName || 'Documento') : '—';
+    if (metaEl) {
+        metaEl.textContent = selected
+            ? `${String(selected.fileName || selected.FileName || 'sin-archivo')} · ${Number(selected.chunkCount || selected.ChunkCount || 0)} chunks`
+            : 'Selecciona un documento de la lista para ver sus chunks.';
+    }
+    if (chunkCountEl) chunkCountEl.textContent = String(globalDocumentChunks.length);
+    if (pageCountEl) pageCountEl.textContent = String(Number(selected?.pageCount || selected?.PageCount || 0));
+    if (!list) return;
+
+    if (!selectedDocumentId) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M4 6h16"></path>
+                    <path d="M4 12h16"></path>
+                    <path d="M4 18h10"></path>
+                </svg>
+                Selecciona un documento para revisar sus chunks y metadata.
+            </div>`;
+        return;
+    }
+
+    if (!globalDocumentChunks.length) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M4 6h16"></path>
+                    <path d="M4 12h16"></path>
+                    <path d="M4 18h10"></path>
+                </svg>
+                Este documento todavía no tiene chunks indexados o la carga falló.
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = globalDocumentChunks.map(chunk => {
+        const page = Number(chunk.pageNumber || chunk.PageNumber || 0);
+        const order = Number(chunk.chunkOrder || chunk.ChunkOrder || 0);
+        const title = String(chunk.chunkTitle || chunk.ChunkTitle || '').trim();
+        const section = String(chunk.sectionName || chunk.SectionName || '').trim();
+        const partNumbers = String(chunk.partNumbers || chunk.PartNumbers || '').trim();
+        const tokenCount = Number(chunk.tokenCount || chunk.TokenCount || 0);
+        const normalizedTokens = String(chunk.normalizedTokens || chunk.NormalizedTokens || '').trim();
+        const isCover = !!(chunk.isCoverPage ?? chunk.IsCoverPage);
+        const text = String(chunk.text || chunk.Text || '').trim();
+
+        return `
+            <div class="document-chunk-card">
+                <div class="document-chunk-head">
+                    <div>
+                        <div class="document-chunk-title">${escHtml(title || `Página ${page} · Chunk ${order}`)}</div>
+                        <div class="document-chunk-sub">${section ? escHtml(section) + ' · ' : ''}Página ${page} · Orden ${order}</div>
+                    </div>
+                    <div class="document-chunk-meta">
+                        ${isCover ? '<span class="meta-chip verify-ok">Cover</span>' : ''}
+                        <span class="meta-chip training-no">${tokenCount} tokens</span>
+                    </div>
+                </div>
+                <div class="document-item-meta">
+                    ${partNumbers ? `<span class="meta-chip status-ok">${escHtml(partNumbers)}</span>` : ''}
+                    ${normalizedTokens ? `<span class="meta-chip training-no">${escHtml(normalizedTokens.slice(0, 96))}${normalizedTokens.length > 96 ? '…' : ''}</span>` : ''}
+                </div>
+                <div class="document-chunk-text">${escHtml(text)}</div>
+            </div>`;
+    }).join('');
+}
+
+async function loadDocumentsAdmin() {
+    ensureDocumentsDomainPrefill();
+    const list = document.getElementById('documentList');
+    const domain = getDocumentsDomainFilter();
+    if (list) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M8 3h7l5 5v13a1 1 0 0 1-1 1H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
+                    <path d="M15 3v6h6"></path>
+                </svg>
+                Cargando documentos...
+            </div>`;
+    }
+
+    try {
+        await loadDocumentsStatus();
+        const suffix = domain ? `?domain=${encodeURIComponent(domain)}` : '';
+        const res = await fetch(`/api/admin/documents${suffix}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        globalDocuments = await res.json();
+
+        if (!selectedDocumentId || !globalDocuments.some(doc => String(doc.docId || doc.DocId || '') === String(selectedDocumentId))) {
+            selectedDocumentId = globalDocuments[0]?.docId || globalDocuments[0]?.DocId || null;
+        }
+
+        renderDocumentsList();
+
+        if (selectedDocumentId) {
+            await selectDocumentAdmin(selectedDocumentId, false);
+        } else {
+            globalDocumentChunks = [];
+            renderDocumentChunks();
+        }
+
+        hideDocumentsBanner();
+    } catch (e) {
+        globalDocuments = [];
+        selectedDocumentId = null;
+        globalDocumentChunks = [];
+        renderDocumentsList();
+        renderDocumentChunks();
+        showDocumentsBanner('err', 'Error cargando documentos: ' + e.message);
+    }
+}
+
+async function loadDocumentsStatus() {
+    try {
+        const res = await fetch('/api/admin/documents/status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = await res.json();
+
+        setText('txtDocumentsRootExists', body?.RootExists ? 'Lista' : 'Falta');
+        setText('txtDocumentsRootPath', body?.RootPath || 'Sin ruta configurada');
+        setText('txtDocumentsFilesOnDisk', String(body?.FilesOnDisk ?? 0));
+        setText('txtDocumentsIndexedCount', String(body?.IndexedDocuments ?? 0));
+        setText('txtDocumentsDefaultDomain', `Dominio documental default: ${body?.DefaultDomain || '—'}`);
+    } catch (e) {
+        setText('txtDocumentsRootExists', 'Error');
+        setText('txtDocumentsRootPath', 'No pude leer la configuración documental.');
+        setText('txtDocumentsFilesOnDisk', '0');
+        setText('txtDocumentsIndexedCount', '0');
+        setText('txtDocumentsDefaultDomain', 'Dominio documental default: —');
+    }
+}
+
+async function selectDocumentAdmin(docId, updateList = true) {
+    selectedDocumentId = docId ? String(docId) : null;
+    if (updateList) renderDocumentsList();
+
+    if (!selectedDocumentId) {
+        globalDocumentChunks = [];
+        renderDocumentChunks();
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/admin/documents/${encodeURIComponent(selectedDocumentId)}/chunks`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        globalDocumentChunks = await res.json();
+        renderDocumentsList();
+        renderDocumentChunks();
+    } catch (e) {
+        globalDocumentChunks = [];
+        renderDocumentsList();
+        renderDocumentChunks();
+        showDocumentsBanner('err', 'Error cargando chunks: ' + e.message);
+    }
+}
+
+async function reindexDocumentsAdmin() {
+    const spinner = document.getElementById('documentsReindexSpinner');
+    if (spinner) spinner.style.display = 'block';
+
+    try {
+        const res = await fetch('/api/admin/reindex-docs', { method: 'POST' });
+        const body = await safeJson(res);
+        if (!res.ok) {
+            throw new Error(body?.Error || body?.Message || `HTTP ${res.status}`);
+        }
+
+        showDocumentsBanner('ok', `${body?.Message || 'Reindex completado.'} Total: ${body?.TotalFiles ?? 0} · Indexados: ${body?.Indexed ?? 0} · Omitidos: ${body?.Skipped ?? 0} · Errores: ${body?.Errors ?? 0}`);
+        await loadDocumentsAdmin();
+    } catch (e) {
+        showDocumentsBanner('err', 'Error reindexando documentos: ' + e.message);
+    } finally {
+        if (spinner) spinner.style.display = 'none';
+    }
+}
+
+async function uploadDocumentAdmin() {
+    const input = document.getElementById('fileDocumentUpload');
+    const spinner = document.getElementById('documentsUploadSpinner');
+    const files = Array.from(input?.files || []);
+
+    if (!files.length) {
+        showDocumentsBanner('warn', 'Selecciona al menos un archivo PDF antes de subirlo.');
+        return;
+    }
+
+    if (spinner) spinner.style.display = 'block';
+
+    try {
+        const form = new FormData();
+        for (const file of files) {
+            form.append(files.length > 1 ? 'files' : 'file', file);
+        }
+
+        const endpoint = files.length > 1 ? '/api/admin/documents/upload-bulk' : '/api/admin/documents/upload';
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            body: form
+        });
+
+        const body = await safeJson(res);
+        if (!res.ok) {
+            throw new Error(body?.Error || body?.Message || `HTTP ${res.status}`);
+        }
+
+        if (files.length > 1) {
+            showDocumentsBanner('ok', `${body?.Message || 'Carga masiva completada.'} Se ejecutará reindex para dejar todos los documentos disponibles.`);
+        } else {
+            showDocumentsBanner('ok', `${body?.Message || 'Documento cargado.'} Se ejecutará reindex para dejarlo disponible.`);
+        }
+        if (input) input.value = '';
+        await reindexDocumentsAdmin();
+    } catch (e) {
+        showDocumentsBanner('err', 'Error subiendo documento: ' + e.message);
+    } finally {
+        if (spinner) spinner.style.display = 'none';
+    }
+}
+
+// -----------------------------------------------------------
+// ML / FORECASTING TAB
+// -----------------------------------------------------------
+function showMlBanner(type, message) {
+    const el = document.getElementById('mlBanner');
+    if (!el) return;
+    el.className = 'rag-banner ' + type;
+    el.textContent = message;
+    el.style.display = 'block';
+}
+
+function hideMlBanner() {
+    const el = document.getElementById('mlBanner');
+    if (!el) return;
+    el.style.display = 'none';
+    el.className = 'rag-banner';
+    el.textContent = '';
+}
+
+function formatBytes(value) {
+    const bytes = Number(value || 0);
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const scaled = bytes / Math.pow(1024, power);
+    return `${scaled.toFixed(power === 0 ? 0 : 1)} ${units[power]}`;
+}
+
+function renderConnectionOptionsForSelect(selectId, selected, emptyLabel) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    const options = [`<option value="">${escHtml(emptyLabel || '(usar conexión operacional por defecto)')}</option>`]
+        .concat((globalConnectionProfiles || []).map(profile => {
+            const value = profile?.connectionName || profile?.ConnectionName || '';
+            const description = profile?.description || profile?.Description || '';
+            return `<option value="${escAttr(value)}">${escHtml(description ? `${value} · ${description}` : value)}</option>`;
+        }));
+    select.innerHTML = options.join('');
+    select.value = selected || '';
+}
+
+function renderMlConnectionOptions(selected) {
+    renderConnectionOptionsForSelect('selMlConnectionName', selected, '(usar conexión operacional por defecto)');
+}
+
+function renderPredictionConnectionOptions(selected) {
+    renderConnectionOptionsForSelect('selPredictionConnectionName', selected, '(usar conexión del domain pack o default)');
+}
+
+function getDefaultPredictionDomain() {
+    if (globalAdminActiveContext?.domain) return String(globalAdminActiveContext.domain).trim();
+    const domainFromProfile = String(globalMlStatus?.ProfileDomain || '').trim();
+    if (domainFromProfile) return domainFromProfile;
+    const current = getValue('txtPredictionProfileDomain').trim();
+    if (current) return current;
+    const retrievalInput = document.getElementById('txtRetrievalDomain');
+    const retrievalDomain = retrievalInput ? String(retrievalInput.value || '').trim() : '';
+    return retrievalDomain || 'erp-kpi-pilot';
+}
+
+function getDefaultDomainPackKey(domain) {
+    const normalized = String(domain || '').trim().toLowerCase();
+    if (normalized.includes('northwind')) return 'northwind-sales';
+    return 'industrial-kpi';
+}
+
+function getDefaultCalendarProfileKey(domain) {
+    const normalized = String(domain || '').trim().toLowerCase();
+    if (normalized.includes('northwind')) return 'standard-calendar';
+    return 'shift-calendar';
+}
+
+function getNorthwindDailyUnitsSql() {
+    return `SELECT
+    CAST(od.ProductID AS nvarchar(50)) AS SeriesKey,
+    CAST(o.OrderDate AS date) AS ObservedOn,
+    1 AS BucketKey,
+    'Daily' AS BucketLabel,
+    CAST(0 AS bigint) AS BucketStartTick,
+    CAST(863999999999 AS bigint) AS BucketEndTick,
+    CAST(SUM(od.Quantity) AS float) AS TargetValue
+FROM dbo.Orders o
+JOIN dbo.OrderDetails od ON o.OrderID = od.OrderID
+WHERE o.OrderDate IS NOT NULL
+GROUP BY od.ProductID, CAST(o.OrderDate AS date)
+ORDER BY od.ProductID, CAST(o.OrderDate AS date)`;
+}
+
+function getNorthwindMonthlySalesSql() {
+    return `SELECT
+    CONCAT('country:', ISNULL(o.ShipCountry, 'Unknown')) AS SeriesKey,
+    DATEFROMPARTS(YEAR(o.OrderDate), MONTH(o.OrderDate), 1) AS ObservedOn,
+    1 AS BucketKey,
+    FORMAT(DATEFROMPARTS(YEAR(o.OrderDate), MONTH(o.OrderDate), 1), 'yyyy-MM') AS BucketLabel,
+    CAST(0 AS bigint) AS BucketStartTick,
+    CAST(2678399999999 AS bigint) AS BucketEndTick,
+    CAST(SUM(od.Quantity) AS float) AS TargetValue
+FROM dbo.Orders o
+JOIN dbo.OrderDetails od ON o.OrderID = od.OrderID
+WHERE o.OrderDate IS NOT NULL
+GROUP BY o.ShipCountry, DATEFROMPARTS(YEAR(o.OrderDate), MONTH(o.OrderDate), 1)
+ORDER BY o.ShipCountry, DATEFROMPARTS(YEAR(o.OrderDate), MONTH(o.OrderDate), 1)`;
+}
+
+function renderMlModeNotice() {
+    const box = document.getElementById('mlModeNotice');
+    if (!box) return;
+
+    const mode = getValue('selMlSourceMode') || 'KpiViews';
+    const connectionName = getValue('selMlConnectionName').trim();
+    const looksNorthwind = connectionName.toLowerCase().includes('northwind');
+
+    if (mode === 'CustomSql') {
+        box.innerHTML = `<strong>Modo genérico activado.</strong> Aquí ya no trabajamos con scrap, producción ni downtime. El modelo se entrena desde una consulta canónica y puede apuntar a ventas, demanda, tickets o cualquier otra serie temporal siempre que devuelva <code>SeriesKey</code>, <code>ObservedOn</code>, <code>BucketKey</code>, <code>BucketLabel</code>, <code>BucketStartTick</code>, <code>BucketEndTick</code>, <code>TargetValue</code>.`;
+        return;
+    }
+
+    if (looksNorthwind) {
+        box.innerHTML = `<strong>Atención.</strong> Seleccionaste una conexión que parece no industrial. Para Northwind o sistemas de ventas conviene cambiar a <code>CustomSql</code> o usar un <code>Prediction Profile</code> del dominio, porque <code>KpiViews</code> asume un esquema de planta con producción, scrap, downtime y turnos.`;
+        return;
+    }
+
+    box.innerHTML = `<strong>Modo industrial transicional.</strong> <code>KpiViews</code> sigue siendo útil para plantas ERP con vistas KPI ya existentes. Si quieres un diseño más profesional y multi-dominio, usa <code>CustomSql</code> para la fuente del dataset y administra la semántica de negocio desde <code>Prediction Profiles</code>.`;
+}
+
+function toggleMlSourceModeFields() {
+    const mode = getValue('selMlSourceMode') || 'KpiViews';
+    const kpiWrap = document.getElementById('mlKpiConfigFields');
+    const sqlWrap = document.getElementById('mlCustomSqlFields');
+    if (kpiWrap) kpiWrap.style.display = mode === 'CustomSql' ? 'none' : '';
+    if (sqlWrap) sqlWrap.style.display = mode === 'CustomSql' ? '' : 'none';
+    renderMlModeNotice();
+}
+
+function populateMlProfileForm(body) {
+    setValue('txtMlProfileName', body?.ProfileName || 'default-forecast');
+    setValue('txtMlDisplayName', body?.DisplayName || 'Forecasting Profile');
+    setValue('txtMlDescription', body?.Description || '');
+    setValue('selMlSourceMode', body?.SourceMode || 'KpiViews');
+    renderMlConnectionOptions(body?.ConnectionName || '');
+    setValue('txtMlShiftTableName', body?.ShiftTableName || 'dbo.Turnos');
+    setValue('txtMlProductionView', body?.ProductionViewName || '');
+    setValue('txtMlScrapView', body?.ScrapViewName || '');
+    setValue('txtMlDowntimeView', body?.DowntimeViewName || '');
+    setValue('txtMlTrainingSql', body?.TrainingSql || '');
+    toggleMlSourceModeFields();
+}
+
+function applyMlSourcePreset(presetKey) {
+    if (presetKey === 'industrial') {
+        setValue('selMlSourceMode', 'KpiViews');
+        if (!getValue('txtMlProfileName').trim()) setValue('txtMlProfileName', 'industrial-forecast');
+        if (!getValue('txtMlDisplayName').trim()) setValue('txtMlDisplayName', 'Industrial KPI Forecast');
+        if (!getValue('txtMlDescription').trim()) setValue('txtMlDescription', 'Perfil transicional para forecasting industrial por turnos usando vistas KPI.');
+        toggleMlSourceModeFields();
+        return;
+    }
+
+    setValue('selMlSourceMode', 'CustomSql');
+    setValue('selMlConnectionName', 'NorthwindDb');
+
+    if (presetKey === 'northwind-daily-units') {
+        setValue('txtMlProfileName', 'northwind-daily-units');
+        setValue('txtMlDisplayName', 'Northwind Daily Units Forecast');
+        setValue('txtMlDescription', 'Perfil genérico para forecast de unidades vendidas por producto y por día en Northwind.');
+        setValue('txtMlTrainingSql', getNorthwindDailyUnitsSql());
+    } else if (presetKey === 'northwind-monthly-sales') {
+        setValue('txtMlProfileName', 'northwind-monthly-units');
+        setValue('txtMlDisplayName', 'Northwind Monthly Units Forecast');
+        setValue('txtMlDescription', 'Perfil genérico para forecast de unidades mensuales por país en Northwind.');
+        setValue('txtMlTrainingSql', getNorthwindMonthlySalesSql());
+    }
+
+    toggleMlSourceModeFields();
+}
+
+function renderMlStatus() {
+    const body = globalMlStatus || {};
+    const modelExists = !!body?.ModelExists;
+    const connReady = !!body?.OperationalConnectionReady;
+    const aligned = !!body?.ModelAlignedWithProfile;
+    const sourceMode = body?.SourceMode || 'KpiViews';
+
+    setText('mlStatusBadge', modelExists ? 'READY' : 'EMPTY');
+    setText('txtMlStatusSummary', modelExists
+        ? 'Hay un modelo serializado disponible para predicción.'
+        : 'Todavía no existe un modelo entrenado o no se pudo encontrar el archivo.');
+    setText('txtMlModelExists', modelExists ? 'Disponible' : 'No existe');
+    setText('txtMlModelUpdated', `Última actualización: ${body?.ModelLastWriteUtc ? formatAdminDateTime(body.ModelLastWriteUtc) : '—'}`);
+    setText('txtMlModelSize', formatBytes(body?.ModelSizeBytes));
+    setText('txtMlConnectionReady', connReady ? 'Lista' : 'Falta');
+    setText('txtMlModelPath', body?.ModelPath || 'Sin ruta configurada');
+    setText('txtMlModelDirectory', `Directorio de modelos: ${body?.ModelDirectory || '—'}`);
+    populateMlProfileForm(body);
+
+    const list = document.getElementById('mlStatusList');
+    if (!list) return;
+
+    list.innerHTML = `
+        <div class="document-item">
+            <div class="document-item-head">
+                <div>
+                    <div class="document-item-title">Modelo de forecasting</div>
+                    <div class="document-item-sub">${escHtml(body?.ModelPath || 'Sin ruta')}</div>
+                </div>
+                <span class="hi-verify ${modelExists ? 'verified' : 'pending'}">${modelExists ? 'READY' : 'EMPTY'}</span>
+            </div>
+            <div class="document-item-meta">
+                <span class="meta-chip ${connReady ? 'status-ok' : 'verify-pending'}">${connReady ? 'Conexión operacional lista' : 'Sin conexión operacional'}</span>
+                <span class="meta-chip ${aligned ? 'verified' : 'verify-pending'}">${aligned ? 'Modelo alineado con perfil' : 'Modelo desalineado'}</span>
+                <span class="meta-chip training-no">${escHtml(formatBytes(body?.ModelSizeBytes))}</span>
+                <span class="meta-chip training-no">${escHtml(body?.ModelLastWriteUtc ? formatAdminDateTime(body.ModelLastWriteUtc) : 'Sin entrenamiento')}</span>
+            </div>
+        </div>
+        <div class="document-item">
+            <div class="document-item-head">
+                <div>
+                    <div class="document-item-title">${escHtml(body?.DisplayName || 'Perfil ML')}</div>
+                    <div class="document-item-sub">${sourceMode === 'CustomSql' ? 'Fuente canónica por SQL custom.' : 'Fuente clásica por vistas KPI y tabla de turnos.'}</div>
+                </div>
+            </div>
+            <div class="document-item-meta">
+                <span class="meta-chip training-no">Modo: ${escHtml(sourceMode)}</span>
+                <span class="meta-chip training-no">Conexión: ${escHtml(body?.ConnectionName || 'default operacional')}</span>
+                <span class="meta-chip training-no">${escHtml(sourceMode === 'CustomSql' ? 'Custom SQL canónico' : `ShiftTable: ${body?.ShiftTableName || '—'}`)}</span>
+            </div>
+        </div>`;
+}
+
+function showPredictionProfileBanner(kind, message) {
+    const el = document.getElementById('predictionProfileBanner');
+    if (!el) return;
+    el.className = `alert-banner ${kind}`;
+    el.style.display = 'block';
+    el.textContent = message;
+}
+
+function hidePredictionProfileBanner() {
+    const el = document.getElementById('predictionProfileBanner');
+    if (!el) return;
+    el.style.display = 'none';
+    el.textContent = '';
+}
+
+function normalizeJsonField(value) {
+    const raw = String(value || '').trim();
+    return raw || null;
+}
+
+function parseStringArrayField(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+
+    try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+            return parsed
+                .map(x => String(x || '').trim())
+                .filter(Boolean);
+        }
+    } catch {
+        // fallback abajo
+    }
+
+    return raw
+        .split(',')
+        .map(x => x.trim())
+        .filter(Boolean);
+}
+
+function toJsonArrayText(values) {
+    const normalized = (values || []).map(x => String(x || '').trim()).filter(Boolean);
+    return normalized.length ? JSON.stringify(normalized) : '';
+}
+
+function getPredictionPackMetrics() {
+    const pack = globalPredictionDomainPack;
+    return Array.isArray(pack?.metrics || pack?.Metrics) ? (pack.metrics || pack.Metrics) : [];
+}
+
+function getPredictionPackDimensions() {
+    const pack = globalPredictionDomainPack;
+    return Array.isArray(pack?.dimensions || pack?.Dimensions) ? (pack.dimensions || pack.Dimensions) : [];
+}
+
+function renderPredictionGuidedSelector(hostId, items, selectedValues, clickHandlerName) {
+    const host = document.getElementById(hostId);
+    if (!host) return;
+
+    if (!items.length) {
+        host.innerHTML = '<span class="meta-empty">No hay opciones definidas en el Domain Pack.</span>';
+        return;
+    }
+
+    const selectedSet = new Set((selectedValues || []).map(x => String(x || '').trim().toLowerCase()));
+    host.innerHTML = items.map(item => {
+        const key = String(item?.key || item?.Key || '').trim();
+        const display = String(item?.displayName || item?.DisplayName || key).trim();
+        const selected = selectedSet.has(key.toLowerCase()) ? ' is-selected' : '';
+        const desc = String(item?.description || item?.Description || '').trim();
+        return `<button class="suggestion-chip prediction-selector-chip${selected}" type="button" title="${escAttr(desc || display)}" onclick="${clickHandlerName}('${jsString(key)}')">${escHtml(display)}</button>`;
+    }).join('');
+}
+
+function renderPredictionGuidedSelectors() {
+    const selectedTargetMetric = String(getValue('txtPredictionTargetMetricKey') || '').trim();
+    const selectedMetrics = parseStringArrayField(getValue('txtPredictionFeatureSourcesJson'));
+    const selectedDimensions = parseStringArrayField(getValue('txtPredictionGroupByJson'));
+    renderPredictionGuidedSelector(
+        'predictionTargetMetricSelector',
+        getPredictionPackMetrics(),
+        selectedTargetMetric ? [selectedTargetMetric] : [],
+        'selectPredictionTargetMetric');
+    renderPredictionGuidedSelector('predictionFeatureSourceSelector', getPredictionPackMetrics(), selectedMetrics, 'togglePredictionFeatureSource');
+    renderPredictionGuidedSelector('predictionGroupBySelector', getPredictionPackDimensions(), selectedDimensions, 'togglePredictionGroupBy');
+}
+
+function selectPredictionTargetMetric(value) {
+    setValue('txtPredictionTargetMetricKey', String(value || '').trim());
+    renderPredictionGuidedSelectors();
+}
+
+function togglePredictionArrayField(fieldId, value) {
+    const current = parseStringArrayField(getValue(fieldId));
+    const normalized = String(value || '').trim();
+    if (!normalized) return;
+
+    const set = new Set(current.map(x => x.toLowerCase()));
+    if (set.has(normalized.toLowerCase())) {
+        const next = current.filter(x => String(x || '').trim().toLowerCase() !== normalized.toLowerCase());
+        setValue(fieldId, toJsonArrayText(next));
+    } else {
+        current.push(normalized);
+        setValue(fieldId, toJsonArrayText(current));
+    }
+
+    renderPredictionGuidedSelectors();
+}
+
+function togglePredictionFeatureSource(value) {
+    togglePredictionArrayField('txtPredictionFeatureSourcesJson', value);
+}
+
+function togglePredictionGroupBy(value) {
+    togglePredictionArrayField('txtPredictionGroupByJson', value);
+}
+
+function renderPredictionDomainPackSummary() {
+    const host = document.getElementById('predictionDomainPackSummary');
+    if (!host) return;
+
+    const pack = globalPredictionDomainPack;
+    if (!pack) {
+        host.innerHTML = '<strong>Sin Domain Pack.</strong> No se pudo resolver el vocabulario analítico para este dominio.';
+        renderPredictionGuidedSelectors();
+        return;
+    }
+
+    const metrics = Array.isArray(pack.metrics || pack.Metrics) ? (pack.metrics || pack.Metrics) : [];
+    const dimensions = Array.isArray(pack.dimensions || pack.Dimensions) ? (pack.dimensions || pack.Dimensions) : [];
+    const metricText = metrics.length ? metrics.map(x => x.key || x.Key).filter(Boolean).join(', ') : 'sin métricas definidas';
+    const dimensionText = dimensions.length ? dimensions.map(x => x.key || x.Key).filter(Boolean).join(', ') : 'sin dimensiones definidas';
+
+    host.innerHTML = `<strong>${escHtml(pack.displayName || pack.DisplayName || pack.key || pack.Key || 'Domain Pack')}</strong><br>Métricas: ${escHtml(metricText)}<br>Dimensiones: ${escHtml(dimensionText)}`;
+    renderPredictionGuidedSelectors();
+}
+
+function renderPredictionProfileList() {
+    const list = document.getElementById('predictionProfileList');
+    if (!list) return;
+
+    if (!globalPredictionProfiles.length) {
+        list.innerHTML = `<div class="empty-state" style="min-height:180px">No hay Prediction Profiles para este dominio todavía.</div>`;
+        return;
+    }
+
+    list.innerHTML = globalPredictionProfiles.map(profile => {
+        const id = Number(profile.id || profile.Id || 0);
+        const selected = id === selectedPredictionProfileId ? ' is-selected' : '';
+        const sourceMode = profile.sourceMode || profile.SourceMode || 'KpiViews';
+        const connection = profile.connectionName || profile.ConnectionName || 'default';
+        const horizon = `${profile.horizon || profile.Horizon || 1} ${profile.horizonUnit || profile.HorizonUnit || 'day'}`;
+        return `
+            <div class="prediction-profile-card${selected}" onclick="selectPredictionProfileAdmin(${id})">
+                <div class="prediction-profile-title">${escHtml(profile.displayName || profile.DisplayName || profile.profileKey || profile.ProfileKey || 'Prediction Profile')}</div>
+                <div class="prediction-profile-sub">${escHtml(profile.profileKey || profile.ProfileKey || '')}</div>
+                <div class="prediction-profile-meta">
+                    <span class="meta-chip training-no">${escHtml(profile.targetMetricKey || profile.TargetMetricKey || '—')}</span>
+                    <span class="meta-chip training-no">${escHtml(sourceMode)}</span>
+                    <span class="meta-chip training-no">${escHtml(horizon)}</span>
+                    <span class="meta-chip ${profile.isActive || profile.IsActive ? 'status-ok' : 'verify-pending'}">${profile.isActive || profile.IsActive ? 'Activo' : 'Inactivo'}</span>
+                </div>
+                <div class="prediction-profile-sub">${escHtml(`Conexión: ${connection}`)}</div>
+            </div>`;
+    }).join('');
+}
+
+function populatePredictionProfileForm(profile) {
+    const domain = profile?.domain || profile?.Domain || getDefaultPredictionDomain();
+    setValue('txtPredictionProfileDomain', domain);
+    setValue('txtPredictionProfileKey', profile?.profileKey || profile?.ProfileKey || '');
+    setValue('txtPredictionProfileDisplayName', profile?.displayName || profile?.DisplayName || '');
+    setValue('txtPredictionDomainPackKey', profile?.domainPackKey || profile?.DomainPackKey || getDefaultDomainPackKey(domain));
+    setValue('txtPredictionTargetMetricKey', profile?.targetMetricKey || profile?.TargetMetricKey || '');
+    setValue('txtPredictionCalendarProfileKey', profile?.calendarProfileKey || profile?.CalendarProfileKey || getDefaultCalendarProfileKey(domain));
+    setValue('selPredictionConnectionName', profile?.connectionName || profile?.ConnectionName || '');
+    setValue('selPredictionSourceMode', profile?.sourceMode || profile?.SourceMode || 'CustomSql');
+    setValue('txtPredictionModelType', profile?.modelType || profile?.ModelType || 'FastTree');
+    setValue('txtPredictionGrain', profile?.grain || profile?.Grain || 'day');
+    setValue('txtPredictionHorizon', String(profile?.horizon || profile?.Horizon || 7));
+    setValue('txtPredictionHorizonUnit', profile?.horizonUnit || profile?.HorizonUnit || 'day');
+    setValue('txtPredictionTargetSeriesSource', profile?.targetSeriesSource || profile?.TargetSeriesSource || '');
+    setValue('txtPredictionFeatureSourcesJson', profile?.featureSourcesJson || profile?.FeatureSourcesJson || '');
+    setValue('txtPredictionGroupByJson', profile?.groupByJson || profile?.GroupByJson || '');
+    setValue('txtPredictionFiltersJson', profile?.filtersJson || profile?.FiltersJson || '');
+    setValue('txtPredictionNotes', profile?.notes || profile?.Notes || '');
+    const checkbox = document.getElementById('chkPredictionProfileIsActive');
+    if (checkbox) checkbox.checked = !!(profile ? (profile.isActive ?? profile.IsActive ?? true) : true);
+    renderPredictionGuidedSelectors();
+}
+
+function buildPredictionProfileDraft(domain) {
+    const normalizedDomain = String(domain || getDefaultPredictionDomain()).trim() || 'erp-kpi-pilot';
+    const northwind = normalizedDomain.toLowerCase().includes('northwind');
+    return {
+        Id: 0,
+        Domain: normalizedDomain,
+        ProfileKey: northwind ? 'northwind-sales-daily-units' : `${normalizedDomain.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-forecast`,
+        DisplayName: northwind ? 'Northwind Sales Daily Units Forecast' : 'Prediction Profile',
+        DomainPackKey: getDefaultDomainPackKey(normalizedDomain),
+        TargetMetricKey: northwind ? 'units_sold' : 'scrap_qty',
+        CalendarProfileKey: getDefaultCalendarProfileKey(normalizedDomain),
+        Grain: northwind ? 'day' : 'shift',
+        Horizon: northwind ? 7 : 1,
+        HorizonUnit: northwind ? 'day' : 'shift',
+        ModelType: 'FastTree',
+        ConnectionName: northwind ? 'NorthwindDb' : '',
+        SourceMode: northwind ? 'CustomSql' : 'KpiViews',
+        TargetSeriesSource: northwind ? getNorthwindDailyUnitsSql() : 'ml:active-profile',
+        FeatureSourcesJson: northwind ? '["net_sales","order_count"]' : '["produced_qty","downtime_minutes"]',
+        GroupByJson: northwind ? '["product"]' : '["part","shift"]',
+        FiltersJson: '',
+        Notes: northwind
+            ? 'Perfil inicial para forecast de unidades vendidas por producto y por día.'
+            : 'Perfil inicial para forecasting industrial por turno.',
+        IsActive: true
+    };
+}
+
+function selectPredictionProfileAdmin(id) {
+    selectedPredictionProfileId = Number(id || 0);
+    const profile = globalPredictionProfiles.find(x => Number(x.id || x.Id || 0) === selectedPredictionProfileId) || null;
+    populatePredictionProfileForm(profile || buildPredictionProfileDraft(getDefaultPredictionDomain()));
+    renderPredictionProfileList();
+}
+
+function newPredictionProfileAdmin() {
+    selectedPredictionProfileId = 0;
+    populatePredictionProfileForm(buildPredictionProfileDraft(getDefaultPredictionDomain()));
+    renderPredictionProfileList();
+    hidePredictionProfileBanner();
+}
+
+async function loadPredictionProfilesAdmin() {
+    const domain = getDefaultPredictionDomain();
+    setValue('txtPredictionProfileDomain', domain);
+
+    try {
+        const [profilesRes, packRes] = await Promise.all([
+            fetch(`/api/admin/prediction-profiles?domain=${encodeURIComponent(domain)}`),
+            fetch(`/api/admin/domain-pack-preview?domain=${encodeURIComponent(domain)}`)
+        ]);
+
+        const profilesBody = await safeJson(profilesRes);
+        const packBody = await safeJson(packRes);
+
+        if (!profilesRes.ok) throw new Error(profilesBody?.Error || `HTTP ${profilesRes.status}`);
+        if (!packRes.ok) throw new Error(packBody?.Error || `HTTP ${packRes.status}`);
+
+        globalPredictionProfiles = Array.isArray(profilesBody) ? profilesBody : [];
+        globalPredictionDomainPack = packBody || null;
+        renderPredictionConnectionOptions('');
+        renderPredictionDomainPackSummary();
+
+        if (selectedPredictionProfileId) {
+            const selected = globalPredictionProfiles.find(x => Number(x.id || x.Id || 0) === selectedPredictionProfileId);
+            if (selected) {
+                populatePredictionProfileForm(selected);
+            } else {
+                newPredictionProfileAdmin();
+            }
+        } else if (globalPredictionProfiles.length) {
+            const selected = globalPredictionProfiles.find(x => x.isActive || x.IsActive) || globalPredictionProfiles[0];
+            selectedPredictionProfileId = Number(selected.id || selected.Id || 0);
+            populatePredictionProfileForm(selected);
+        } else {
+            newPredictionProfileAdmin();
+        }
+
+        renderPredictionProfileList();
+    } catch (e) {
+        globalPredictionProfiles = [];
+        globalPredictionDomainPack = null;
+        renderPredictionProfileList();
+        renderPredictionDomainPackSummary();
+        renderPredictionGuidedSelectors();
+        showPredictionProfileBanner('err', 'Error cargando Prediction Profiles: ' + e.message);
+    }
+}
+
+async function refreshPredictionProfilesAdmin() {
+    hidePredictionProfileBanner();
+    selectedPredictionProfileId = 0;
+    await loadPredictionProfilesAdmin();
+}
+
+async function savePredictionProfileAdmin() {
+    const domain = getValue('txtPredictionProfileDomain').trim() || getDefaultPredictionDomain();
+    const payload = {
+        Id: selectedPredictionProfileId || 0,
+        Domain: domain,
+        ProfileKey: getValue('txtPredictionProfileKey').trim(),
+        DisplayName: getValue('txtPredictionProfileDisplayName').trim(),
+        DomainPackKey: getValue('txtPredictionDomainPackKey').trim(),
+        TargetMetricKey: getValue('txtPredictionTargetMetricKey').trim(),
+        CalendarProfileKey: getValue('txtPredictionCalendarProfileKey').trim(),
+        Grain: getValue('txtPredictionGrain').trim(),
+        Horizon: Number(getValue('txtPredictionHorizon')) || 1,
+        HorizonUnit: getValue('txtPredictionHorizonUnit').trim(),
+        ModelType: getValue('txtPredictionModelType').trim(),
+        ConnectionName: getValue('selPredictionConnectionName').trim(),
+        SourceMode: getValue('selPredictionSourceMode').trim(),
+        TargetSeriesSource: getValue('txtPredictionTargetSeriesSource').trim(),
+        FeatureSourcesJson: normalizeJsonField(getValue('txtPredictionFeatureSourcesJson')),
+        GroupByJson: normalizeJsonField(getValue('txtPredictionGroupByJson')),
+        FiltersJson: normalizeJsonField(getValue('txtPredictionFiltersJson')),
+        Notes: normalizeJsonField(getValue('txtPredictionNotes')),
+        IsActive: !!document.getElementById('chkPredictionProfileIsActive')?.checked
+    };
+
+    try {
+        const res = await fetch('/api/admin/prediction-profiles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const body = await safeJson(res);
+        if (!res.ok) {
+            throw new Error(body?.Error || body?.Message || `HTTP ${res.status}`);
+        }
+
+        showPredictionProfileBanner('ok', body?.Message || 'Prediction Profile guardado correctamente.');
+        selectedPredictionProfileId = Number(body?.Id || 0);
+        await loadPredictionProfilesAdmin();
+    } catch (e) {
+        showPredictionProfileBanner('err', 'Error guardando Prediction Profile: ' + e.message);
+    }
+}
+
+async function loadMlAdmin() {
+    const list = document.getElementById('mlStatusList');
+    if (list) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+                    <polyline points="16 7 22 7 22 13"></polyline>
+                </svg>
+                Cargando estado de ML...
+            </div>`;
+    }
+
+    try {
+        const res = await fetch('/api/admin/ml/status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        globalMlStatus = await res.json();
+        renderMlStatus();
+        await loadPredictionProfilesAdmin();
+        if (globalMlStatus?.ConnectionError) {
+            showMlBanner('warn', `Perfil ML cargado, pero la conexión no está lista: ${globalMlStatus.ConnectionError}`);
+        } else {
+            hideMlBanner();
+        }
+    } catch (e) {
+        globalMlStatus = null;
+        renderMlStatus();
+        await loadPredictionProfilesAdmin();
+        showMlBanner('err', 'Error cargando estado ML: ' + e.message);
+    }
+}
+
+async function saveMlProfileAdmin() {
+    const payload = {
+        ProfileName: getValue('txtMlProfileName').trim(),
+        DisplayName: getValue('txtMlDisplayName').trim(),
+        SourceMode: getValue('selMlSourceMode').trim() || 'KpiViews',
+        ConnectionName: getValue('selMlConnectionName').trim(),
+        Description: getValue('txtMlDescription').trim(),
+        ShiftTableName: getValue('txtMlShiftTableName').trim(),
+        ProductionViewName: getValue('txtMlProductionView').trim(),
+        ScrapViewName: getValue('txtMlScrapView').trim(),
+        DowntimeViewName: getValue('txtMlDowntimeView').trim(),
+        TrainingSql: getValue('txtMlTrainingSql').trim()
+    };
+
+    try {
+        const res = await fetch('/api/admin/ml/profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const body = await safeJson(res);
+        if (!res.ok) {
+            throw new Error(body?.Error || body?.Message || `HTTP ${res.status}`);
+        }
+
+        showMlBanner('ok', body?.Message || 'Perfil ML guardado correctamente.');
+        await loadMlAdmin();
+    } catch (e) {
+        showMlBanner('err', 'Error guardando perfil ML: ' + e.message);
+    }
+}
+
+async function trainMlModelAdmin() {
+    const spinner = document.getElementById('mlTrainSpinner');
+    if (spinner) spinner.style.display = 'block';
+
+    try {
+        const res = await fetch('/api/admin/ml/train', { method: 'POST' });
+        const body = await safeJson(res);
+        if (!res.ok) {
+            throw new Error(body?.Error || body?.Message || `HTTP ${res.status}`);
+        }
+
+        globalMlStatus = body;
+        renderMlStatus();
+        showMlBanner('ok', `${body?.Message || 'Entrenamiento completado.'} Modelo: ${body?.ModelExists ? 'disponible' : 'sin archivo'} · Actualizado: ${body?.ModelLastWriteUtc ? formatAdminDateTime(body.ModelLastWriteUtc) : '—'}`);
+        await loadMlAdmin();
+    } catch (e) {
+        showMlBanner('err', 'Error entrenando modelo ML: ' + e.message);
+    } finally {
+        if (spinner) spinner.style.display = 'none';
+    }
+}
+
+// -----------------------------------------------------------
 // UTILS
 // -----------------------------------------------------------
 function escHtml(s) {
@@ -4773,10 +5981,43 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         });
 
+    ['txtOnboardingConnServer', 'txtOnboardingConnPort', 'txtOnboardingConnDatabase', 'txtOnboardingConnAuthMode', 'txtOnboardingConnUser', 'txtOnboardingConnPassword', 'txtOnboardingConnEncrypt', 'txtOnboardingConnTrustCert', 'txtOnboardingConnectionMode']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('input', () => {
+                if (id === 'txtOnboardingConnAuthMode') {
+                    handleOnboardingAuthModeChange();
+                    return;
+                }
+                if (id === 'txtOnboardingConnectionMode') {
+                    handleOnboardingConnectionModeChange();
+                    return;
+                }
+                buildOnboardingConnectionString();
+            });
+            el.addEventListener('change', () => {
+                if (id === 'txtOnboardingConnAuthMode') {
+                    handleOnboardingAuthModeChange();
+                    return;
+                }
+                if (id === 'txtOnboardingConnectionMode') {
+                    handleOnboardingConnectionModeChange();
+                    return;
+                }
+                buildOnboardingConnectionString();
+            });
+        });
+
     const validationQuestion = document.getElementById('txtOnboardingValidationQuestion');
     if (validationQuestion) {
         validationQuestion.addEventListener('input', () => clearOnboardingFieldError('validationQuestion'));
         validationQuestion.addEventListener('change', () => clearOnboardingFieldError('validationQuestion'));
+    }
+
+    const documentsDomainFilter = document.getElementById('txtDocumentDomainFilter');
+    if (documentsDomainFilter) {
+        documentsDomainFilter.addEventListener('change', () => loadDocumentsAdmin());
     }
 });
 

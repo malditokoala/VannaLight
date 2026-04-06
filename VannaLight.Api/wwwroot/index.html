@@ -68,9 +68,14 @@
             position: relative;
             z-index: 1;
             display: grid;
-            grid-template-columns: 72px 1fr;
+            grid-template-columns: 320px 1fr;
             grid-template-rows: 56px 1fr;
-            min-height: 100vh
+            min-height: 100vh;
+            transition: grid-template-columns .22s ease;
+        }
+
+        body.history-collapsed .app {
+            grid-template-columns: 72px 1fr;
         }
 
         /* TOPBAR */
@@ -217,23 +222,69 @@
             border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
-            align-items: center;
-            padding: 14px 0;
-            gap: 4px;
+            align-items: stretch;
+            padding: 12px;
+            gap: 12px;
             position: sticky;
             top: 56px;
-            height: calc(100vh - 56px)
+            height: calc(100vh - 56px);
+            overflow: hidden;
+            transition: padding .22s ease;
+        }
+
+        .sidebar-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .sidebar-brand {
+            min-width: 0;
+        }
+
+        .sidebar-brand-title {
+            font-family: var(--cond);
+            font-size: .92rem;
+            font-weight: 700;
+            letter-spacing: .04em;
+            color: var(--text);
+        }
+
+        .sidebar-brand-subtitle {
+            margin-top: 2px;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: .58rem;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .sidebar-rail {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .sidebar-history {
+            display: flex;
+            flex: 1 1 auto;
+            min-height: 0;
+            flex-direction: column;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: linear-gradient(180deg, rgba(255,255,255,.015), rgba(255,255,255,0));
+            overflow: hidden;
         }
 
         .sb-btn {
             position: relative;
-            width: 52px;
-            height: 52px;
+            width: 100%;
+            min-height: 52px;
             display: flex;
-            flex-direction: column;
             align-items: center;
-            justify-content: center;
-            gap: 3px;
+            justify-content: flex-start;
+            gap: 10px;
             border: none;
             border-radius: var(--radius);
             background: transparent;
@@ -241,16 +292,24 @@
             cursor: pointer;
             transition: all .2s;
             font-family: var(--mono);
-            font-size: .5rem;
+            font-size: .62rem;
             letter-spacing: .06em;
-            text-transform: uppercase
+            text-transform: uppercase;
+            padding: 0 12px;
         }
 
             .sb-btn svg {
                 width: 18px;
                 height: 18px;
-                transition: stroke .3s
+                transition: stroke .3s;
+                flex-shrink: 0;
             }
+
+        .sb-label {
+            display: inline-flex;
+            align-items: center;
+            white-space: nowrap;
+        }
 
             .sb-btn:hover {
                 background: var(--panel);
@@ -305,7 +364,7 @@
             }
 
         .sb-divider {
-            width: 32px;
+            width: 100%;
             height: 1px;
             background: var(--border);
             margin: 6px 0
@@ -315,7 +374,7 @@
         .main {
             grid-row: 2;
             grid-column: 2;
-            padding: 18px 22px 60px;
+            padding: 18px 22px 96px;
             display: flex;
             flex-direction: column;
             gap: 12px;
@@ -515,6 +574,63 @@
             overflow: hidden;
         }
 
+        .history-sidebar-head {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 12px 10px;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, rgba(255,255,255,.015), rgba(255,255,255,0));
+        }
+
+        .history-sidebar-copy {
+            min-width: 0;
+        }
+
+        .history-collapse-btn {
+            width: 34px;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius);
+            border: 1px solid var(--border2);
+            background: var(--panel);
+            color: var(--text);
+            cursor: pointer;
+            transition: all .2s ease;
+        }
+
+        .history-collapse-btn:hover {
+            border-color: var(--a);
+            color: var(--a);
+        }
+
+        .history-collapse-btn svg {
+            width: 16px;
+            height: 16px;
+            transition: transform .2s ease;
+        }
+
+        .history-sidebar-mode {
+            padding: 8px 14px;
+            border-bottom: 1px solid var(--border);
+            font-family: var(--mono);
+            font-size: .6rem;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            background: color-mix(in srgb, var(--a) 5%, transparent);
+        }
+
+        .history-list-sidebar {
+            flex: 1 1 auto;
+            min-height: 0;
+            max-height: none;
+            overflow-y: auto;
+        }
+
         .history-head {
             display: flex;
             align-items: center;
@@ -529,6 +645,9 @@
         .history-list {
             display: flex;
             flex-direction: column;
+            min-height: 0;
+            max-height: none;
+            overflow-y: auto;
         }
 
         .history-empty {
@@ -539,16 +658,26 @@
         }
 
         .history-item {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 12px;
             padding: 12px 14px;
             border-top: 1px solid var(--border);
-            align-items: center;
+            transition: background .18s ease, border-color .18s ease, box-shadow .18s ease;
         }
 
         .history-item:first-child {
             border-top: none;
+        }
+
+        .history-item:hover {
+            background: color-mix(in srgb, var(--a) 4%, transparent);
+        }
+
+        .history-item.is-active {
+            background: color-mix(in srgb, var(--a) 8%, transparent);
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--a) 18%, transparent);
         }
 
         .history-main {
@@ -560,18 +689,43 @@
 
         .history-question {
             color: var(--text);
-            font-size: .86rem;
-            line-height: 1.35;
+            font-size: .84rem;
+            font-weight: 600;
+            line-height: 1.4;
+            overflow-wrap: anywhere;
         }
 
         .history-meta {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             flex-wrap: wrap;
             color: var(--dim);
             font-family: var(--mono);
-            font-size: .62rem;
+            font-size: .58rem;
+        }
+
+        .history-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 7px;
+            border-radius: 999px;
+            border: 1px solid var(--border2);
+            background: var(--panel);
+            color: var(--dim);
+            letter-spacing: .06em;
+            text-transform: uppercase;
+        }
+
+        .history-context {
+            width: 100%;
+            color: var(--muted);
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
+
+        .history-time {
+            color: var(--dim);
         }
 
         .history-status {
@@ -606,10 +760,10 @@
         }
 
         .history-item-actions {
-            display: flex;
-            align-items: center;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 8px;
-            flex-wrap: wrap;
+            width: 100%;
         }
 
         .history-action-btn {
@@ -617,18 +771,60 @@
             border: 1px solid var(--border2);
             color: var(--text);
             font-family: var(--mono);
-            font-size: .58rem;
-            padding: 6px 10px;
+            font-size: .56rem;
+            padding: 7px 10px;
             border-radius: var(--radius);
             cursor: pointer;
             transition: border-color .2s, color .2s, background .2s;
             text-transform: uppercase;
             letter-spacing: .08em;
+            width: 100%;
+            white-space: nowrap;
+            text-align: center;
         }
 
         .history-action-btn:hover {
             border-color: var(--a);
             color: var(--a);
+        }
+
+        .history-action-btn.is-wide {
+            grid-column: 1 / -1;
+        }
+
+        body.history-collapsed .sidebar {
+            align-items: center;
+            padding: 14px 0;
+        }
+
+        body.history-collapsed .sidebar-brand,
+        body.history-collapsed .sb-label,
+        body.history-collapsed .sidebar-history {
+            display: none;
+        }
+
+        body.history-collapsed .sidebar-top {
+            justify-content: center;
+        }
+
+        body.history-collapsed .sidebar-rail {
+            width: 100%;
+            align-items: center;
+        }
+
+        body.history-collapsed .sb-btn {
+            width: 52px;
+            min-height: 52px;
+            justify-content: center;
+            padding: 0;
+        }
+
+        body.history-collapsed .sb-divider {
+            width: 32px;
+        }
+
+        body.history-collapsed .history-collapse-btn svg {
+            transform: rotate(180deg);
         }
 
         .query-status-banner {
@@ -703,14 +899,20 @@
         .input-panel {
             border-radius: var(--radius);
             border: 1px solid var(--border);
-            background: var(--surface);
+            background: color-mix(in srgb, var(--surface) 92%, rgba(6,10,18,.92));
             overflow: hidden;
-            transition: border-color .35s, box-shadow .35s
+            transition: border-color .35s, box-shadow .35s, transform .25s;
+            position: sticky;
+            bottom: 14px;
+            z-index: 18;
+            backdrop-filter: blur(14px);
+            box-shadow: 0 18px 42px rgba(0, 0, 0, .26)
         }
 
             .input-panel:focus-within {
                 border-color: var(--a);
-                box-shadow: 0 0 0 3px color-mix(in srgb,var(--a) 13%,transparent), 0 0 28px color-mix(in srgb,var(--a) 9%,transparent)
+                box-shadow: 0 0 0 3px color-mix(in srgb,var(--a) 13%,transparent), 0 18px 42px rgba(0, 0, 0, .3), 0 0 28px color-mix(in srgb,var(--a) 9%,transparent);
+                transform: translateY(-1px)
             }
 
         .input-row {
@@ -983,6 +1185,60 @@
             word-break: break-word;
         }
 
+        .docs-answer-text {
+            font-size: 1rem;
+            line-height: 1.65;
+            color: var(--text);
+            white-space: pre-wrap;
+        }
+
+        .docs-confidence {
+            margin-top: 12px;
+            display: inline-flex;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(52, 211, 153, .12);
+            color: var(--docs-c);
+            font: 700 .72rem/1 var(--mono);
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .docs-citations {
+            margin-top: 16px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .docs-citation {
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid color-mix(in srgb, var(--docs-c) 20%, var(--border));
+            background: rgba(255,255,255,.03);
+        }
+
+        .docs-citation-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font: 700 .72rem/1.2 var(--mono);
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: var(--docs-c);
+        }
+
+        .docs-citation-section {
+            margin-top: 8px;
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .docs-citation-snippet {
+            margin-top: 6px;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
         /* PREDICT */
         .pred-grid {
             display: none;
@@ -1201,6 +1457,26 @@
                 color: var(--dim);
             }
 
+        .sql-footer .sql-toggle-btn,
+        .chart-toolbar .sql-toggle-btn {
+            min-height: 38px;
+            padding: 8px 14px;
+            border-color: color-mix(in srgb, var(--a) 18%, var(--border2));
+            background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 82%, rgba(255,255,255,.03)), color-mix(in srgb, var(--panel) 92%, rgba(255,255,255,.02)));
+            color: #dbe7ff;
+            font-size: .62rem;
+            font-weight: 700;
+            letter-spacing: .08em;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+        }
+
+            .sql-footer .sql-toggle-btn:hover,
+            .chart-toolbar .sql-toggle-btn:hover {
+                border-color: color-mix(in srgb, var(--a) 55%, var(--border2));
+                color: #ffffff;
+                background: linear-gradient(180deg, color-mix(in srgb, var(--a) 14%, var(--surface)), color-mix(in srgb, var(--a) 8%, var(--panel)));
+            }
+
         /* separador visual entre grupos */
         .toolbar-sep {
             width: 1px;
@@ -1219,34 +1495,39 @@
             display: flex;
             align-items: center;
             gap: 5px;
-            padding: 5px 10px;
+            padding: 8px 12px;
+            min-height: 38px;
             border-radius: var(--radius);
-            border: 1px solid var(--border2);
-            background: var(--panel);
-            color: var(--muted);
+            border: 1px solid color-mix(in srgb, var(--a) 16%, var(--border2));
+            background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 86%, rgba(255,255,255,.02)), color-mix(in srgb, var(--panel) 94%, rgba(255,255,255,.01)));
+            color: #dbe7ff;
             font-family: var(--mono);
-            font-size: .58rem;
-            letter-spacing: .05em;
+            font-size: .62rem;
+            font-weight: 700;
+            letter-spacing: .08em;
             cursor: pointer;
-            transition: border-color .2s, color .2s, background .2s;
+            transition: border-color .2s, color .2s, background .2s, transform .2s, box-shadow .2s;
             white-space: nowrap;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
         }
 
             .chart-type-btn svg {
-                width: 12px;
-                height: 12px;
+                width: 14px;
+                height: 14px;
                 flex-shrink: 0;
             }
 
             .chart-type-btn:hover {
-                border-color: var(--dim);
-                color: var(--dim);
+                border-color: color-mix(in srgb, var(--a) 48%, var(--border2));
+                color: #ffffff;
+                transform: translateY(-1px);
             }
 
             .chart-type-btn.active {
                 border-color: var(--a);
-                color: var(--a);
-                background: color-mix(in srgb, var(--a) 10%, transparent);
+                color: #04131a;
+                background: linear-gradient(180deg, color-mix(in srgb, var(--a) 92%, white 8%), color-mix(in srgb, var(--a) 78%, black 4%));
+                box-shadow: 0 0 0 1px color-mix(in srgb, var(--a) 36%, transparent), 0 10px 24px color-mix(in srgb, var(--a) 18%, transparent);
             }
 
         #sqlContainer {
@@ -1267,31 +1548,88 @@
         /* UTILS */
         .data-table {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
             font-size: .8rem;
-            background: var(--surface);
-            border: 1px solid var(--border);
+            background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, rgba(255,255,255,.02)), color-mix(in srgb, var(--panel) 94%, rgba(255,255,255,.01)));
+            border: 1px solid color-mix(in srgb, var(--a) 12%, var(--border));
             border-radius: var(--radius);
-            overflow: hidden
+            overflow: hidden;
+            table-layout: fixed
         }
 
             .data-table th {
-                background: var(--panel);
-                color: var(--muted);
+                position: sticky;
+                top: 0;
+                z-index: 2;
+                background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, rgba(255,255,255,.03)), color-mix(in srgb, var(--surface) 88%, rgba(255,255,255,.02)));
+                color: #c9d6ee;
                 font-family: var(--mono);
-                font-size: .58rem;
-                padding: 10px 14px;
+                font-size: .62rem;
+                font-weight: 700;
+                letter-spacing: .08em;
+                padding: 12px 14px;
                 text-align: left;
-                border-bottom: 1px solid var(--border)
+                border-bottom: 1px solid color-mix(in srgb, var(--a) 10%, var(--border))
             }
 
             .data-table td {
-                padding: 9px 14px;
-                border-bottom: 1px solid var(--border);
-                color: var(--dim);
+                padding: 11px 14px;
+                border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, rgba(255,255,255,.02));
+                color: #b8c6de;
                 font-family: var(--mono);
-                font-size: .74rem
+                font-size: .78rem;
+                line-height: 1.45
             }
+
+            .data-table tbody tr:nth-child(odd) td {
+                background: rgba(255,255,255,.012);
+            }
+
+            .data-table tbody tr:hover td {
+                background: color-mix(in srgb, var(--a) 8%, rgba(255,255,255,.015));
+                color: #edf4ff;
+            }
+
+            .data-table th:last-child,
+            .data-table td:last-child {
+                border-right: none;
+            }
+
+        .table-wrap {
+            display: none;
+            overflow: auto;
+            max-width: 100%;
+            border: 1px solid color-mix(in srgb, var(--a) 10%, var(--border));
+            border-radius: var(--radius);
+            background: var(--surface);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.02);
+        }
+
+        .table-cell {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .table-cell.is-numeric,
+        .data-table th.is-numeric {
+            text-align: right;
+        }
+
+        .data-table th.is-numeric {
+            color: #dde8ff;
+        }
+
+        .table-cell.is-numeric {
+            font-variant-numeric: tabular-nums;
+            color: #d6e2f5;
+        }
+
+        .table-cell.is-text {
+            color: #c2d0e7;
+        }
 
         .kpi-grid {
             display: grid;
@@ -1341,6 +1679,10 @@
                 grid-template-rows: 56px 48px 1fr
             }
 
+            body.history-collapsed .app {
+                grid-template-columns: 1fr;
+            }
+
             .sidebar {
                 grid-row: 2;
                 grid-column: 1;
@@ -1350,12 +1692,33 @@
                 border-right: none;
                 border-bottom: 1px solid var(--border);
                 position: sticky;
-                top: 56px
+                top: 56px;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .sidebar-top,
+            .sidebar-brand,
+            .sidebar-history,
+            .sb-divider {
+                display: none;
+            }
+
+            .sidebar-rail {
+                flex-direction: row;
+                width: 100%;
+                justify-content: space-between;
             }
 
             .sb-btn {
                 width: 44px;
-                height: 40px
+                min-height: 40px;
+                justify-content: center;
+                padding: 0;
+            }
+
+            .sb-label {
+                display: none;
             }
 
                 .sb-btn::before {
@@ -1370,11 +1733,19 @@
 
             .main {
                 grid-row: 3;
-                padding: 12px
+                padding: 12px 12px 92px
             }
 
             .chart-type-group {
                 flex-wrap: wrap;
+            }
+
+            body.history-collapsed .history-collapse-btn svg {
+                transform: none;
+            }
+
+            .history-list {
+                max-height: 180px;
             }
         }
     </style>
@@ -1399,20 +1770,46 @@
         </header>
 
         <!-- SIDEBAR -->
-        <nav class="sidebar">
-            <button class="sb-btn active-sql" id="sb-sql" onclick="setMode('sql')">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>SQL
-            </button>
-            <button class="sb-btn" id="sb-docs" onclick="setMode('docs')">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>PDF
-            </button>
-            <button class="sb-btn" id="sb-pred" onclick="setMode('pred')">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></svg>ML
-            </button>
-            <div class="sb-divider"></div>
-            <button class="sb-btn" id="sb-mic" onclick="startDictation()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>VOZ
-            </button>
+        <nav class="sidebar" id="historySidebar">
+            <div class="sidebar-top">
+                <div class="sidebar-brand">
+                    <div class="sidebar-brand-title">Vanna Workspace</div>
+                    <div class="sidebar-brand-subtitle">Modos e historial local</div>
+                </div>
+                <button class="history-collapse-btn" type="button" id="historyCollapseBtn" aria-label="Colapsar historial" aria-expanded="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+            </div>
+            <div class="sidebar-rail">
+                <button class="sb-btn active-sql" id="sb-sql" onclick="setMode('sql')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg><span class="sb-label">SQL</span>
+                </button>
+                <button class="sb-btn" id="sb-docs" onclick="setMode('docs')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg><span class="sb-label">PDF</span>
+                </button>
+                <button class="sb-btn" id="sb-pred" onclick="setMode('pred')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></svg><span class="sb-label">ML</span>
+                </button>
+                <div class="sb-divider"></div>
+                <button class="sb-btn" id="sb-mic" onclick="startDictation()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg><span class="sb-label">VOZ</span>
+                </button>
+            </div>
+            <section class="sidebar-history">
+                <div class="history-sidebar-head">
+                    <div class="history-sidebar-copy">
+                        <div class="context-title">Ultimas 10 consultas</div>
+                        <div class="context-subtitle">Top 10 por modo. Guardadas en este navegador.</div>
+                    </div>
+                    <button class="sql-toggle-btn history-clear-btn" type="button" onclick="clearQueryHistory()">LIMPIAR</button>
+                </div>
+                <div class="history-sidebar-mode" id="historySidebarModeLabel">Historial SQL</div>
+                <div class="history-list history-list-sidebar" id="queryHistoryList">
+                    <div class="history-empty">Aun no hay consultas guardadas en este navegador.</div>
+                </div>
+            </section>
         </nav>
 
         <!-- MAIN -->
@@ -1448,19 +1845,6 @@
                         <div class="context-hero-value" id="runtimeContextHeroValue">Sin contexto seleccionado</div>
                     </div>
                     <div class="context-hero-meta" id="runtimeContextHeroMeta">Selecciona una base antes de consultar.</div>
-                </div>
-            </div>
-
-            <div class="history-strip">
-                <div class="history-head">
-                    <div class="context-copy">
-                        <div class="context-title">Ultimas 10 consultas</div>
-                        <div class="context-subtitle">Reusa una consulta reciente, vuelve a ejecutarla o toma una como base.</div>
-                    </div>
-                    <button class="sql-toggle-btn" type="button" onclick="clearQueryHistory()">LIMPIAR HISTORIAL</button>
-                </div>
-                <div class="history-list" id="queryHistoryList">
-                    <div class="history-empty">Aun no hay consultas guardadas en este navegador.</div>
                 </div>
             </div>
 
@@ -1585,19 +1969,16 @@
                         <div class="feedback-title">Feedback de respuesta</div>
                         <div class="feedback-status" id="feedbackStatus">Indica si esta respuesta fue correcta o incorrecta.</div>
                     </div>
-                    <div class="feedback-actions">
-                        <button class="feedback-btn up" id="feedbackUpBtn" type="button" onclick="submitFeedback('Up')">
-                            <span class="feedback-icon">👍</span>
-                            <span>Correcta</span>
+                <div class="feedback-actions">
+                    <button class="feedback-btn up" id="feedbackUpBtn" type="button" onclick="submitFeedback('Up')">
+                        <span class="feedback-icon">👍</span>
+                        <span>Correcta</span>
                         </button>
                         <button class="feedback-btn down" id="feedbackDownBtn" type="button" onclick="submitFeedback('Down')">
                             <span class="feedback-icon">👎</span>
-                            <span>Incorrecta</span>
-                        </button>
-                    </div>
+                        <span>Incorrecta</span>
+                    </button>
                 </div>
-
-
             </div>
         </main>
     </div>

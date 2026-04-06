@@ -135,6 +135,52 @@ public class SqliteTrainingStore : ITrainingStore
         return result.ToList();
     }
 
+    public async Task<TrainingExample?> GetVerifiedExactMatchAsync(
+        string sqlitePath,
+        string question,
+        AskExecutionContext executionContext,
+        CancellationToken ct)
+    {
+        await using var connection = new SqliteConnection($"Data Source={sqlitePath}");
+        await connection.OpenAsync(ct);
+        await EnsureSchemaAsync(connection, ct);
+
+        const string query = @"
+            SELECT
+                Id,
+                Question,
+                Sql,
+                TenantKey,
+                NULLIF(Domain, '') AS Domain,
+                ConnectionName,
+                IntentName,
+                IsVerified,
+                Priority,
+                CreatedUtc,
+                LastUsedUtc,
+                COALESCE(UseCount, 0) AS UseCount
+            FROM TrainingExamples
+            WHERE IsVerified = 1
+              AND Question = @Question COLLATE NOCASE
+              AND TenantKey = @TenantKey
+              AND Domain = @Domain
+              AND ConnectionName = @ConnectionName
+            ORDER BY Priority DESC, LastUsedUtc DESC, Id DESC
+            LIMIT 1;";
+
+        return await connection.QueryFirstOrDefaultAsync<TrainingExample>(
+            new CommandDefinition(
+                query,
+                new
+                {
+                    Question = NormalizeText(question),
+                    TenantKey = NormalizeText(executionContext?.TenantKey),
+                    Domain = NormalizeText(executionContext?.Domain),
+                    ConnectionName = NormalizeText(executionContext?.ConnectionName)
+                },
+                cancellationToken: ct));
+    }
+
     private static async Task EnsureSchemaAsync(SqliteConnection connection, CancellationToken ct)
     {
         var columns = (await connection.QueryAsync<string>(

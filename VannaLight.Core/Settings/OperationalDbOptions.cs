@@ -1,4 +1,1 @@
-﻿
-
-namespace VannaLight.Core.Settings;
-public sealed record OperationalDbOptions(string ConnectionString);
+// Legacy placeholder after rename to BootstrapSqlConnectionOptions.

@@ -6,5 +6,5 @@ using VannaLight.Core.Models;
 namespace VannaLight.Core.Abstractions;
 public interface IForecastingService
 {
-    Task<PredictionIntent> PredictAsync(PredictionIntent intent);
+    Task<PredictionIntent> PredictAsync(PredictionIntent intent, AskExecutionContext executionContext, CancellationToken ct = default);
 }

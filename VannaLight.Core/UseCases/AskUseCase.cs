@@ -31,6 +31,7 @@ public record AskResult(
 
 public class AskUseCase(
     IRetriever retriever,
+    ITrainingStore trainingStore,
     ILlmClient llmClient,
     ISqlValidator validator,
     ISqlDryRunner dryRunner,
@@ -118,6 +119,31 @@ public class AskUseCase(
             ? null
             : patternMatch.IntentName;
 
+        var verifiedExactMatch = await trainingStore.GetVerifiedExactMatchAsync(
+            memoryDbPath,
+            question,
+            executionContext,
+            ct);
+
+        if (verifiedExactMatch is not null)
+        {
+            var fastPathResult = await ProcessSqlCandidateAsync(
+                                question,
+                                memoryDbPath,
+                                runtimeDbPath,
+                                sqlServerConnString,
+                                executionContext,
+                                normalizedDomain,
+                                verifiedExactMatch.Sql,
+                                inferredIntentName,
+                                allowedObjectNames,
+                                profileKey,
+                                exampleIdToTouch: verifiedExactMatch.Id,
+                                reviewReasonPrefix: "VerifiedExample",
+                                ct: ct);
+            return fastPathResult;
+        }
+
         if (patternMatch.IsMatch)
         {
             var patternSql = templateSqlBuilder.BuildSql(patternMatch);
@@ -132,59 +158,19 @@ public class AskUseCase(
                     AskFailureKind.GenerationError);
             }
 
-            if (!validator.TryValidate(patternSql, normalizedDomain, out var patternValidationError))
-            {
-                var reviewId = await TryEnqueueReviewAsync(
-                    runtimeDbPath,
-                    question,
-                    patternSql,
-                    patternValidationError,
-                    "UnsafePattern",
-                    ct);
-
-                return new AskResult(
-                    false,
-                    patternSql,
-                    $"Validacion fallida en patron: {patternValidationError}",
-                    false,
-                    AskFailureKind.ValidationError,
-                    reviewId);
-            }
-
-            var passedPatternDryRun = false;
-
-            if (settings.Security.DryRunEnabledByDefault)
-            {
-                var (ok, error) = await dryRunner.DryRunAsync(sqlServerConnString, patternSql, ct);
-
-                if (!ok)
-                {
-                    var reviewId = await TryEnqueueReviewAsync(
-                        runtimeDbPath,
-                        question,
-                        patternSql,
-                        error,
-                        "PatternNotCompiling",
-                        ct);
-
-                    return new AskResult(
-                        false,
-                        patternSql,
-                        $"Error de compilacion en patron: {error}",
-                        false,
-                        AskFailureKind.DryRunError,
-                        reviewId);
-                }
-
-                passedPatternDryRun = true;
-            }
-
-            return new AskResult(
-                true,
+            return await ProcessSqlCandidateAsync(
+                question,
+                memoryDbPath,
+                runtimeDbPath,
+                sqlServerConnString,
+                executionContext,
+                normalizedDomain,
                 patternSql,
-                null,
-                passedPatternDryRun,
-                AskFailureKind.None);
+                inferredIntentName,
+                allowedObjectNames,
+                profileKey,
+                reviewReasonPrefix: "Pattern",
+                ct: ct);
         }
 
         // Solo si no hubo pattern, caer al flujo LLM
@@ -207,7 +193,7 @@ public class AskUseCase(
             maxHints: 8,
             ct);
 
-        var prompt = await BuildPromptAsync(question, context, rules, semanticHints, allowedObjectNames, profileKey, ct);
+        var prompt = await BuildPromptAsync(question, context, rules, semanticHints, allowedObjectNames, profileKey, null, ct);
 
         var rawSql = await llmClient.GenerateSqlAsync(prompt, ct);
         var cleanSql = CleanLlmOutput(rawSql);
@@ -222,62 +208,168 @@ public class AskUseCase(
                 AskFailureKind.GenerationError);
         }
 
-        if (!validator.TryValidate(cleanSql, normalizedDomain, out var validationError))
-        {
-            var reviewId = await TryEnqueueReviewAsync(
-                runtimeDbPath,
-                question,
-                cleanSql,
-                validationError,
-                "Unsafe",
-                ct);
-
-            return new AskResult(
-                false,
-                cleanSql,
-                $"Validacion fallida: {validationError}",
-                false,
-                AskFailureKind.ValidationError,
-                reviewId);
-        }
-
-        var passedDryRun = false;
-
-        if (settings.Security.DryRunEnabledByDefault)
-        {
-            var (ok, error) = await dryRunner.DryRunAsync(sqlServerConnString, cleanSql, ct);
-
-            if (!ok)
-            {
-                var reviewId = await TryEnqueueReviewAsync(
-                    runtimeDbPath,
+        return await ProcessSqlCandidateAsync(
                     question,
+                    memoryDbPath,
+                    runtimeDbPath,
+                    sqlServerConnString,
+                    executionContext,
+                    normalizedDomain,
                     cleanSql,
-                    error,
-                    "NotCompiling",
-                    ct);
-
-                return new AskResult(
-                    false,
-                    cleanSql,
-                    $"Error de compilacion: {error}",
-                    false,
-                    AskFailureKind.DryRunError,
-                    reviewId);
-            }
-
-            passedDryRun = true;
-        }
-
-        return new AskResult(
-            true,
-            cleanSql,
-            null,
-            passedDryRun,
-            AskFailureKind.None);
+                    inferredIntentName,
+                    allowedObjectNames,
+                    profileKey,
+                    existingContext: context,
+                    existingRules: rules,
+                    existingSemanticHints: semanticHints,
+                    reviewReasonPrefix: "Llm",
+                    ct: ct);
     }
 
-    public async Task<AskResult> PredictAsync(string question, CancellationToken ct = default)
+    private async Task<AskResult> ProcessSqlCandidateAsync(
+    string question,
+    string memoryDbPath,
+    string runtimeDbPath,
+    string sqlServerConnString,
+    AskExecutionContext executionContext,
+    string normalizedDomain,
+    string candidateSql,
+    string? intentName,
+    IReadOnlyList<string> allowedObjectNames,
+    string? profileKey,
+    CancellationToken ct, // ✅ ahora va antes
+    RetrievalContext? existingContext = null,
+    IReadOnlyList<BusinessRule>? existingRules = null,
+    IReadOnlyList<SemanticHint>? existingSemanticHints = null,
+    long? exampleIdToTouch = null,
+    string reviewReasonPrefix = "Sql")
+    {
+        var initialSql = CleanLlmOutput(candidateSql);
+        if (string.IsNullOrWhiteSpace(initialSql))
+        {
+            return new AskResult(
+                false,
+                string.Empty,
+                "El SQL candidato esta vacio o no es utilizable.",
+                false,
+                AskFailureKind.GenerationError);
+        }
+
+        var firstAttempt = await ValidateSqlCandidateAsync(
+            initialSql,
+            sqlServerConnString,
+            normalizedDomain,
+            ct);
+
+        if (firstAttempt.Success)
+        {
+            if (exampleIdToTouch.HasValue)
+            {
+                await trainingStore.TouchExampleAsync(memoryDbPath, exampleIdToTouch.Value, ct);
+            }
+            return new AskResult(
+                true,
+                initialSql,
+                null,
+                firstAttempt.PassedDryRun,
+                AskFailureKind.None);
+        }
+
+        if (firstAttempt.FailureKind is AskFailureKind.ValidationError or AskFailureKind.DryRunError)
+        {
+            var retryContext = existingContext ?? await retriever.RetrieveAsync(
+                memoryDbPath,
+                question,
+                executionContext,
+                intentName,
+                ct);
+
+            var retryRules = existingRules ?? await businessRuleStore.GetActiveRulesAsync(
+                memoryDbPath,
+                normalizedDomain,
+                maxRules: 6,
+                ct);
+
+            var retrySemanticHints = existingSemanticHints ?? await semanticHintStore.GetActiveHintsAsync(
+                memoryDbPath,
+                normalizedDomain,
+                maxHints: 8,
+                ct);
+
+            var correctedSql = await TrySelfCorrectSqlAsync(
+                question,
+                initialSql,
+                firstAttempt.Error ?? "Fallo desconocido.",
+                retryContext,
+                retryRules,
+                retrySemanticHints,
+                allowedObjectNames,
+                profileKey,
+                ct);
+
+            if (!string.IsNullOrWhiteSpace(correctedSql))
+            {
+                var normalizedCorrectedSql = CleanLlmOutput(correctedSql);
+                if (!string.IsNullOrWhiteSpace(normalizedCorrectedSql))
+                {
+                    var secondAttempt = await ValidateSqlCandidateAsync(
+                        normalizedCorrectedSql,
+                        sqlServerConnString,
+                        normalizedDomain,
+                        ct);
+
+                    if (secondAttempt.Success)
+                    {
+                        if (exampleIdToTouch.HasValue)
+                        {
+                            await trainingStore.TouchExampleAsync(memoryDbPath, exampleIdToTouch.Value, ct);
+                        }
+
+                        return new AskResult(
+                            true,
+                            normalizedCorrectedSql,
+                            null,
+                            secondAttempt.PassedDryRun,
+                            AskFailureKind.None);
+                    }
+
+                    var retryReviewId = await TryEnqueueReviewAsync(
+                        runtimeDbPath,
+                        question,
+                        normalizedCorrectedSql,
+                        secondAttempt.Error,
+                        $"{reviewReasonPrefix}RequiresReview",
+                        ct);
+
+                    return new AskResult(
+                        false,
+                        normalizedCorrectedSql,
+                        $"No pude corregir el SQL automaticamente. {secondAttempt.Error}",
+                        false,
+                        secondAttempt.FailureKind,
+                        retryReviewId);
+                }
+            }
+        }
+
+        var reviewId = await TryEnqueueReviewAsync(
+            runtimeDbPath,
+            question,
+            initialSql,
+            firstAttempt.Error,
+            $"{reviewReasonPrefix}RequiresReview",
+            ct);
+
+        return new AskResult(
+            false,
+            initialSql,
+            $"No pude corregir el SQL automaticamente. {firstAttempt.Error}",
+            false,
+            firstAttempt.FailureKind,
+            reviewId);
+    }
+
+    public async Task<AskResult> PredictAsync(string question, AskExecutionContext executionContext, CancellationToken ct = default)
     {
         var intent = await predictionRouter.ParseAsync(question, ct);
 
@@ -291,7 +383,7 @@ public class AskUseCase(
                 AskFailureKind.GenerationError);
         }
 
-        intent = await forecaster.PredictAsync(intent);
+        intent = await forecaster.PredictAsync(intent, executionContext, ct);
         var humanizedText = await humanizer.HumanizeAsync(intent, ct);
 
         var predictionJson = JsonSerializer.Serialize(new
@@ -367,6 +459,7 @@ public class AskUseCase(
         IReadOnlyList<SemanticHint> semanticHints,
         IReadOnlyList<string> allowedObjectNames,
         string? profileKey,
+        string? retryInstructions,
         CancellationToken ct)
     {
         var maxPromptChars = await GetPromptIntAsync("MaxPromptChars", 9000, profileKey, ct);
@@ -520,6 +613,12 @@ public class AskUseCase(
         sb.AppendLine("<|im_start|>user");
         sb.AppendLine(questionHeader);
         sb.AppendLine(question?.Trim() ?? string.Empty);
+        if (!string.IsNullOrWhiteSpace(retryInstructions))
+        {
+            sb.AppendLine();
+            sb.AppendLine("CONTEXTO DE CORRECCION:");
+            sb.AppendLine(retryInstructions.Trim());
+        }
         sb.AppendLine("<|im_end|>");
         sb.AppendLine("<|im_start|>assistant");
 
@@ -635,5 +734,72 @@ public class AskUseCase(
             clean = sqlMatch.Value;
 
         return clean.Trim();
+    }
+
+    private async Task<(bool Success, AskFailureKind FailureKind, string? Error, bool PassedDryRun)> ValidateSqlCandidateAsync(
+        string sql,
+        string sqlServerConnString,
+        string normalizedDomain,
+        CancellationToken ct)
+    {
+        if (!validator.TryValidate(sql, normalizedDomain, out var validationError))
+        {
+            return (false, AskFailureKind.ValidationError, $"Validacion fallida: {validationError}", false);
+        }
+
+        if (!settings.Security.DryRunEnabledByDefault)
+        {
+            return (true, AskFailureKind.None, null, false);
+        }
+
+        var (ok, error) = await dryRunner.DryRunAsync(sqlServerConnString, sql, ct);
+        if (!ok)
+        {
+            return (false, AskFailureKind.DryRunError, $"Error de compilacion: {error}", false);
+        }
+
+        return (true, AskFailureKind.None, null, true);
+    }
+
+    private async Task<string> TrySelfCorrectSqlAsync(
+        string question,
+        string failedSql,
+        string exactError,
+        RetrievalContext context,
+        IReadOnlyList<BusinessRule> rules,
+        IReadOnlyList<SemanticHint> semanticHints,
+        IReadOnlyList<string> allowedObjectNames,
+        string? profileKey,
+        CancellationToken ct)
+    {
+        var retryInstructions =
+            $"""
+            La propuesta anterior fallo y debes corregirla en un solo reintento.
+            Pregunta original: {question.Trim()}
+            SQL fallido:
+            {failedSql.Trim()}
+
+            Error exacto:
+            {exactError.Trim()}
+
+            Reglas obligatorias para corregir:
+            - conserva la intencion original de la pregunta
+            - usa solo objetos SQL permitidos
+            - no inventes tablas, vistas ni columnas
+            - corrige el SQL usando el error exacto de validacion o compilacion
+            - devuelve SOLO SQL valido para SQL Server
+            """;
+
+        var retryPrompt = await BuildPromptAsync(
+            question,
+            context,
+            rules,
+            semanticHints,
+            allowedObjectNames,
+            profileKey,
+            retryInstructions,
+            ct);
+
+        return await llmClient.GenerateSqlAsync(retryPrompt, ct);
     }
 }

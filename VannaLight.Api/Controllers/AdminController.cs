@@ -1,13 +1,15 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using VannaLight.Api.Contracts;
 using VannaLight.Api.Services;
+using VannaLight.Api.Services.Predictions;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.Models;
 using VannaLight.Core.Settings;
@@ -154,6 +156,39 @@ public record ConnectionProfileUpsertRequest(
     string ConnectionString,
     string? Description);
 
+public record MlTrainingProfileUpsertRequest(
+    string? ProfileName,
+    string? DisplayName,
+    string? SourceMode,
+    string? ConnectionName,
+    string? Description,
+    string? ShiftTableName,
+    string? ProductionViewName,
+    string? ScrapViewName,
+    string? DowntimeViewName,
+    string? TrainingSql);
+
+public record PredictionProfileUpsertRequest(
+    long Id,
+    string Domain,
+    string ProfileKey,
+    string DisplayName,
+    string DomainPackKey,
+    string TargetMetricKey,
+    string CalendarProfileKey,
+    string Grain,
+    int Horizon,
+    string HorizonUnit,
+    string ModelType,
+    string? ConnectionName,
+    string? SourceMode,
+    string? TargetSeriesSource,
+    string? FeatureSourcesJson,
+    string? GroupByJson,
+    string? FiltersJson,
+    string? Notes,
+    bool IsActive);
+
 internal sealed record ConnectionValidationMetadata(
     string ServerHost,
     string DatabaseName,
@@ -176,7 +211,8 @@ public class AdminController(
     ISchemaIngestor schemaIngestor,
     ISchemaStore schemaStore,
     ILlmProfileStore profileStore,
-    WiDocIngestor wiIngestor,
+    DocumentIngestor documentIngestor,
+    IDocChunkRepository docChunkRepository,
     IBusinessRuleStore businessRuleStore,
     ISemanticHintStore semanticHintStore,
     IQueryPatternStore queryPatternStore,
@@ -184,8 +220,10 @@ public class AdminController(
     ITenantStore tenantStore,
     ITenantDomainStore tenantDomainStore,
     ITrainingStore trainingStore,
+    IPredictionProfileStore predictionProfileStore,
     SqliteOptions sqliteOptions,
-    OperationalDbOptions operationalDbOptions,
+    IMlTrainingProfileProvider mlTrainingProfileProvider,
+    IDomainPackProvider domainPackProvider,
     Microsoft.AspNetCore.DataProtection.IDataProtectionProvider dataProtectionProvider,
     IngestUseCase ingestUseCase,
     TrainExampleUseCase useCase,
@@ -200,16 +238,16 @@ public class AdminController(
     public async Task<IActionResult> Train([FromBody] TrainRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (!Guid.TryParse(request.JobId, out var jobId))
-            return BadRequest(new { Error = "JobId inválido." });
+            return BadRequest(new { Error = "JobId invÃ¯Â¿Â½lido." });
 
         try
         {
             var job = await jobStore.GetJobAsync(jobId, ct);
             if (job is null)
-                return NotFound(new { Error = "No se encontró el job a actualizar en runtime." });
+                return NotFound(new { Error = "No se encontrÃ¯Â¿Â½ el job a actualizar en runtime." });
 
             await useCase.TrainAsync(
                 request.Question,
@@ -231,7 +269,7 @@ public class AdminController(
                 ct);
 
             if (!updated)
-                return NotFound(new { Error = "No se encontró el job a actualizar en runtime." });
+                return NotFound(new { Error = "No se encontrÃ¯Â¿Â½ el job a actualizar en runtime." });
 
             return Ok(new
             {
@@ -247,14 +285,14 @@ public class AdminController(
         }
     }
 
-    [HttpPost("reindex-wi")]
-    public async Task<IActionResult> ReindexWi(CancellationToken ct)
+    [HttpPost("reindex-docs")]
+    public async Task<IActionResult> ReindexDocuments(CancellationToken ct)
     {
-        var result = await wiIngestor.ReindexAsync(ct);
+        var result = await documentIngestor.ReindexAsync(ct);
 
         return Ok(new
         {
-            Message = "Reindex de WI completado.",
+            Message = "Reindex de documentos completado.",
             result.TotalFiles,
             result.Indexed,
             result.Skipped,
@@ -262,17 +300,377 @@ public class AdminController(
         });
     }
 
-    [HttpPost("reindex-schema")]
-    public async Task<IActionResult> ReindexSchema(CancellationToken ct)
+    [HttpPost("reindex-wi")]
+    public Task<IActionResult> ReindexWi(CancellationToken ct)
+        => ReindexDocuments(ct);
+
+    [HttpGet("documents")]
+    public async Task<IActionResult> GetDocuments([FromQuery] string? domain, [FromQuery] int limit = 200, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(operationalDbOptions.ConnectionString))
+        var docsDomain = string.IsNullOrWhiteSpace(domain)
+            ? (configuration["Docs:DefaultDomain"] ?? "work-instructions")
+            : domain.Trim();
+
+        var documents = await docChunkRepository.GetDocumentsByDomainAsync(sqliteOptions.DbPath, docsDomain, Math.Clamp(limit, 1, 500), ct);
+        return Ok(documents);
+    }
+
+    [HttpGet("documents/status")]
+    public async Task<IActionResult> GetDocumentsStatus(CancellationToken ct = default)
+    {
+        var rootPath = await documentIngestor.ResolveDocumentsRootPathAsync(ct);
+        var defaultDomain = await documentIngestor.ResolveDocumentsDomainAsync(ct);
+        var filesOnDisk = Directory.Exists(rootPath)
+            ? Directory.EnumerateFiles(rootPath, "*.pdf", SearchOption.AllDirectories).Count()
+            : 0;
+        var indexedDocuments = await docChunkRepository.GetDocumentsByDomainAsync(sqliteOptions.DbPath, null, 1000, ct);
+
+        return Ok(new
+        {
+            RootPath = rootPath,
+            DefaultDomain = defaultDomain,
+            FilesOnDisk = filesOnDisk,
+            IndexedDocuments = indexedDocuments.Count(),
+            RootExists = Directory.Exists(rootPath)
+        });
+    }
+
+    [HttpGet("documents/{docId}/chunks")]
+    public async Task<IActionResult> GetDocumentChunks(string docId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(docId))
+            return BadRequest(new { Error = "DocId requerido." });
+
+        var chunks = await docChunkRepository.GetDocumentChunksAsync(sqliteOptions.DbPath, docId.Trim(), ct);
+        return Ok(chunks);
+    }
+
+    [HttpPost("documents/upload")]
+    [RequestSizeLimit(50_000_000)]
+    public async Task<IActionResult> UploadDocument([FromForm] IFormFile? file, CancellationToken ct)
+    {
+        if (file is null || file.Length <= 0)
+            return BadRequest(new { Error = "Adjunta un archivo PDF válido." });
+
+        var saved = await SaveUploadedDocumentsAsync(new[] { file }, ct);
+
+        return Ok(new
+        {
+            Message = "Documento cargado correctamente.",
+            FileName = saved[0].FileName,
+            Path = saved[0].Path
+        });
+    }
+
+    [HttpPost("documents/upload-bulk")]
+    [RequestSizeLimit(250_000_000)]
+    public async Task<IActionResult> UploadDocumentsBulk([FromForm] List<IFormFile>? files, CancellationToken ct)
+    {
+        if (files is null || files.Count == 0)
+            return BadRequest(new { Error = "Adjunta al menos un archivo PDF v�lido." });
+
+        var results = new List<object>();
+        var validFiles = new List<IFormFile>();
+
+        foreach (var file in files)
+        {
+            if (file is null || file.Length <= 0)
+            {
+                results.Add(new { FileName = file?.FileName ?? "(vac�o)", Status = "failed", Error = "Archivo vac�o o inv�lido." });
+                continue;
+            }
+
+            if (!string.Equals(Path.GetExtension(file.FileName), ".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                results.Add(new { FileName = file.FileName, Status = "failed", Error = "Solo se permiten archivos PDF." });
+                continue;
+            }
+
+            validFiles.Add(file);
+        }
+
+        if (validFiles.Count > 0)
+        {
+            var saved = await SaveUploadedDocumentsAsync(validFiles, ct);
+            results.AddRange(saved.Select(item => new
+            {
+                item.FileName,
+                Status = "uploaded",
+                item.Path
+            }));
+        }
+
+        var uploaded = results.Count(x => string.Equals(x.GetType().GetProperty("Status")?.GetValue(x)?.ToString(), "uploaded", StringComparison.OrdinalIgnoreCase));
+        var failed = results.Count - uploaded;
+
+        return Ok(new
+        {
+            Message = $"Carga masiva completada. Subidos: {uploaded}. Fallidos: {failed}.",
+            Uploaded = uploaded,
+            Failed = failed,
+            Files = results
+        });
+    }
+
+    private async Task<List<(string FileName, string Path)>> SaveUploadedDocumentsAsync(IEnumerable<IFormFile> files, CancellationToken ct)
+    {
+        var rootPath = await documentIngestor.ResolveDocumentsRootPathAsync(ct);
+        Directory.CreateDirectory(rootPath);
+
+        var saved = new List<(string FileName, string Path)>();
+
+        foreach (var file in files)
+        {
+            if (!string.Equals(Path.GetExtension(file.FileName), ".pdf", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Solo se permiten archivos PDF.");
+
+            var safeFileName = Path.GetFileName(file.FileName);
+            var destination = Path.Combine(rootPath, safeFileName);
+
+            await using var stream = System.IO.File.Create(destination);
+            await file.CopyToAsync(stream, ct);
+            saved.Add((safeFileName, destination));
+        }
+
+        return saved;
+    }
+
+    [HttpGet("ml/status")]
+    public async Task<IActionResult> GetMlStatus(CancellationToken ct = default)
+    {
+        var profile = await mlTrainingProfileProvider.GetActiveProfileAsync(ct);
+        var modelPath = MlModelTrainer.ModelPath;
+        var modelExists = System.IO.File.Exists(modelPath);
+        var fileInfo = modelExists ? new FileInfo(modelPath) : null;
+        var metadata = MlModelTrainer.LoadMetadata();
+        var profileAligned = modelExists && MlModelTrainer.IsModelAlignedWithProfile(profile);
+        var connectionReady = false;
+        string? connectionError = null;
+
+        try
+        {
+            var connectionString = await mlTrainingProfileProvider.ResolveConnectionStringAsync(profile, ct);
+            connectionReady = !string.IsNullOrWhiteSpace(connectionString);
+        }
+        catch (Exception ex)
+        {
+            connectionError = ex.Message;
+        }
+
+        return Ok(new
+        {
+            ModelPath = modelPath,
+            ModelExists = modelExists,
+            ModelSizeBytes = fileInfo?.Length ?? 0,
+            ModelLastWriteUtc = fileInfo?.LastWriteTimeUtc,
+            ModelDirectory = Path.GetDirectoryName(modelPath),
+            ModelDirectoryExists = Directory.Exists(Path.GetDirectoryName(modelPath) ?? string.Empty),
+            OperationalConnectionReady = connectionReady,
+            ConnectionError = connectionError,
+            ModelAlignedWithProfile = profileAligned,
+            ModelProfileSignature = metadata?.ProfileSignature,
+            ModelTrainedUtc = metadata?.TrainedUtc,
+            ProfileName = profile.ProfileName,
+            DisplayName = profile.DisplayName,
+            SourceMode = profile.NormalizedSourceMode,
+            ConnectionName = profile.ConnectionName,
+            Description = profile.Description,
+            ShiftTableName = profile.ShiftTableQualifiedName,
+            ProductionViewName = profile.ProductionViewQualifiedName,
+            ScrapViewName = profile.ScrapViewQualifiedName,
+            DowntimeViewName = profile.DowntimeViewQualifiedName,
+            TrainingSql = profile.TrainingSqlNormalized
+        });
+    }
+
+    [HttpPost("ml/profile")]
+    public async Task<IActionResult> SaveMlProfile([FromBody] MlTrainingProfileUpsertRequest request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { Error = "Body inv�lido." });
+
+        var profile = await GetActiveSystemConfigProfileAsync(ct);
+        if (profile is null)
+            return NotFound(new { Error = "No hay perfil activo de SystemConfig." });
+
+        var sourceMode = string.Equals(request.SourceMode?.Trim(), MlTrainingProfile.CustomSqlMode, StringComparison.OrdinalIgnoreCase)
+            ? MlTrainingProfile.CustomSqlMode
+            : MlTrainingProfile.KpiViewsMode;
+
+        if (string.Equals(sourceMode, MlTrainingProfile.CustomSqlMode, StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(request.TrainingSql))
+        {
+            return BadRequest(new { Error = "TrainingSql es requerido cuando SourceMode = CustomSql." });
+        }
+
+        var now = DateTime.UtcNow.ToString("O");
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "ProfileName", string.IsNullOrWhiteSpace(request.ProfileName) ? "default-forecast" : request.ProfileName.Trim(), "string", "Identificador del perfil ML activo.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "DisplayName", string.IsNullOrWhiteSpace(request.DisplayName) ? "Forecasting Profile" : request.DisplayName.Trim(), "string", "Nombre visible del perfil ML.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "SourceMode", sourceMode, "string", "Modo de fuente del dataset ML.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "ConnectionName", request.ConnectionName?.Trim() ?? string.Empty, "string", "Nombre l�gico de la conexi�n SQL usada por el entrenamiento ML.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "Description", request.Description?.Trim() ?? string.Empty, "string", "Descripci�n operativa del perfil ML.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "ShiftTableName", request.ShiftTableName?.Trim() ?? "dbo.Turnos", "string", "Tabla de turnos usada por el perfil ML cuando SourceMode = KpiViews.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "ProductionViewName", request.ProductionViewName?.Trim() ?? string.Empty, "string", "Vista de producci�n para el perfil ML.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "ScrapViewName", request.ScrapViewName?.Trim() ?? string.Empty, "string", "Vista de scrap para el perfil ML.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "DowntimeViewName", request.DowntimeViewName?.Trim() ?? string.Empty, "string", "Vista de downtime para el perfil ML.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "TrainingSql", request.TrainingSql?.Trim() ?? string.Empty, "string", "Consulta can�nica para entrenamiento ML cuando SourceMode = CustomSql.", now, ct);
+
+        var savedProfile = await mlTrainingProfileProvider.GetActiveProfileAsync(ct);
+
+        return Ok(new
+        {
+            Message = "Perfil ML guardado correctamente.",
+            ProfileName = savedProfile.ProfileName,
+            DisplayName = savedProfile.DisplayName,
+            SourceMode = savedProfile.NormalizedSourceMode,
+            ConnectionName = savedProfile.ConnectionName,
+            Description = savedProfile.Description,
+            ShiftTableName = savedProfile.ShiftTableQualifiedName,
+            ProductionViewName = savedProfile.ProductionViewQualifiedName,
+            ScrapViewName = savedProfile.ScrapViewQualifiedName,
+            DowntimeViewName = savedProfile.DowntimeViewQualifiedName,
+            TrainingSql = savedProfile.TrainingSqlNormalized
+        });
+    }
+
+    [HttpPost("ml/train")]
+    public async Task<IActionResult> TrainMlModel(CancellationToken ct)
+    {
+        var profile = await mlTrainingProfileProvider.GetActiveProfileAsync(ct);
+        string connectionString;
+
+        try
+        {
+            connectionString = await mlTrainingProfileProvider.ResolveConnectionStringAsync(profile, ct);
+        }
+        catch (Exception ex)
         {
             return BadRequest(new
             {
-                Error = "OperationalDbOptions.ConnectionString no está configurado."
+                Error = $"No hay una conexi�n v�lida para entrenar el modelo ML. {ex.Message}"
             });
         }
 
+        await Task.Run(() => MlModelTrainer.TrainAndSaveModel(connectionString, profile), ct);
+
+        var modelPath = MlModelTrainer.ModelPath;
+        var fileInfo = System.IO.File.Exists(modelPath) ? new FileInfo(modelPath) : null;
+        var metadata = MlModelTrainer.LoadMetadata();
+
+        return Ok(new
+        {
+            Message = "Entrenamiento ML completado correctamente.",
+            ModelPath = modelPath,
+            ModelExists = fileInfo is not null,
+            ModelSizeBytes = fileInfo?.Length ?? 0,
+            ModelLastWriteUtc = fileInfo?.LastWriteTimeUtc,
+            ModelAlignedWithProfile = MlModelTrainer.IsModelAlignedWithProfile(profile),
+            ModelProfileSignature = metadata?.ProfileSignature,
+            ModelTrainedUtc = metadata?.TrainedUtc,
+            ProfileName = profile.ProfileName,
+            DisplayName = profile.DisplayName,
+            SourceMode = profile.NormalizedSourceMode,
+            ConnectionName = profile.ConnectionName,
+            ShiftTableName = profile.ShiftTableQualifiedName,
+            ProductionViewName = profile.ProductionViewQualifiedName,
+            ScrapViewName = profile.ScrapViewQualifiedName,
+            DowntimeViewName = profile.DowntimeViewQualifiedName,
+            TrainingSql = profile.TrainingSqlNormalized
+        });
+    }
+
+    [HttpGet("prediction-profiles")]
+    public async Task<IActionResult> GetPredictionProfiles([FromQuery] string? domain, CancellationToken ct = default)
+    {
+        var normalizedDomain = string.IsNullOrWhiteSpace(domain)
+            ? (await systemConfigProvider.GetValueAsync("Retrieval", "Domain", ct: ct))?.Trim() ?? "erp-kpi-pilot"
+            : domain.Trim();
+
+        var profiles = await predictionProfileStore.GetAllAsync(sqliteOptions.DbPath, normalizedDomain, ct);
+        return Ok(profiles);
+    }
+
+    [HttpPost("prediction-profiles")]
+    public async Task<IActionResult> UpsertPredictionProfile([FromBody] PredictionProfileUpsertRequest request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { Error = "Body inv�lido." });
+
+        if (string.IsNullOrWhiteSpace(request.Domain))
+            return BadRequest(new { Error = "Domain es requerido." });
+
+        if (string.IsNullOrWhiteSpace(request.ProfileKey))
+            return BadRequest(new { Error = "ProfileKey es requerido." });
+
+        if (string.IsNullOrWhiteSpace(request.DisplayName))
+            return BadRequest(new { Error = "DisplayName es requerido." });
+
+        var existing = request.Id > 0
+            ? (await predictionProfileStore.GetAllAsync(sqliteOptions.DbPath, request.Domain.Trim(), ct)).FirstOrDefault(x => x.Id == request.Id)
+            : await predictionProfileStore.GetAsync(sqliteOptions.DbPath, request.Domain.Trim(), request.ProfileKey.Trim(), ct);
+
+        var now = DateTime.UtcNow.ToString("O");
+        var normalizedDomain = request.Domain.Trim();
+        var isNorthwindDomain = normalizedDomain.Contains("northwind", StringComparison.OrdinalIgnoreCase);
+
+        var profile = new PredictionProfile
+        {
+            Id = request.Id > 0 ? request.Id : existing?.Id ?? 0,
+            Domain = normalizedDomain,
+            ProfileKey = request.ProfileKey.Trim(),
+            DisplayName = request.DisplayName.Trim(),
+            DomainPackKey = string.IsNullOrWhiteSpace(request.DomainPackKey)
+                ? (isNorthwindDomain ? "northwind-sales" : "industrial-kpi")
+                : request.DomainPackKey.Trim(),
+            TargetMetricKey = string.IsNullOrWhiteSpace(request.TargetMetricKey)
+                ? (isNorthwindDomain ? "units_sold" : "scrap_qty")
+                : request.TargetMetricKey.Trim(),
+            CalendarProfileKey = string.IsNullOrWhiteSpace(request.CalendarProfileKey)
+                ? (isNorthwindDomain ? "standard-calendar" : "shift-calendar")
+                : request.CalendarProfileKey.Trim(),
+            Grain = string.IsNullOrWhiteSpace(request.Grain)
+                ? (isNorthwindDomain ? "day" : "day")
+                : request.Grain.Trim(),
+            Horizon = request.Horizon <= 0 ? (isNorthwindDomain ? 7 : 1) : request.Horizon,
+            HorizonUnit = string.IsNullOrWhiteSpace(request.HorizonUnit)
+                ? "day"
+                : request.HorizonUnit.Trim(),
+            ModelType = string.IsNullOrWhiteSpace(request.ModelType) ? "FastTree" : request.ModelType.Trim(),
+            ConnectionName = string.IsNullOrWhiteSpace(request.ConnectionName) ? null : request.ConnectionName.Trim(),
+            SourceMode = string.IsNullOrWhiteSpace(request.SourceMode)
+                ? (isNorthwindDomain ? MlTrainingProfile.CustomSqlMode : MlTrainingProfile.KpiViewsMode)
+                : request.SourceMode.Trim(),
+            TargetSeriesSource = string.IsNullOrWhiteSpace(request.TargetSeriesSource) ? null : request.TargetSeriesSource.Trim(),
+            FeatureSourcesJson = string.IsNullOrWhiteSpace(request.FeatureSourcesJson) ? null : request.FeatureSourcesJson.Trim(),
+            GroupByJson = string.IsNullOrWhiteSpace(request.GroupByJson) ? null : request.GroupByJson.Trim(),
+            FiltersJson = string.IsNullOrWhiteSpace(request.FiltersJson) ? null : request.FiltersJson.Trim(),
+            Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
+            IsActive = request.IsActive,
+            CreatedUtc = existing?.CreatedUtc ?? now,
+            UpdatedUtc = now
+        };
+
+        var id = await predictionProfileStore.UpsertAsync(sqliteOptions.DbPath, profile, ct);
+        return Ok(new
+        {
+            Message = "PredictionProfile guardado correctamente.",
+            Id = id
+        });
+    }
+
+    [HttpGet("domain-pack-preview")]
+    public async Task<IActionResult> GetDomainPackPreview([FromQuery] string? domain, CancellationToken ct = default)
+    {
+        var normalizedDomain = string.IsNullOrWhiteSpace(domain)
+            ? (await systemConfigProvider.GetValueAsync("Retrieval", "Domain", ct: ct))?.Trim() ?? "erp-kpi-pilot"
+            : domain.Trim();
+
+        var pack = await domainPackProvider.GetDomainPackAsync(normalizedDomain, ct);
+        return Ok(pack);
+    }
+    [HttpPost("reindex-schema")]
+    public async Task<IActionResult> ReindexSchema(CancellationToken ct)
+    {
         if (string.IsNullOrWhiteSpace(sqliteOptions.DbPath))
         {
             return BadRequest(new
@@ -283,12 +681,21 @@ public class AdminController(
 
         try
         {
+            var bootstrapConnectionString = await operationalConnectionResolver.ResolveOperationalConnectionStringAsync(ct);
+            if (string.IsNullOrWhiteSpace(bootstrapConnectionString))
+            {
+                return BadRequest(new
+                {
+                    Error = "No hay una conexión bootstrap configurada para reindexar schema."
+                });
+            }
+
             logger.LogInformation(
                 "Iniciando reindexación de schema. SqliteDbPath: {SqliteDbPath}",
                 sqliteOptions.DbPath);
 
             await ingestUseCase.ExecuteAsync(
-                operationalDbOptions.ConnectionString,
+                bootstrapConnectionString,
                 sqliteOptions.DbPath,
                 ct);
 
@@ -320,18 +727,25 @@ public class AdminController(
         }
     }
 
+
     // ==========================================
     // 2. HISTORIAL DE TRABAJOS (SLIM)
     // ==========================================
 
     [HttpGet("history")]
-    public async Task<IActionResult> GetHistory(CancellationToken ct)
+    public async Task<IActionResult> GetHistory([FromQuery] string? tenantKey, [FromQuery] string? domain, [FromQuery] string? connectionName, CancellationToken ct)
     {
         try
         {
             // FIX: Forzamos el modo "Data" (SQL).
             // El Admin de RAG NUNCA debe ver las predicciones de ML.NET.
-            var jobs = await jobStore.GetRecentJobsAsync(100, "Data", ct);
+            var jobs = await jobStore.GetRecentJobsAsync(
+                100,
+                "Data",
+                string.IsNullOrWhiteSpace(tenantKey) ? null : tenantKey.Trim(),
+                string.IsNullOrWhiteSpace(domain) ? null : domain.Trim(),
+                string.IsNullOrWhiteSpace(connectionName) ? null : connectionName.Trim(),
+                ct);
             return Ok(jobs);
         }
         catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
@@ -375,6 +789,10 @@ public class AdminController(
             var defaultSystemProfile = configuration["SystemStartup:DefaultSystemProfile"] ?? "default";
             var profile = await GetActiveSystemConfigProfileAsync(ct);
             var connections = await connectionProfileStore.GetAllAsync(environmentName, ct);
+            var availableConnectionNames = connections
+                .Select(x => x.ConnectionName)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var tenants = await tenantStore.GetAllAsync(ct);
             var runtimeContexts = new List<object>();
             foreach (var tenant in tenants.Where(t => t.IsActive))
@@ -382,6 +800,9 @@ public class AdminController(
                 var mappings = await tenantDomainStore.GetAllByTenantAsync(tenant.TenantKey, ct);
                 foreach (var mapping in mappings.Where(m => m.IsActive))
                 {
+                    if (!availableConnectionNames.Contains(mapping.ConnectionName))
+                        continue;
+
                     runtimeContexts.Add(new
                     {
                         tenantKey = tenant.TenantKey,
@@ -390,7 +811,7 @@ public class AdminController(
                         connectionName = mapping.ConnectionName,
                         systemProfileKey = string.IsNullOrWhiteSpace(mapping.SystemProfileKey) ? "default" : mapping.SystemProfileKey,
                         isDefault = mapping.IsDefault,
-                        label = $"{tenant.DisplayName} · {mapping.Domain} · {mapping.ConnectionName}"
+                        label = $"{tenant.DisplayName} Ã¯Â¿Â½ {mapping.Domain} Ã¯Â¿Â½ {mapping.ConnectionName}"
                     });
                 }
             }
@@ -399,16 +820,21 @@ public class AdminController(
             var defaultConnectionName = (await systemConfigProvider.GetValueAsync("TenantDefaults", "ConnectionName", ct: ct))?.Trim();
             var defaultDomain = (await systemConfigProvider.GetValueAsync("UiDefaults", "AdminDomain", ct: ct))?.Trim()
                 ?? (await systemConfigProvider.GetValueAsync("Retrieval", "Domain", ct: ct))?.Trim();
+            if (string.IsNullOrWhiteSpace(defaultConnectionName) || !availableConnectionNames.Contains(defaultConnectionName))
+                defaultConnectionName = string.Empty;
+
+            var needsInitialSetup = connections.Count == 0 || runtimeContexts.Count == 0;
 
             return Ok(new
             {
                 EnvironmentName = environmentName,
                 Profile = profile,
+                NeedsInitialSetup = needsInitialSetup,
                 Defaults = new
                 {
                     TenantKey = string.IsNullOrWhiteSpace(defaultTenantKey) ? "default" : defaultTenantKey,
                     Domain = string.IsNullOrWhiteSpace(defaultDomain) ? string.Empty : defaultDomain,
-                    ConnectionName = string.IsNullOrWhiteSpace(defaultConnectionName) ? "OperationalDb" : defaultConnectionName,
+                    ConnectionName = string.IsNullOrWhiteSpace(defaultConnectionName) ? string.Empty : defaultConnectionName,
                     SystemProfileKey = defaultSystemProfile
                 },
                 Tenants = tenants,
@@ -433,7 +859,7 @@ public class AdminController(
             var metadata = await ValidateSqlServerConnectionAsync(request.ConnectionString.Trim(), ct);
             return Ok(new
             {
-                Message = "Conexión validada correctamente.",
+                Message = "ConexiÃ¯Â¿Â½n validada correctamente.",
                 metadata.ServerHost,
                 metadata.DatabaseName,
                 metadata.UserName,
@@ -453,7 +879,7 @@ public class AdminController(
     public async Task<IActionResult> SaveConnectionProfile([FromBody] ConnectionProfileUpsertRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (string.IsNullOrWhiteSpace(request.ConnectionName))
             return BadRequest(new { Error = "ConnectionName es requerido." });
@@ -473,7 +899,7 @@ public class AdminController(
         }
         catch (Exception ex)
         {
-            return BadRequest(new { Error = $"La conexión no es válida: {ex.Message}" });
+            return BadRequest(new { Error = $"La conexiÃ¯Â¿Â½n no es vÃ¯Â¿Â½lida: {ex.Message}" });
         }
 
         var secretKey = BuildConnectionSecretKey(environmentName, profileKey, normalizedConnectionName);
@@ -524,7 +950,7 @@ public class AdminController(
 
         return Ok(new
         {
-            Message = "Conexión guardada correctamente.",
+            Message = "ConexiÃ¯Â¿Â½n guardada correctamente.",
             Id = profileId,
             ConnectionName = normalizedConnectionName,
             metadata.ServerHost,
@@ -540,7 +966,7 @@ public class AdminController(
     public async Task<IActionResult> SaveOnboardingStep1([FromBody] OnboardingStep1Request request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (string.IsNullOrWhiteSpace(request.TenantKey))
             return BadRequest(new { Error = "TenantKey es requerido." });
@@ -565,11 +991,11 @@ public class AdminController(
             {
                 var resolvedConnectionString = await operationalConnectionResolver.ResolveConnectionStringAsync(normalizedConnectionName, ct);
                 if (string.IsNullOrWhiteSpace(resolvedConnectionString))
-                    return NotFound(new { Error = "La conexión seleccionada no existe ni pudo resolverse desde secrets/configuración." });
+                    return NotFound(new { Error = "La conexiÃ¯Â¿Â½n seleccionada no existe ni pudo resolverse desde secrets/configuraciÃ¯Â¿Â½n." });
             }
             catch
             {
-                return NotFound(new { Error = "La conexión seleccionada no existe ni pudo resolverse desde secrets/configuración." });
+                return NotFound(new { Error = "La conexiÃ¯Â¿Â½n seleccionada no existe ni pudo resolverse desde secrets/configuraciÃ¯Â¿Â½n." });
             }
         }
 
@@ -621,10 +1047,10 @@ public class AdminController(
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(connectionName))
-            return BadRequest(new { Error = "El parámetro connectionName es requerido." });
+            return BadRequest(new { Error = "El parÃ¯Â¿Â½metro connectionName es requerido." });
 
         if (string.IsNullOrWhiteSpace(domain))
-            return BadRequest(new { Error = "El parámetro domain es requerido." });
+            return BadRequest(new { Error = "El parÃ¯Â¿Â½metro domain es requerido." });
 
         try
         {
@@ -676,7 +1102,7 @@ public class AdminController(
     public async Task<IActionResult> SaveOnboardingAllowedObjects([FromBody] OnboardingAllowedObjectsRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (string.IsNullOrWhiteSpace(request.Domain))
             return BadRequest(new { Error = "Domain es requerido." });
@@ -730,7 +1156,7 @@ public class AdminController(
     public async Task<IActionResult> InitializeOnboardingDomain([FromBody] OnboardingInitializeRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (string.IsNullOrWhiteSpace(request.Domain))
             return BadRequest(new { Error = "Domain es requerido." });
@@ -767,13 +1193,13 @@ public class AdminController(
     public async Task<IActionResult> GetOnboardingStatus([FromQuery] string domain, [FromQuery] string? connectionName, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(domain))
-            return BadRequest(new { Error = "El parámetro domain es requerido." });
+            return BadRequest(new { Error = "El parÃ¯Â¿Â½metro domain es requerido." });
 
         try
         {
             var status = await BuildOnboardingStatusAsync(
                 domain.Trim(),
-                string.IsNullOrWhiteSpace(connectionName) ? "OperationalDb" : connectionName.Trim(),
+                string.IsNullOrWhiteSpace(connectionName) ? string.Empty : connectionName.Trim(),
                 ct);
 
             return Ok(status);
@@ -792,7 +1218,7 @@ public class AdminController(
     public async Task<IActionResult> UpsertSystemConfigEntry([FromBody] SystemConfigEntryUpsertRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (string.IsNullOrWhiteSpace(request.Section))
             return BadRequest(new { Error = "Section es requerido." });
@@ -855,7 +1281,7 @@ public class AdminController(
         foreach (var entryRequest in request.Entries)
         {
             if (entryRequest is null)
-                return BadRequest(new { Error = "Cada entry debe ser válida." });
+                return BadRequest(new { Error = "Cada entry debe ser vÃ¯Â¿Â½lida." });
 
             if (string.IsNullOrWhiteSpace(entryRequest.Section))
                 return BadRequest(new { Error = "Section es requerido en todas las entries." });
@@ -923,7 +1349,7 @@ public class AdminController(
     public async Task<IActionResult> UpsertTenant([FromBody] TenantUpsertRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (string.IsNullOrWhiteSpace(request.TenantKey))
             return BadRequest(new { Error = "TenantKey es requerido." });
@@ -958,7 +1384,7 @@ public class AdminController(
     public async Task<IActionResult> GetTenantDomains([FromQuery] string tenantKey, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(tenantKey))
-            return BadRequest(new { Error = "El parámetro tenantKey es requerido." });
+            return BadRequest(new { Error = "El parÃ¯Â¿Â½metro tenantKey es requerido." });
 
         try
         {
@@ -979,7 +1405,7 @@ public class AdminController(
     public async Task<IActionResult> UpsertTenantDomain([FromBody] TenantDomainUpsertRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (string.IsNullOrWhiteSpace(request.TenantKey))
             return BadRequest(new { Error = "TenantKey es requerido." });
@@ -1023,10 +1449,10 @@ public class AdminController(
     public async Task<IActionResult> ExportDomainPack([FromQuery] string tenantKey, [FromQuery] string domain, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(tenantKey))
-            return BadRequest(new { Error = "El parámetro tenantKey es requerido." });
+            return BadRequest(new { Error = "El parÃ¯Â¿Â½metro tenantKey es requerido." });
 
         if (string.IsNullOrWhiteSpace(domain))
-            return BadRequest(new { Error = "El parámetro domain es requerido." });
+            return BadRequest(new { Error = "El parÃ¯Â¿Â½metro domain es requerido." });
 
         var normalizedTenantKey = tenantKey.Trim();
         var normalizedDomain = domain.Trim();
@@ -1142,7 +1568,7 @@ public class AdminController(
     public async Task<IActionResult> ImportDomainPack([FromBody] DomainPackDto pack, CancellationToken ct)
     {
         if (pack is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (string.IsNullOrWhiteSpace(pack.TenantKey))
             return BadRequest(new { Error = "TenantKey es requerido en el pack." });
@@ -1376,7 +1802,7 @@ public class AdminController(
     }
 
     // ==========================================
-    // 3. GESTIÓN DE PERFILES LLM (SLIM)
+    // 3. GESTIÃ¯Â¿Â½N DE PERFILES LLM (SLIM)
     // ==========================================
 
     [HttpGet("llm-profiles")]
@@ -1404,7 +1830,7 @@ public class AdminController(
     public async Task<IActionResult> UpdateLlmProfile(int id, [FromBody] LlmProfileUpdateRequest req, CancellationToken ct)
     {
         if (req is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         var success = await profileStore.UpdateAsync(
             id,
@@ -1429,7 +1855,7 @@ public class AdminController(
     public async Task<IActionResult> GetAllowedObjects([FromQuery] string domain, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(domain))
-            return BadRequest(new { Error = "El parámetro domain es requerido." });
+            return BadRequest(new { Error = "El parÃ¯Â¿Â½metro domain es requerido." });
 
         try
         {
@@ -1450,7 +1876,7 @@ public class AdminController(
     public async Task<IActionResult> UpsertAllowedObject([FromBody] AllowedObjectUpsertRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (string.IsNullOrWhiteSpace(request.Domain))
             return BadRequest(new { Error = "Domain es requerido." });
@@ -1484,7 +1910,7 @@ public class AdminController(
     public async Task<IActionResult> SetAllowedObjectStatus(long id, [FromBody] AllowedObjectStatusRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         var updated = await allowedObjectStore.SetIsActiveAsync(id, request.IsActive, ct);
 
@@ -1507,7 +1933,7 @@ public class AdminController(
     public async Task<IActionResult> GetBusinessRules([FromQuery] string domain, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(domain))
-            return BadRequest(new { Error = "El parámetro domain es requerido." });
+            return BadRequest(new { Error = "El parÃ¯Â¿Â½metro domain es requerido." });
 
         try
         {
@@ -1528,7 +1954,7 @@ public class AdminController(
     public async Task<IActionResult> UpsertBusinessRule([FromBody] BusinessRuleUpsertRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (string.IsNullOrWhiteSpace(request.Domain))
             return BadRequest(new { Error = "Domain es requerido." });
@@ -1566,7 +1992,7 @@ public class AdminController(
     public async Task<IActionResult> SetBusinessRuleStatus(long id, [FromBody] BusinessRuleStatusRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         var updated = await businessRuleStore.SetIsActiveAsync(
             sqliteOptions.DbPath,
@@ -1593,7 +2019,7 @@ public class AdminController(
     public async Task<IActionResult> GetSemanticHints([FromQuery] string domain, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(domain))
-            return BadRequest(new { Error = "El parámetro domain es requerido." });
+            return BadRequest(new { Error = "El parÃ¯Â¿Â½metro domain es requerido." });
 
         try
         {
@@ -1614,7 +2040,7 @@ public class AdminController(
     public async Task<IActionResult> UpsertSemanticHint([FromBody] SemanticHintUpsertRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (string.IsNullOrWhiteSpace(request.Domain))
             return BadRequest(new { Error = "Domain es requerido." });
@@ -1659,7 +2085,7 @@ public class AdminController(
     public async Task<IActionResult> SetSemanticHintStatus(long id, [FromBody] SemanticHintStatusRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         var updated = await semanticHintStore.SetIsActiveAsync(
             sqliteOptions.DbPath,
@@ -1686,7 +2112,7 @@ public class AdminController(
     public async Task<IActionResult> GetQueryPatterns([FromQuery] string domain, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(domain))
-            return BadRequest(new { Error = "El parámetro domain es requerido." });
+            return BadRequest(new { Error = "El parÃ¯Â¿Â½metro domain es requerido." });
 
         try
         {
@@ -1707,7 +2133,7 @@ public class AdminController(
     public async Task<IActionResult> UpsertQueryPattern([FromBody] QueryPatternUpsertRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (string.IsNullOrWhiteSpace(request.Domain))
             return BadRequest(new { Error = "Domain es requerido." });
@@ -1756,7 +2182,7 @@ public class AdminController(
     public async Task<IActionResult> SetQueryPatternStatus(long id, [FromBody] QueryPatternStatusRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         var updated = await queryPatternStore.SetIsActiveAsync(id, request.IsActive, ct);
         if (!updated)
@@ -1796,7 +2222,7 @@ public class AdminController(
     public async Task<IActionResult> UpsertQueryPatternTerm([FromBody] QueryPatternTermUpsertRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         if (request.PatternId <= 0)
             return BadRequest(new { Error = "PatternId es requerido." });
@@ -1838,7 +2264,7 @@ public class AdminController(
     public async Task<IActionResult> SetQueryPatternTermStatus(long id, [FromBody] QueryPatternTermStatusRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invÃ¯Â¿Â½lido." });
 
         var updated = await queryPatternTermStore.SetIsActiveAsync(id, request.IsActive, ct);
         if (!updated)
@@ -2040,9 +2466,9 @@ public class AdminController(
         return hintType switch
         {
             "time_field" => $"Campo temporal sugerido para filtros o agrupaciones: {table.Schema}.{table.Name}.{column.Name}.",
-            "measure" => $"Métrica cuantitativa sugerida para agregaciones: {table.Schema}.{table.Name}.{column.Name}.",
-            "dimension" => $"Dimensión o etiqueta descriptiva sugerida para segmentar resultados: {table.Schema}.{table.Name}.{column.Name}.",
-            _ => $"Pista semántica generada para {table.Schema}.{table.Name}.{column.Name}."
+            "measure" => $"MÃ¯Â¿Â½trica cuantitativa sugerida para agregaciones: {table.Schema}.{table.Name}.{column.Name}.",
+            "dimension" => $"DimensiÃ¯Â¿Â½n o etiqueta descriptiva sugerida para segmentar resultados: {table.Schema}.{table.Name}.{column.Name}.",
+            _ => $"Pista semÃ¯Â¿Â½ntica generada para {table.Schema}.{table.Name}.{column.Name}."
         };
     }
 
@@ -2075,3 +2501,11 @@ public class AdminController(
             ServerVersion: serverVersion);
     }
 }
+
+
+
+
+
+
+
+

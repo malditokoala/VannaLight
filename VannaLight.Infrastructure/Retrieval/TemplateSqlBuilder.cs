@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.Models;
+using VannaLight.Core.Settings;
 
 namespace VannaLight.Infrastructure.Retrieval;
 
@@ -10,6 +11,12 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
 {
     private static readonly Regex PlaceholderRegex = new(@"\{(?<token>[^{}]+)\}", RegexOptions.Compiled);
     private static readonly Regex FromAliasRegex = new(@"\bFROM\s+(?<source>[\[\]\w\.]+)\s+(?:AS\s+)?(?<alias>[A-Za-z_][A-Za-z0-9_]*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private readonly KpiViewOptions _kpiViews;
+
+    public TemplateSqlBuilder(KpiViewOptions kpiViews)
+    {
+        _kpiViews = kpiViews;
+    }
 
     public bool Supports(string patternKey)
     {
@@ -52,7 +59,7 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
         };
     }
 
-    private static string TryBuildFromTemplate(PatternMatchResult match)
+    private string TryBuildFromTemplate(PatternMatchResult match)
     {
         if (string.IsNullOrWhiteSpace(match.SqlTemplate))
             return string.Empty;
@@ -81,7 +88,7 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
             : rendered.Trim();
     }
 
-    private static string BuildTopScrapByPress(PatternMatchResult match)
+    private string BuildTopScrapByPress(PatternMatchResult match)
     {
         var top = match.TopN > 0 ? match.TopN : 5;
 
@@ -90,22 +97,22 @@ SELECT TOP ({top})
     s.PressId,
     s.PressName,
     SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty
-FROM dbo.vw_KpiScrap_v1 s
+FROM {_kpiViews.ScrapViewQualifiedName} s
 WHERE {BuildTimeFilter("s", match.TimeScope, includeIsOpenForDowntime: false)}
 GROUP BY s.PressId, s.PressName
 ORDER BY TotalScrapQty DESC, s.PressName;".Trim();
     }
 
-    private static string BuildTotalProduction(PatternMatchResult match)
+    private string BuildTotalProduction(PatternMatchResult match)
     {
         return $@"
 SELECT
     SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty
-FROM dbo.vw_KpiProduction_v1 p
+FROM {_kpiViews.ProductionViewQualifiedName} p
 WHERE {BuildTimeFilter("p", match.TimeScope, includeIsOpenForDowntime: false)};".Trim();
     }
 
-    private static string BuildTopDowntimeByFailure(PatternMatchResult match)
+    private string BuildTopDowntimeByFailure(PatternMatchResult match)
     {
         var top = match.TopN > 0 ? match.TopN : 5;
 
@@ -114,13 +121,13 @@ SELECT TOP ({top})
     d.FailureName,
     SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
     SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
-FROM dbo.vw_KpiDownTime_v1 d
+FROM {_kpiViews.DowntimeViewQualifiedName} d
 WHERE {BuildTimeFilter("d", match.TimeScope, includeIsOpenForDowntime: true)}
 GROUP BY d.FailureName
 ORDER BY TotalDownTimeMinutes DESC, d.FailureName;".Trim();
     }
 
-    private static string BuildTopDowntimeByPress(PatternMatchResult match)
+    private string BuildTopDowntimeByPress(PatternMatchResult match)
     {
         var top = match.TopN > 0 ? match.TopN : 5;
 
@@ -130,13 +137,13 @@ SELECT TOP ({top})
     d.PressName,
     SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
     SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
-FROM dbo.vw_KpiDownTime_v1 d
+FROM {_kpiViews.DowntimeViewQualifiedName} d
 WHERE {BuildTimeFilter("d", match.TimeScope, includeIsOpenForDowntime: true)}
 GROUP BY d.PressId, d.PressName
 ORDER BY TotalDownTimeMinutes DESC, d.PressName;".Trim();
     }
 
-    private static string BuildDowntimeByDepartment(PatternMatchResult match)
+    private string BuildDowntimeByDepartment(PatternMatchResult match)
     {
         var selectTop = match.TopN > 0 ? $"TOP ({match.TopN})" : string.Empty;
 
@@ -145,13 +152,13 @@ SELECT {selectTop}
     d.DepartmentName,
     SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
     SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
-FROM dbo.vw_KpiDownTime_v1 d
+FROM {_kpiViews.DowntimeViewQualifiedName} d
 WHERE {BuildTimeFilter("d", match.TimeScope, includeIsOpenForDowntime: true)}
 GROUP BY d.DepartmentName
 ORDER BY TotalDownTimeMinutes DESC, d.DepartmentName;".Trim();
     }
 
-    private static string BuildTopScrapCostByMold(PatternMatchResult match)
+    private string BuildTopScrapCostByMold(PatternMatchResult match)
     {
         var top = match.TopN > 0 ? match.TopN : 5;
 
@@ -160,13 +167,13 @@ SELECT TOP ({top})
     s.MoldId,
     s.MoldName,
     SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost
-FROM dbo.vw_KpiScrap_v1 s
+FROM {_kpiViews.ScrapViewQualifiedName} s
 WHERE {BuildTimeFilter("s", match.TimeScope, includeIsOpenForDowntime: false)}
 GROUP BY s.MoldId, s.MoldName
 ORDER BY TotalScrapCost DESC, s.MoldName;".Trim();
     }
 
-    private static string BuildTimeFilter(string alias, PatternTimeScope scope, bool includeIsOpenForDowntime)
+    private string BuildTimeFilter(string alias, PatternTimeScope scope, bool includeIsOpenForDowntime)
     {
         var sb = new StringBuilder();
 
@@ -208,15 +215,9 @@ ORDER BY TotalScrapCost DESC, s.MoldName;".Trim();
         return sb.ToString();
     }
 
-    private static string ResolveViewForAlias(string alias)
+    private string ResolveViewForAlias(string alias)
     {
-        return alias switch
-        {
-            "p" => "dbo.vw_KpiProduction_v1",
-            "s" => "dbo.vw_KpiScrap_v1",
-            "d" => "dbo.vw_KpiDownTime_v1",
-            _ => "dbo.vw_KpiProduction_v1"
-        };
+        return _kpiViews.ResolveByAlias(alias);
     }
 
     private static string ReplaceSimpleToken(string sql, string tokenName, string value)
@@ -277,15 +278,9 @@ ORDER BY TotalScrapCost DESC, s.MoldName;".Trim();
         return match.Metric is PatternMetric.DownTimeMinutes or PatternMetric.DownTimeCost or PatternMetric.TotalLoss;
     }
 
-    private static string? ResolveViewName(PatternMatchResult match)
+    private string? ResolveViewName(PatternMatchResult match)
     {
-        return match.Metric switch
-        {
-            PatternMetric.ScrapQty or PatternMetric.ScrapCost => "dbo.vw_KpiScrap_v1",
-            PatternMetric.ProducedQty => "dbo.vw_KpiProduction_v1",
-            PatternMetric.DownTimeMinutes or PatternMetric.DownTimeCost or PatternMetric.TotalLoss => "dbo.vw_KpiDownTime_v1",
-            _ => null
-        };
+        return _kpiViews.ResolveByMetric(match.Metric);
     }
 
     private static bool HasUnresolvedPlaceholders(string sql)

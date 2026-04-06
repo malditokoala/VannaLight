@@ -20,9 +20,11 @@
         let currentRuntimeContext = null;
         const RUNTIME_CONTEXT_STORAGE_KEY = 'vannalight.runtimeContext';
         const QUERY_HISTORY_STORAGE_KEY = 'vannalight.queryHistory';
+        const HISTORY_SIDEBAR_COLLAPSED_KEY = 'vannalight.historySidebarCollapsed';
         const QUERY_HISTORY_LIMIT = 10;
         let queryHistory = [];
         let activeHistoryEntryId = '';
+        let previewHistoryEntryId = '';
 
         // datos del último chart para poder redibujar al cambiar tipo
         let lastChartModel = null;   // { labels, values, labelColumn, valueColumn }
@@ -45,6 +47,7 @@
             document.getElementById('inpSub').textContent = c.sub;
             document.getElementById('txtQuestion').placeholder = c.ph;
             logLine(`Modo → ${c.title}`, 'sys');
+            renderQueryHistory();
             hideResult();
             resetFeedbackPanel();
             updateRuntimeContextState();
@@ -268,23 +271,48 @@
             safeStorageSet(QUERY_HISTORY_STORAGE_KEY, JSON.stringify(queryHistory.slice(0, QUERY_HISTORY_LIMIT)));
         }
 
+        function setHistorySidebarCollapsed(isCollapsed) {
+            document.body.classList.toggle('history-collapsed', !!isCollapsed);
+            const btn = document.getElementById('historyCollapseBtn');
+            if (btn) {
+                btn.setAttribute('aria-label', isCollapsed ? 'Expandir historial' : 'Colapsar historial');
+                btn.title = isCollapsed ? 'Expandir historial' : 'Colapsar historial';
+                btn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+            }
+            safeStorageSet(HISTORY_SIDEBAR_COLLAPSED_KEY, isCollapsed ? '1' : '0');
+        }
+
+        function toggleHistorySidebar() {
+            const next = !document.body.classList.contains('history-collapsed');
+            setHistorySidebarCollapsed(next);
+        }
+
+        function loadHistorySidebarPreference() {
+            setHistorySidebarCollapsed(safeStorageGet(HISTORY_SIDEBAR_COLLAPSED_KEY) === '1');
+        }
+
         function renderQueryHistory() {
             const list = document.getElementById('queryHistoryList');
+            const modeLabel = document.getElementById('historySidebarModeLabel');
             if (!list) return;
+            if (modeLabel) {
+                modeLabel.textContent = `Historial ${getModeLabel(currentMode)} · Top ${QUERY_HISTORY_LIMIT}`;
+            }
 
             list.innerHTML = '';
+            const modeHistory = queryHistory.filter(entry => (entry.mode || 'sql') === currentMode);
 
-            if (!queryHistory.length) {
+            if (!modeHistory.length) {
                 const empty = document.createElement('div');
                 empty.className = 'history-empty';
-                empty.textContent = 'Aun no hay consultas guardadas en este navegador.';
+                empty.textContent = `Aun no hay consultas guardadas para ${getModeLabel(currentMode)} en este navegador.`;
                 list.appendChild(empty);
                 return;
             }
 
-            queryHistory.forEach(entry => {
+            modeHistory.forEach(entry => {
                 const item = document.createElement('div');
-                item.className = 'history-item';
+                item.className = 'history-item' + (entry.id === previewHistoryEntryId ? ' is-active' : '');
 
                 const main = document.createElement('div');
                 main.className = 'history-main';
@@ -301,12 +329,16 @@
                 status.textContent = getHistoryStatusLabel(entry.status);
 
                 const mode = document.createElement('span');
+                mode.className = 'history-chip';
                 mode.textContent = getModeLabel(entry.mode);
 
                 const context = document.createElement('span');
+                context.className = 'history-context';
+                context.title = entry.contextLabel || 'Sin contexto';
                 context.textContent = entry.contextLabel || 'Sin contexto';
 
                 const time = document.createElement('span');
+                time.className = 'history-time';
                 time.textContent = formatHistoryTime(entry.timestamp);
 
                 meta.appendChild(status);
@@ -320,18 +352,25 @@
                 const actions = document.createElement('div');
                 actions.className = 'history-item-actions';
 
+                const viewBtn = document.createElement('button');
+                viewBtn.type = 'button';
+                viewBtn.className = 'history-action-btn';
+                viewBtn.textContent = 'VER';
+                viewBtn.onclick = () => previewHistoryEntry(entry.id);
+
                 const useBtn = document.createElement('button');
                 useBtn.type = 'button';
                 useBtn.className = 'history-action-btn';
-                useBtn.textContent = 'USAR';
-                useBtn.onclick = () => reuseHistoryEntry(entry.id, false);
+                useBtn.textContent = 'USAR COMO BASE';
+                useBtn.onclick = () => useHistoryEntryAsBase(entry.id);
 
                 const rerunBtn = document.createElement('button');
                 rerunBtn.type = 'button';
-                rerunBtn.className = 'history-action-btn';
+                rerunBtn.className = 'history-action-btn is-wide';
                 rerunBtn.textContent = 'RE-EJECUTAR';
-                rerunBtn.onclick = () => reuseHistoryEntry(entry.id, true);
+                rerunBtn.onclick = () => rerunHistoryEntry(entry.id);
 
+                actions.appendChild(viewBtn);
                 actions.appendChild(useBtn);
                 actions.appendChild(rerunBtn);
 
@@ -395,6 +434,7 @@
             queryHistory.unshift(entry);
             queryHistory = queryHistory.slice(0, QUERY_HISTORY_LIMIT);
             activeHistoryEntryId = entry.id;
+            previewHistoryEntryId = entry.id;
             persistQueryHistory();
             renderQueryHistory();
         }
@@ -409,16 +449,40 @@
         }
 
         function clearQueryHistory() {
-            queryHistory = [];
+            queryHistory = queryHistory.filter(entry => (entry.mode || 'sql') !== currentMode);
             activeHistoryEntryId = '';
-            safeStorageRemove(QUERY_HISTORY_STORAGE_KEY);
+            previewHistoryEntryId = '';
+            if (queryHistory.length) {
+                persistQueryHistory();
+            } else {
+                safeStorageRemove(QUERY_HISTORY_STORAGE_KEY);
+            }
             renderQueryHistory();
-            logLine('Historial local limpiado.', 'sys');
+            logLine(`Historial local limpiado para ${getModeLabel(currentMode)}.`, 'sys');
+        }
+
+        function previewHistoryEntry(entryId) {
+            const entry = queryHistory.find(item => item.id === entryId);
+            if (!entry) return;
+
+            previewHistoryEntryId = entry.id;
+            renderQueryHistory();
+
+            const summary = entry.error
+                ? `Ultimo estado: ${getHistoryStatusLabel(entry.status)}. Error: ${entry.error}`
+                : entry.rowCount !== undefined && entry.rowCount !== null
+                    ? `Ultimo estado: ${getHistoryStatusLabel(entry.status)}. Filas: ${entry.rowCount}.`
+                    : `Ultimo estado: ${getHistoryStatusLabel(entry.status)}.`;
+
+            setQueryStatus('info', 'Vista previa de historial', `${summary} Contexto: ${entry.contextLabel || 'Sin contexto'}.`);
         }
 
         function reuseHistoryEntry(entryId, shouldRun) {
             const entry = queryHistory.find(item => item.id === entryId);
             if (!entry) return;
+
+            previewHistoryEntryId = entry.id;
+            renderQueryHistory();
 
             if (entry.mode && MODES[entry.mode]) {
                 setMode(entry.mode);
@@ -449,6 +513,14 @@
             if (shouldRun) {
                 sendQuestion();
             }
+        }
+
+        function useHistoryEntryAsBase(entryId) {
+            reuseHistoryEntry(entryId, false);
+        }
+
+        function rerunHistoryEntry(entryId) {
+            reuseHistoryEntry(entryId, true);
         }
 
         function setQueryStatus(type, title, message) {
@@ -742,7 +814,29 @@
             const answer =
                 payload?.HumanizedMessage || payload?.answer ||
                 payload?.text || payload?.message || 'Documento analizado correctamente.';
-            docsCard.textContent = String(answer);
+            const confidence = payload?.confidence ?? payload?.Confidence ?? null;
+            const citations = Array.isArray(payload?.citations)
+                ? payload.citations
+                : Array.isArray(payload?.Citations)
+                    ? payload.Citations
+                    : [];
+
+            docsCard.innerHTML = `
+                <div class="docs-answer-text">${escapeHtml(String(answer))}</div>
+                ${confidence !== null && confidence !== undefined ? `<div class="docs-confidence">Confianza estimada: ${escapeHtml(Number(confidence).toFixed(2))}</div>` : ''}
+                ${citations.length ? `
+                    <div class="docs-citations">
+                        ${citations.map(c => `
+                            <div class="docs-citation">
+                                <div class="docs-citation-head">
+                                    <span>${escapeHtml(c.fileName || c.FileName || 'Documento')}</span>
+                                    <span>p. ${escapeHtml(c.pageNumber || c.PageNumber || '?')}</span>
+                                </div>
+                                ${c.section || c.Section ? `<div class="docs-citation-section">${escapeHtml(c.section || c.Section)}</div>` : ''}
+                                ${c.snippet || c.Snippet ? `<div class="docs-citation-snippet">${escapeHtml(c.snippet || c.Snippet)}</div>` : ''}
+                            </div>`).join('')}
+                    </div>` : ''}
+            `;
             speakSummary(String(answer));
         }
 
@@ -818,8 +912,8 @@
                 const h = Object.keys(data[0]);
                 document.getElementById('tableContainer').innerHTML =
                     `<table class="data-table">
-                    <thead><tr>${h.map(c => `<th>${c}</th>`).join('')}</tr></thead>
-                    <tbody>${data.map(r => `<tr>${h.map(c => `<td>${fmtVal(r[c])}</td>`).join('')}</tr>`).join('')}</tbody>
+                    <thead><tr>${h.map(c => `<th class="${getTableColumnClass(c, data)}" title="${escapeHtml(c)}">${escapeHtml(c)}</th>`).join('')}</tr></thead>
+                    <tbody>${data.map(r => `<tr>${h.map(c => renderTableCell(c, r[c], data)).join('')}</tr>`).join('')}</tbody>
                 </table>`;
             }
 
@@ -1161,6 +1255,10 @@
             }
 
             const rows = lastSqlExportState.rows;
+            const chartImageDataUrl = getCurrentChartSnapshotDataUrl();
+            const chartSummary = lastChartModel
+                ? `${lastChartModel.labelColumn} vs ${lastChartModel.valueColumn} · ${String(activeChartType || 'bar').toUpperCase()}`
+                : '';
             const headers = Object.keys(rows[0] || {});
             const headerHtml = headers
                 .map(h => '<th style="border:1px solid #d1d5db;padding:8px;background:#f3f4f6;text-align:left;">' + escapeHtml(h) + '</th>')
@@ -1217,18 +1315,49 @@
                 '<div class="label">SQL generado</div>',
                 '<pre>' + escapeHtml(lastSqlExportState.sql || 'Sin SQL registrado') + '</pre>',
                 '</div>',
+                chartImageDataUrl ? [
+                    '<div class="block">',
+                    '<div class="label">Grafica</div>',
+                    '<div style="margin-bottom:8px;color:#4b5563;font-size:12px;">' + escapeHtml(chartSummary || 'Visualizacion generada desde el resultado actual.') + '</div>',
+                    '<div style="border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#0b1020;">',
+                    '<img src="' + chartImageDataUrl + '" alt="Grafica del resultado" style="display:block;width:100%;height:auto;border-radius:8px;" />',
+                    '</div>',
+                    '</div>'
+                ].join('') : '',
                 '<div class="block">',
                 '<div class="label">Resultado</div>',
                 tableHtml,
                 '</div>',
+                '<script>',
+                'window.addEventListener("load", function () {',
+                '  setTimeout(function () { window.focus(); window.print(); }, 320);',
+                '});',
+                '<\/script>',
                 '</body>',
                 '</html>'
             ].join('');
             win.document.write(html);
             win.document.close();
             win.focus();
-            win.print();
             logLine('Vista de impresión PDF abierta.', 'ok');
+        }
+
+        function getCurrentChartSnapshotDataUrl() {
+            if (!currentChart || !lastChartModel) {
+                return null;
+            }
+
+            const canvas = document.getElementById('liaChart');
+            if (!canvas) {
+                return null;
+            }
+
+            try {
+                currentChart.update('none');
+                return canvas.toDataURL('image/png', 1);
+            } catch {
+                return null;
+            }
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -1298,7 +1427,37 @@
             return v ?? '—';
         }
 
+        function isNumericLikeValue(value) {
+            return toNumberOrNull(value) !== null;
+        }
+
+        function isMostlyNumericColumn(columnName, rows) {
+            if (!Array.isArray(rows) || !rows.length) return false;
+            const sample = rows.slice(0, 12).map(row => row?.[columnName]);
+            const nonEmpty = sample.filter(value => value !== null && value !== undefined && String(value).trim() !== '');
+            if (!nonEmpty.length) return false;
+            const numericCount = nonEmpty.filter(isNumericLikeValue).length;
+            return numericCount / nonEmpty.length >= 0.7;
+        }
+
+        function getTableColumnClass(columnName, rows) {
+            return isMostlyNumericColumn(columnName, rows) ? 'is-numeric' : '';
+        }
+
+        function renderTableCell(columnName, value, rows) {
+            const formatted = fmtVal(value);
+            const cellClass = isMostlyNumericColumn(columnName, rows) ? 'table-cell is-numeric' : 'table-cell is-text';
+            const title = escapeHtml(formatted);
+            return `<td title="${title}"><span class="${cellClass}">${escapeHtml(formatted)}</span></td>`;
+        }
+
         // INIT
+        loadHistorySidebarPreference();
         loadQueryHistory();
+        window.toggleHistorySidebar = toggleHistorySidebar;
+        document.getElementById('historyCollapseBtn')?.addEventListener('click', (event) => {
+            event.preventDefault();
+            toggleHistorySidebar();
+        });
         document.getElementById('runtimeContextSelect')?.addEventListener('change', onRuntimeContextChange);
         setMode('sql');

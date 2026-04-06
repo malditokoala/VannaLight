@@ -26,7 +26,13 @@ public class OperationalConnectionResolver : IOperationalConnectionResolver
     }
 
     public async Task<string> ResolveOperationalConnectionStringAsync(CancellationToken ct = default)
-        => await ResolveConnectionStringAsync("OperationalDb", ct);
+    {
+        var defaultConnectionName = await ResolveDefaultConnectionNameAsync(ct);
+        if (string.IsNullOrWhiteSpace(defaultConnectionName))
+            throw new InvalidOperationException("No hay una conexión SQL Server configurada como default.");
+
+        return await ResolveConnectionStringAsync(defaultConnectionName, ct);
+    }
 
     public async Task<string> ResolveConnectionStringAsync(string connectionName, CancellationToken ct = default)
     {
@@ -51,11 +57,11 @@ public class OperationalConnectionResolver : IOperationalConnectionResolver
         if (string.Equals(profile.ConnectionMode, "FullStringRef", StringComparison.OrdinalIgnoreCase))
         {
             if (string.IsNullOrWhiteSpace(profile.SecretRef))
-                throw new InvalidOperationException("OperationalDb FullStringRef requires SecretRef.");
+                throw new InvalidOperationException($"{normalizedConnectionName} FullStringRef requires SecretRef.");
 
             var fullConnection = await _secretResolver.ResolveAsync(profile.SecretRef ?? string.Empty, ct);
             if (string.IsNullOrWhiteSpace(fullConnection))
-                throw new InvalidOperationException("OperationalDb secret reference could not be resolved.");
+                throw new InvalidOperationException($"{normalizedConnectionName} secret reference could not be resolved.");
 
             return fullConnection;
         }
@@ -63,10 +69,10 @@ public class OperationalConnectionResolver : IOperationalConnectionResolver
         if (string.Equals(profile.ConnectionMode, "CompositeSqlServer", StringComparison.OrdinalIgnoreCase))
         {
             if (string.IsNullOrWhiteSpace(profile.ServerHost))
-                throw new InvalidOperationException("OperationalDb composite profile requires ServerHost.");
+                throw new InvalidOperationException($"{normalizedConnectionName} composite profile requires ServerHost.");
 
             if (string.IsNullOrWhiteSpace(profile.DatabaseName))
-                throw new InvalidOperationException("OperationalDb composite profile requires DatabaseName.");
+                throw new InvalidOperationException($"{normalizedConnectionName} composite profile requires DatabaseName.");
 
             var builder = new SqlConnectionStringBuilder
             {
@@ -80,19 +86,59 @@ public class OperationalConnectionResolver : IOperationalConnectionResolver
             if (!profile.IntegratedSecurity)
             {
                 if (string.IsNullOrWhiteSpace(profile.UserName))
-                    throw new InvalidOperationException("OperationalDb composite profile requires UserName when IntegratedSecurity is false.");
+                    throw new InvalidOperationException($"{normalizedConnectionName} composite profile requires UserName when IntegratedSecurity is false.");
 
                 if (string.IsNullOrWhiteSpace(profile.SecretRef))
-                    throw new InvalidOperationException("OperationalDb composite profile requires SecretRef when IntegratedSecurity is false.");
+                    throw new InvalidOperationException($"{normalizedConnectionName} composite profile requires SecretRef when IntegratedSecurity is false.");
 
                 builder.UserID = profile.UserName;
                 builder.Password = await _secretResolver.ResolveAsync(profile.SecretRef ?? string.Empty, ct)
-                    ?? throw new InvalidOperationException("OperationalDb password secret reference could not be resolved.");
+                    ?? throw new InvalidOperationException($"{normalizedConnectionName} password secret reference could not be resolved.");
             }
 
             return builder.ConnectionString;
         }
 
         throw new InvalidOperationException($"Unsupported connection mode: {profile.ConnectionMode}");
+    }
+
+    private async Task<string?> ResolveDefaultConnectionNameAsync(CancellationToken ct)
+    {
+        var configuredBootstrapConnection = _configuration["SystemStartup:BootstrapConnectionName"]?.Trim();
+        if (await IsConfiguredConnectionAsync(configuredBootstrapConnection, ct))
+            return configuredBootstrapConnection;
+
+        var profiles = await _connectionProfileStore.GetAllAsync(_environmentName, ct);
+        var firstAvailableProfileConnection = profiles
+            .Where(x => !string.IsNullOrWhiteSpace(x.ConnectionName))
+            .OrderByDescending(x => x.IsActive)
+            .ThenBy(x => x.ConnectionName)
+            .Select(x => x.ConnectionName.Trim())
+            .FirstOrDefault();
+        if (await IsConfiguredConnectionAsync(firstAvailableProfileConnection, ct))
+            return firstAvailableProfileConnection;
+
+        return _configuration
+            .GetSection("ConnectionStrings")
+            .GetChildren()
+            .Select(x => x.Key)
+            .FirstOrDefault(x => !string.IsNullOrWhiteSpace(_configuration.GetConnectionString(x)));
+    }
+
+    private async Task<bool> IsConfiguredConnectionAsync(string? connectionName, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(connectionName))
+            return false;
+
+        var normalizedConnectionName = connectionName.Trim();
+        var activeProfile = await _connectionProfileStore.GetActiveAsync(_environmentName, normalizedConnectionName, ct);
+        if (activeProfile is not null)
+            return true;
+
+        var profile = await _connectionProfileStore.GetAsync(_environmentName, _defaultProfileKey, normalizedConnectionName, ct);
+        if (profile is not null)
+            return true;
+
+        return !string.IsNullOrWhiteSpace(_configuration.GetConnectionString(normalizedConnectionName));
     }
 }

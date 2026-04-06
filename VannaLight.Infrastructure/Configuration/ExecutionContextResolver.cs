@@ -9,17 +9,24 @@ public class ExecutionContextResolver : IExecutionContextResolver
     private readonly ISystemConfigProvider _systemConfigProvider;
     private readonly ITenantStore _tenantStore;
     private readonly ITenantDomainStore _tenantDomainStore;
+    private readonly IConnectionProfileStore _connectionProfileStore;
+    private readonly IConfiguration _configuration;
+    private readonly string _environmentName;
     private readonly string _defaultSystemProfileKey;
 
     public ExecutionContextResolver(
         ISystemConfigProvider systemConfigProvider,
         ITenantStore tenantStore,
         ITenantDomainStore tenantDomainStore,
+        IConnectionProfileStore connectionProfileStore,
         IConfiguration configuration)
     {
         _systemConfigProvider = systemConfigProvider;
         _tenantStore = tenantStore;
         _tenantDomainStore = tenantDomainStore;
+        _connectionProfileStore = connectionProfileStore;
+        _configuration = configuration;
+        _environmentName = configuration["SystemStartup:EnvironmentName"]?.Trim() ?? "Development";
         _defaultSystemProfileKey = configuration["SystemStartup:DefaultSystemProfile"]?.Trim() ?? "default";
     }
 
@@ -41,7 +48,9 @@ public class ExecutionContextResolver : IExecutionContextResolver
         var configuredDefaultDomain = await _systemConfigProvider.GetRequiredValueAsync("Retrieval", "Domain", ct: ct);
         var configuredDefaultConnection = NormalizeOrDefault(
             await _systemConfigProvider.GetValueAsync("TenantDefaults", "ConnectionName", ct: ct),
-            fallback: "OperationalDb");
+            fallback: null);
+        if (!await IsConfiguredConnectionAsync(configuredDefaultConnection, ct))
+            configuredDefaultConnection = string.Empty;
 
         var resolvedDomain = NormalizeOrDefault(domain, configuredDefaultDomain);
         var resolvedConnectionName = NormalizeOrDefault(connectionName, configuredDefaultConnection);
@@ -61,7 +70,12 @@ public class ExecutionContextResolver : IExecutionContextResolver
                 resolvedDomain = mapping.Domain;
 
             if (string.IsNullOrWhiteSpace(connectionName))
-                resolvedConnectionName = NormalizeOrDefault(mapping.ConnectionName, configuredDefaultConnection);
+            {
+                var mappedConnectionName = NormalizeOrDefault(mapping.ConnectionName, configuredDefaultConnection);
+                resolvedConnectionName = await IsConfiguredConnectionAsync(mappedConnectionName, ct)
+                    ? mappedConnectionName
+                    : configuredDefaultConnection;
+            }
 
             resolvedSystemProfileKey = NormalizeOrDefault(mapping.SystemProfileKey, _defaultSystemProfileKey, _defaultSystemProfileKey);
         }
@@ -73,6 +87,23 @@ public class ExecutionContextResolver : IExecutionContextResolver
             ConnectionName = NormalizeOrDefault(resolvedConnectionName, configuredDefaultConnection),
             SystemProfileKey = NormalizeOrDefault(resolvedSystemProfileKey, _defaultSystemProfileKey, _defaultSystemProfileKey)
         };
+    }
+
+    private async Task<bool> IsConfiguredConnectionAsync(string? connectionName, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(connectionName))
+            return false;
+
+        var normalizedConnectionName = connectionName.Trim();
+        var activeProfile = await _connectionProfileStore.GetActiveAsync(_environmentName, normalizedConnectionName, ct);
+        if (activeProfile is not null)
+            return true;
+
+        var profile = await _connectionProfileStore.GetAsync(_environmentName, _defaultSystemProfileKey, normalizedConnectionName, ct);
+        if (profile is not null)
+            return true;
+
+        return !string.IsNullOrWhiteSpace(_configuration.GetConnectionString(normalizedConnectionName));
     }
 
     private static string NormalizeOrDefault(string? primary, string? fallback, string hardDefault = "")

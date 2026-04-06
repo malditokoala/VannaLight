@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using VannaLight.Api.Hubs;
 using VannaLight.Api.Services;
+using VannaLight.Api.Services.Docs;
 using VannaLight.Api.Services.Predictions;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.Models;
@@ -69,25 +70,15 @@ var defaultSystemProfile = builder.Configuration["SystemStartup:DefaultSystemPro
 // ---------------------------------------------------------
 var sqliteOptions = new SqliteOptions(sqlitePath);
 var runtimeOptions = new RuntimeDbOptions(runtimePath);
+var kpiViewOptions = builder.Configuration.GetSection("KpiViews").Get<KpiViewOptions>() ?? new KpiViewOptions();
 
 // Registro directo de options concretas
 builder.Services.AddSingleton(sqliteOptions);
 builder.Services.AddSingleton(runtimeOptions);
-builder.Services.AddSingleton<OperationalDbOptions>(sp =>
-{
-    var connectionString = sp.GetRequiredService<IOperationalConnectionResolver>()
-        .ResolveOperationalConnectionStringAsync()
-        .GetAwaiter()
-        .GetResult();
-
-    return new OperationalDbOptions(connectionString);
-});
-
-// Compatibilidad para servicios que usen IOptions<T>
+builder.Services.AddSingleton(kpiViewOptions);
 builder.Services.AddSingleton<IOptions<SqliteOptions>>(Options.Create(sqliteOptions));
-builder.Services.AddSingleton<IOptions<OperationalDbOptions>>(sp =>
-    Options.Create(sp.GetRequiredService<OperationalDbOptions>()));
 builder.Services.AddSingleton<IOptions<RuntimeDbOptions>>(Options.Create(runtimeOptions));
+builder.Services.AddSingleton<IOptions<KpiViewOptions>>(Options.Create(kpiViewOptions));
 
 // AppSettings actual: se mantiene por compatibilidad hasta mover LlmClient
 var settings = AppSettingsFactory.Create(RuntimeProfile.ALTO, modelPath);
@@ -104,6 +95,7 @@ builder.Services.AddSingleton<IConnectionProfileStore>(_ => new SqliteConnection
 builder.Services.AddSingleton<IAppSecretStore>(_ => new SqliteAppSecretStore(sqlitePath));
 builder.Services.AddSingleton<ITenantStore>(_ => new SqliteTenantStore(sqlitePath));
 builder.Services.AddSingleton<ITenantDomainStore>(_ => new SqliteTenantDomainStore(sqlitePath));
+builder.Services.AddSingleton<IPredictionProfileStore, SqlitePredictionProfileStore>();
 builder.Services.AddSingleton<ISystemConfigProvider, SystemConfigProvider>();
 builder.Services.AddSingleton<ISecretResolver, CompositeSecretResolver>();
 builder.Services.AddSingleton<IOperationalConnectionResolver, OperationalConnectionResolver>();
@@ -158,10 +150,17 @@ builder.Services.AddSingleton<ISqlDryRunner, SqlServerDryRunner>();
 // ---------------------------------------------------------
 // 7. DOCS (RAG) Y MACHINE LEARNING
 // ---------------------------------------------------------
+builder.Services.AddSingleton<DocumentIngestor>();
 builder.Services.AddSingleton<WiDocIngestor>();
 builder.Services.AddSingleton<IDocsIntentRouter, DocsIntentRouterLlm>();
+builder.Services.AddSingleton<IDocChunkScorer, DocChunkScorer>();
+builder.Services.AddSingleton<IDocAnswerComposer, DocAnswerComposer>();
 builder.Services.AddSingleton<IDocsAnswerService, DocsAnswerService>();
 
+builder.Services.AddSingleton<IMlTrainingProfileProvider, MlTrainingProfileProvider>();
+builder.Services.AddSingleton<IndustrialDomainPackAdapter>();
+builder.Services.AddSingleton<NorthwindSalesDomainPackAdapter>();
+builder.Services.AddSingleton<IDomainPackProvider, CompositeDomainPackProvider>();
 builder.Services.AddSingleton<IPredictionIntentRouter, PredictionIntentRouterLlm>();
 builder.Services.AddSingleton<IForecastingService, ForecastingService>();
 builder.Services.AddSingleton<IPredictionAnswerService, PredictionAnswerService>();
@@ -182,6 +181,7 @@ await EnsureSystemConfigDatabaseSetupAsync(
     builder.Configuration,
     environmentName,
     defaultSystemProfile);
+await EnsureMemoryFeatureDatabaseSetupAsync(sqlitePath);
 await EnsureSeededConnectionProfilesAndContextMappingsAsync(
     sqlitePath,
     builder.Configuration,
@@ -326,6 +326,31 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
             FOREIGN KEY(TenantId) REFERENCES Tenants(Id),
             UNIQUE(TenantId, Domain)
         );
+
+        CREATE TABLE IF NOT EXISTS PredictionProfiles (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Domain TEXT NOT NULL,
+            ProfileKey TEXT NOT NULL,
+            DisplayName TEXT NOT NULL,
+            DomainPackKey TEXT NOT NULL,
+            TargetMetricKey TEXT NOT NULL,
+            CalendarProfileKey TEXT NOT NULL,
+            Grain TEXT NOT NULL,
+            Horizon INTEGER NOT NULL,
+            HorizonUnit TEXT NOT NULL,
+            ModelType TEXT NOT NULL,
+            ConnectionName TEXT NULL,
+            SourceMode TEXT NULL,
+            TargetSeriesSource TEXT NULL,
+            FeatureSourcesJson TEXT NULL,
+            GroupByJson TEXT NULL,
+            FiltersJson TEXT NULL,
+            Notes TEXT NULL,
+            IsActive INTEGER NOT NULL DEFAULT 1,
+            CreatedUtc TEXT NOT NULL,
+            UpdatedUtc TEXT NOT NULL,
+            UNIQUE(Domain, ProfileKey)
+        );
     ";
 
     await connection.ExecuteAsync(sql);
@@ -367,6 +392,10 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
         WHERE EnvironmentName = @EnvironmentName
           AND ProfileKey = @ProfileKey;";
 
+    var seededDefaultConnectionName = !string.IsNullOrWhiteSpace(configuration.GetConnectionString("ErpDb"))
+        ? "ErpDb"
+        : null;
+
     var profileId = await connection.ExecuteScalarAsync<int>(
         seedProfileSql,
         new
@@ -381,38 +410,42 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
     var seedEntries = new (string Section, string Key, string? Value, string ValueType, string Description)[]
     {
         ("Paths", "Model", configuration["Paths:Model"], "string", "Ruta del modelo LLM mutable por perfil."),
-        ("Docs", "WiRootPath", configuration["Docs:WiRootPath"], "string", "Carpeta de documentos WI para reindexación."),
-        ("Docs", "TopKPages", configuration["Docs:TopKPages"], "int", "Cantidad de páginas a recuperar para respuestas de documentación."),
-        ("Docs", "MaxAnswerCitations", configuration["Docs:MaxAnswerCitations"], "int", "Máximo de citas devueltas por respuesta de documentación.")
+        ("Docs", "RootPath", configuration["Docs:RootPath"] ?? configuration["Docs:WiRootPath"], "string", "Carpeta raiz de documentos PDF para indexacion."),
+        ("Docs", "WiRootPath", configuration["Docs:WiRootPath"] ?? configuration["Docs:RootPath"], "string", "Compatibilidad temporal con el nombre legacy de la carpeta de WI."),
+        ("Docs", "DefaultDomain", configuration["Docs:DefaultDomain"] ?? "work-instructions", "string", "Dominio por defecto usado por el pipeline de documentos."),
+        ("Docs", "SchemaFile", configuration["Docs:SchemaFile"] ?? "work-instructions.json", "string", "Archivo JSON del schema de extraccion de documentos."),
+        ("Docs", "TopKChunks", configuration["Docs:TopKChunks"] ?? configuration["Docs:TopKPages"] ?? "6", "int", "Cantidad de chunks a recuperar para respuestas de documentacion."),
+        ("Docs", "TopKPages", configuration["Docs:TopKPages"] ?? configuration["Docs:TopKChunks"] ?? "6", "int", "Compatibilidad temporal con el nombre legacy de TopKChunks."),
+        ("Docs", "MaxAnswerCitations", configuration["Docs:MaxAnswerCitations"], "int", "Maximo de citas devueltas por respuesta de documentacion.")
     };
 
     seedEntries =
     [
         .. seedEntries,
         ("Retrieval", "TopExamples", configuration["Settings:Retrieval:TopExamples"] ?? "10", "int", "Cantidad de training examples candidatos para retrieval."),
-        ("Retrieval", "MinExampleScore", "2.5", "double", "Score mínimo para considerar un training example relevante."),
+        ("Retrieval", "MinExampleScore", "2.5", "double", "Score mÃ­nimo para considerar un training example relevante."),
         ("Retrieval", "TopSchemaDocs", configuration["Settings:Retrieval:TopSchemaDocs"] ?? "6", "int", "Cantidad de schema docs relevantes a incluir."),
         ("Retrieval", "FallbackSchemaDocs", configuration["Settings:Retrieval:FallbackSchemaDocs"] ?? "15", "int", "Cantidad de schema docs de fallback cuando no hay match fuerte."),
-        ("Retrieval", "Domain", configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot", "string", "Dominio operativo para retrieval y validación."),
+        ("Retrieval", "Domain", configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot", "string", "Dominio operativo para retrieval y validaciÃ³n."),
 
         ("TenantDefaults", "TenantKey", "default", "string", "Tenant por defecto del runtime y onboarding inicial."),
-        ("TenantDefaults", "ConnectionName", "OperationalDb", "string", "Nombre de conexión por defecto para runtime y onboarding inicial."),
+        ("TenantDefaults", "ConnectionName", seededDefaultConnectionName, "string", "Nombre de conexiÃ³n por defecto para runtime y onboarding inicial."),
         ("Prompting", "MaxPromptChars", "9000", "int", "Presupuesto total del prompt SQL en caracteres."),
-        ("Prompting", "MaxRulesChars", "1800", "int", "Presupuesto máximo para reglas de negocio en el prompt SQL."),
-        ("Prompting", "MaxSemanticHintsChars", "1400", "int", "Presupuesto máximo para pistas semánticas del dominio en el prompt SQL."),
-        ("Prompting", "MaxSchemasChars", "1800", "int", "Presupuesto máximo para schema docs en el prompt SQL."),
-        ("Prompting", "MaxExamplesChars", "4200", "int", "Presupuesto máximo para examples en el prompt SQL."),
-        ("Prompting", "MaxRules", "6", "int", "Cantidad máxima de business rules enviadas al prompt SQL."),
-        ("Prompting", "MaxSemanticHints", "8", "int", "Cantidad máxima de pistas semánticas enviadas al prompt SQL."),
-        ("Prompting", "MaxSchemas", "3", "int", "Cantidad máxima de schema docs enviadas al prompt SQL."),
-        ("Prompting", "MaxExamples", "2", "int", "Cantidad máxima de training examples enviados al prompt SQL."),
+        ("Prompting", "MaxRulesChars", "1800", "int", "Presupuesto mÃ¡ximo para reglas de negocio en el prompt SQL."),
+        ("Prompting", "MaxSemanticHintsChars", "1400", "int", "Presupuesto mÃ¡ximo para pistas semÃ¡nticas del dominio en el prompt SQL."),
+        ("Prompting", "MaxSchemasChars", "1800", "int", "Presupuesto mÃ¡ximo para schema docs en el prompt SQL."),
+        ("Prompting", "MaxExamplesChars", "4200", "int", "Presupuesto mÃ¡ximo para examples en el prompt SQL."),
+        ("Prompting", "MaxRules", "6", "int", "Cantidad mÃ¡xima de business rules enviadas al prompt SQL."),
+        ("Prompting", "MaxSemanticHints", "8", "int", "Cantidad mÃ¡xima de pistas semÃ¡nticas enviadas al prompt SQL."),
+        ("Prompting", "MaxSchemas", "3", "int", "Cantidad mÃ¡xima de schema docs enviadas al prompt SQL."),
+        ("Prompting", "MaxExamples", "2", "int", "Cantidad mÃ¡xima de training examples enviados al prompt SQL."),
         ("Prompting", "SystemPersona", "Eres un desarrollador experto en T-SQL para SQL Server.", "string", "Persona base del system prompt SQL."),
-        ("Prompting", "TaskInstruction", "Tu tarea es generar SOLO codigo SQL valido para SQL Server.", "string", "Instrucción principal del system prompt SQL."),
-        ("Prompting", "ContextInstruction", "Debes basarte estrictamente en los objetos SQL permitidos, reglas, esquemas y ejemplos proporcionados.", "string", "Instrucción de uso de contexto del system prompt SQL."),
-        ("Prompting", "SqlSyntaxRules", "1. ESTA ESTRICTAMENTE PROHIBIDO USAR 'LIMIT'. Para limitar resultados en SQL Server, usa SIEMPRE 'SELECT TOP (N)'.\n2. Usa EXACTAMENTE los nombres de columnas que aparezcan en los esquemas recuperados y ejemplos validos.\n3. NUNCA compares un valor de texto contra una columna ID.\n4. Si necesitas cruzar objetos SQL permitidos, prefiere joins por IDs y OperationDate.\n5. Devuelve SOLO el SQL, sin comentarios y sin bloques markdown.", "string", "Bloque editable de reglas críticas de sintaxis T-SQL."),
-        ("Prompting", "TimeInterpretationRules", "- Hoy: CAST(OperationDate AS date) = CAST(GETDATE() AS date)\n- Ayer: CAST(OperationDate AS date) = DATEADD(DAY, -1, CAST(GETDATE() AS date))\n- Mes actual: YearMonth = CONVERT(char(7), GETDATE(), 120)\n- Semana actual: YearNumber = YEAR(GETDATE()) AND WeekOfYear = DATEPART(ISO_WEEK, GETDATE())\n- Cuando el usuario diga 'turno actual' o 'del turno', filtra explicitamente por un unico ShiftId calculado como el mas reciente del dia dentro de la vista consultada.", "string", "Bloque editable de interpretación temporal para el prompt SQL."),
+        ("Prompting", "TaskInstruction", "Tu tarea es generar SOLO codigo SQL valido para SQL Server.", "string", "InstrucciÃ³n principal del system prompt SQL."),
+        ("Prompting", "ContextInstruction", "Debes basarte estrictamente en los objetos SQL permitidos, reglas, esquemas y ejemplos proporcionados.", "string", "InstrucciÃ³n de uso de contexto del system prompt SQL."),
+        ("Prompting", "SqlSyntaxRules", "1. ESTA ESTRICTAMENTE PROHIBIDO USAR 'LIMIT'. Para limitar resultados en SQL Server, usa SIEMPRE 'SELECT TOP (N)'.\n2. Usa EXACTAMENTE los nombres de columnas que aparezcan en los esquemas recuperados y ejemplos validos.\n3. NUNCA compares un valor de texto contra una columna ID.\n4. Si necesitas cruzar objetos SQL permitidos, prefiere joins por IDs y OperationDate.\n5. Devuelve SOLO el SQL, sin comentarios y sin bloques markdown.", "string", "Bloque editable de reglas crÃ­ticas de sintaxis T-SQL."),
+        ("Prompting", "TimeInterpretationRules", "- Hoy: CAST(OperationDate AS date) = CAST(GETDATE() AS date)\n- Ayer: CAST(OperationDate AS date) = DATEADD(DAY, -1, CAST(GETDATE() AS date))\n- Mes actual: YearMonth = CONVERT(char(7), GETDATE(), 120)\n- Semana actual: YearNumber = YEAR(GETDATE()) AND WeekOfYear = DATEPART(ISO_WEEK, GETDATE())\n- Cuando el usuario diga 'turno actual' o 'del turno', filtra explicitamente por un unico ShiftId calculado como el mas reciente del dia dentro de la vista consultada.", "string", "Bloque editable de interpretaciÃ³n temporal para el prompt SQL."),
         ("Prompting", "BusinessRulesHeader", "REGLAS DE NEGOCIO IMPORTANTES:", "string", "Encabezado para el bloque de business rules del prompt SQL."),
-        ("Prompting", "SemanticHintsHeader", "PISTAS SEMANTICAS DEL DOMINIO:", "string", "Encabezado para el bloque de pistas sem�nticas del prompt SQL."),
+        ("Prompting", "SemanticHintsHeader", "PISTAS SEMANTICAS DEL DOMINIO:", "string", "Encabezado para el bloque de pistas semÃ¡nticas del prompt SQL."),
         ("Prompting", "AllowedObjectsHeader", "OBJETOS SQL PERMITIDOS:", "string", "Encabezado para el bloque de objetos permitidos del prompt SQL."),
         ("Prompting", "SchemasHeader", "ESQUEMAS RELEVANTES RECUPERADOS:", "string", "Encabezado para el bloque de schema docs del prompt SQL."),
         ("Prompting", "ExamplesHeader", "EJEMPLOS RELEVANTES:", "string", "Encabezado para el bloque de examples del prompt SQL."),
@@ -460,6 +493,98 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
                 CreatedUtc = createdUtc
             });
     }
+
+    const string seedPredictionProfileSql = @"
+        INSERT INTO PredictionProfiles
+            (Domain, ProfileKey, DisplayName, DomainPackKey, TargetMetricKey, CalendarProfileKey, Grain, Horizon, HorizonUnit, ModelType, ConnectionName, SourceMode, TargetSeriesSource, FeatureSourcesJson, GroupByJson, FiltersJson, Notes, IsActive, CreatedUtc, UpdatedUtc)
+        SELECT
+            @Domain,
+            @ProfileKey,
+            @DisplayName,
+            @DomainPackKey,
+            @TargetMetricKey,
+            @CalendarProfileKey,
+            @Grain,
+            @Horizon,
+            @HorizonUnit,
+            @ModelType,
+            @ConnectionName,
+            @SourceMode,
+            @TargetSeriesSource,
+            @FeatureSourcesJson,
+            @GroupByJson,
+            @FiltersJson,
+            @Notes,
+            1,
+            @CreatedUtc,
+            @CreatedUtc
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM PredictionProfiles
+            WHERE Domain = @Domain
+              AND ProfileKey = @ProfileKey
+        );";
+
+    await connection.ExecuteAsync(
+        seedPredictionProfileSql,
+        new
+        {
+            Domain = configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot",
+            ProfileKey = "industrial-scrap-shift",
+            DisplayName = "Industrial Scrap Shift Forecast",
+            DomainPackKey = "industrial-kpi",
+            TargetMetricKey = "scrap_qty",
+            CalendarProfileKey = "shift-calendar",
+            Grain = "shift",
+            Horizon = 1,
+            HorizonUnit = "shift",
+            ModelType = "FastTree",
+            ConnectionName = seededDefaultConnectionName,
+            SourceMode = "KpiViews",
+            TargetSeriesSource = "ml:active-profile",
+            FeatureSourcesJson = "[\"produced_qty\",\"downtime_minutes\"]",
+            GroupByJson = "[\"part\",\"shift\"]",
+            FiltersJson = (string?)null,
+            Notes = "Perfil semilla transicional para forecasting industrial por turno.",
+            CreatedUtc = createdUtc
+        });
+
+    await connection.ExecuteAsync(
+        seedPredictionProfileSql,
+        new
+        {
+            Domain = "northwind-sales",
+            ProfileKey = "northwind-sales-daily-units",
+            DisplayName = "Northwind Sales Daily Units Forecast",
+            DomainPackKey = "northwind-sales",
+            TargetMetricKey = "units_sold",
+            CalendarProfileKey = "standard-calendar",
+            Grain = "day",
+            Horizon = 7,
+            HorizonUnit = "day",
+            ModelType = "FastTree",
+            ConnectionName = "NorthwindDb",
+            SourceMode = "CustomSql",
+            TargetSeriesSource = @"
+SELECT
+    CAST(od.ProductID AS nvarchar(50)) AS SeriesKey,
+    CAST(o.OrderDate AS date) AS ObservedOn,
+    1 AS BucketKey,
+    'Daily' AS BucketLabel,
+    CAST(0 AS bigint) AS BucketStartTick,
+    CAST(863999999999 AS bigint) AS BucketEndTick,
+    CAST(SUM(od.Quantity) AS float) AS TargetValue
+FROM dbo.Orders o
+JOIN dbo.OrderDetails od ON o.OrderID = od.OrderID
+WHERE o.OrderDate IS NOT NULL
+GROUP BY od.ProductID, CAST(o.OrderDate AS date)
+ORDER BY od.ProductID, CAST(o.OrderDate AS date)",
+            FeatureSourcesJson = "[\"net_sales\",\"order_count\"]",
+            GroupByJson = "[\"product\"]",
+            FiltersJson = (string?)null,
+            Notes = "Perfil semilla para forecast de unidades vendidas por producto en Northwind.",
+            CreatedUtc = createdUtc
+        });
 
     const string seedTenantSql = @"
         INSERT INTO Tenants
@@ -510,16 +635,19 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
               AND Domain = @Domain
         );";
 
-    await connection.ExecuteAsync(
-        seedTenantDomainSql,
-        new
-        {
-            TenantId = defaultTenantId,
-            Domain = configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot",
-            ConnectionName = "OperationalDb",
-            SystemProfileKey = defaultSystemProfile,
-            CreatedUtc = createdUtc
-        });
+    if (!string.IsNullOrWhiteSpace(seededDefaultConnectionName))
+    {
+        await connection.ExecuteAsync(
+            seedTenantDomainSql,
+            new
+            {
+                TenantId = defaultTenantId,
+                Domain = configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot",
+                ConnectionName = seededDefaultConnectionName,
+                SystemProfileKey = defaultSystemProfile,
+                CreatedUtc = createdUtc
+            });
+    }
     Console.WriteLine($"[DB Setup] System config listo en: {sqlitePath}");
 }
 
@@ -534,12 +662,479 @@ static async Task EnsureRuntimeDatabaseSetupAsync(IServiceProvider services)
     await connection.OpenAsync();
 
     const string sql = @"
-        -- tu SQL actual de runtime aquí...
+        CREATE TABLE IF NOT EXISTS QuestionJobs (
+            JobId TEXT PRIMARY KEY,
+            UserId TEXT NOT NULL,
+            Role TEXT NOT NULL,
+            TenantKey TEXT NOT NULL DEFAULT 'default',
+            Domain TEXT NULL,
+            ConnectionName TEXT NOT NULL DEFAULT '',
+            Question TEXT NOT NULL,
+            Status TEXT NOT NULL,
+            Mode TEXT NOT NULL DEFAULT 'Data',
+            SqlText TEXT NULL,
+            ErrorText TEXT NULL,
+            ResultJson TEXT NULL,
+            Attempt INTEGER NOT NULL DEFAULT 0,
+            TrainingExampleSaved INTEGER NOT NULL DEFAULT 0,
+            VerificationStatus TEXT NOT NULL DEFAULT 'Pending',
+            UserFeedback TEXT NULL,
+            FeedbackUtc TEXT NULL,
+            FeedbackComment TEXT NULL,
+            CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_QuestionJobs_CreatedUtc
+            ON QuestionJobs(CreatedUtc DESC);
+
+        CREATE INDEX IF NOT EXISTS IX_QuestionJobs_UserQuestionContextStatus
+            ON QuestionJobs(UserId, Question, TenantKey, Domain, ConnectionName, Status);
+
+        CREATE TABLE IF NOT EXISTS LlmRuntimeProfile (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            IsActive INTEGER NOT NULL DEFAULT 0,
+            Name TEXT NOT NULL,
+            GpuLayerCount INTEGER NULL,
+            ContextSize INTEGER NULL,
+            Threads INTEGER NULL,
+            BatchThreads INTEGER NULL,
+            BatchSize INTEGER NULL,
+            UBatchSize INTEGER NULL,
+            FlashAttention INTEGER NULL,
+            UseMemorymap INTEGER NOT NULL DEFAULT 1,
+            NoKqvOffload INTEGER NOT NULL DEFAULT 0,
+            OpOffload INTEGER NULL,
+            CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UpdatedUtc TEXT NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS IX_LlmRuntimeProfile_SingleActive
+            ON LlmRuntimeProfile(IsActive)
+            WHERE IsActive = 1;
     ";
 
     await connection.ExecuteAsync(sql);
+    await EnsureLlmRuntimeProfileSchemaAsync(connection);
+
+    const string seedProfileSql = @"
+        INSERT INTO LlmRuntimeProfile
+            (IsActive, Name, GpuLayerCount, ContextSize, Threads, BatchThreads, BatchSize, UBatchSize, FlashAttention, UseMemorymap, NoKqvOffload, OpOffload, CreatedUtc)
+        SELECT
+            1,
+            'Fallback-Workstation',
+            15,
+            2048,
+            NULL,
+            NULL,
+            128,
+            64,
+            NULL,
+            1,
+            0,
+            NULL,
+            @CreatedUtc
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM LlmRuntimeProfile
+        );";
+
+    await connection.ExecuteAsync(
+        seedProfileSql,
+        new
+        {
+            CreatedUtc = DateTime.UtcNow.ToString("o")
+        });
 }
 
+static async Task EnsureLlmRuntimeProfileSchemaAsync(SqliteConnection connection)
+{
+    var columns = (await connection.QueryAsync<string>(
+        "SELECT name FROM pragma_table_info('LlmRuntimeProfile');"))
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    if (columns.Count == 0)
+        return;
+
+    var alterStatements = new List<string>();
+
+    if (!columns.Contains("IsActive"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN IsActive INTEGER NOT NULL DEFAULT 0;");
+    if (!columns.Contains("Name"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN Name TEXT NOT NULL DEFAULT 'Default';");
+    if (!columns.Contains("GpuLayerCount"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN GpuLayerCount INTEGER NULL;");
+    if (!columns.Contains("ContextSize"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN ContextSize INTEGER NULL;");
+    if (!columns.Contains("Threads"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN Threads INTEGER NULL;");
+    if (!columns.Contains("BatchThreads"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN BatchThreads INTEGER NULL;");
+    if (!columns.Contains("BatchSize"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN BatchSize INTEGER NULL;");
+    if (!columns.Contains("UBatchSize"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN UBatchSize INTEGER NULL;");
+    if (!columns.Contains("FlashAttention"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN FlashAttention INTEGER NULL;");
+    if (!columns.Contains("UseMemorymap"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN UseMemorymap INTEGER NOT NULL DEFAULT 1;");
+    if (!columns.Contains("NoKqvOffload"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN NoKqvOffload INTEGER NOT NULL DEFAULT 0;");
+    if (!columns.Contains("OpOffload"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN OpOffload INTEGER NULL;");
+    if (!columns.Contains("CreatedUtc"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN CreatedUtc TEXT NULL;");
+    if (!columns.Contains("UpdatedUtc"))
+        alterStatements.Add("ALTER TABLE LlmRuntimeProfile ADD COLUMN UpdatedUtc TEXT NULL;");
+
+    foreach (var statement in alterStatements)
+    {
+        await connection.ExecuteAsync(statement);
+    }
+
+    await connection.ExecuteAsync(@"
+        UPDATE LlmRuntimeProfile
+        SET CreatedUtc = COALESCE(CreatedUtc, CURRENT_TIMESTAMP)
+        WHERE CreatedUtc IS NULL;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS IX_LlmRuntimeProfile_SingleActive
+            ON LlmRuntimeProfile(IsActive)
+            WHERE IsActive = 1;");
+}
+
+static async Task EnsureMemoryFeatureDatabaseSetupAsync(string sqlitePath)
+{
+    using var connection = new SqliteConnection($"Data Source={sqlitePath};");
+    await connection.OpenAsync();
+
+    const string sql = @"
+        CREATE TABLE IF NOT EXISTS BusinessRules (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Domain TEXT NOT NULL,
+            RuleKey TEXT NOT NULL,
+            RuleText TEXT NOT NULL,
+            Priority INTEGER NOT NULL DEFAULT 100,
+            IsActive INTEGER NOT NULL DEFAULT 1,
+            CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UpdatedUtc TEXT NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS UX_BusinessRules_Domain_RuleKey
+            ON BusinessRules(Domain, RuleKey);
+
+        CREATE INDEX IF NOT EXISTS IX_BusinessRules_Domain_IsActive_Priority
+            ON BusinessRules(Domain, IsActive, Priority, Id);
+
+        CREATE TABLE IF NOT EXISTS AllowedObjects (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Domain TEXT NOT NULL,
+            SchemaName TEXT NOT NULL,
+            ObjectName TEXT NOT NULL,
+            ObjectType TEXT NOT NULL DEFAULT '',
+            IsActive INTEGER NOT NULL DEFAULT 1,
+            Notes TEXT NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS UX_AllowedObjects_Domain_Schema_Object
+            ON AllowedObjects(Domain, SchemaName, ObjectName);
+
+        CREATE INDEX IF NOT EXISTS IX_AllowedObjects_Domain_IsActive
+            ON AllowedObjects(Domain, IsActive, SchemaName, ObjectName);
+
+        CREATE TABLE IF NOT EXISTS SchemaDocs (
+            SchemaName TEXT NOT NULL,
+            TableName TEXT NOT NULL,
+            DocText TEXT NOT NULL,
+            JsonDefinition TEXT NOT NULL,
+            PRIMARY KEY (SchemaName, TableName)
+        );
+
+        CREATE TABLE IF NOT EXISTS TrainingExamples (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Question TEXT NOT NULL,
+            Sql TEXT NOT NULL,
+            TenantKey TEXT NOT NULL DEFAULT '',
+            Domain TEXT NOT NULL DEFAULT '',
+            ConnectionName TEXT NOT NULL DEFAULT '',
+            IntentName TEXT NULL,
+            IsVerified INTEGER NOT NULL DEFAULT 0,
+            Priority INTEGER NOT NULL DEFAULT 0,
+            CreatedUtc DATETIME NOT NULL,
+            LastUsedUtc DATETIME NOT NULL,
+            UseCount INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS ReviewQueue (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Question TEXT NOT NULL,
+            GeneratedSql TEXT NOT NULL,
+            ErrorMessage TEXT NULL,
+            Status TEXT NOT NULL,
+            Reason TEXT NOT NULL,
+            CreatedUtc DATETIME NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS SemanticHints (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Domain TEXT NOT NULL,
+            HintKey TEXT NOT NULL,
+            HintType TEXT NOT NULL,
+            DisplayName TEXT NULL,
+            ObjectName TEXT NULL,
+            ColumnName TEXT NULL,
+            HintText TEXT NOT NULL,
+            Priority INTEGER NOT NULL DEFAULT 100,
+            IsActive INTEGER NOT NULL DEFAULT 1,
+            CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UpdatedUtc TEXT NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS IX_SemanticHints_Domain_HintKey
+            ON SemanticHints(Domain, HintKey);
+
+        CREATE INDEX IF NOT EXISTS IX_SemanticHints_Domain_IsActive_Priority
+            ON SemanticHints(Domain, IsActive, Priority, Id);
+
+        CREATE TABLE IF NOT EXISTS QueryPatterns (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Domain TEXT NOT NULL,
+            PatternKey TEXT NOT NULL,
+            IntentName TEXT NOT NULL,
+            Description TEXT NULL,
+            SqlTemplate TEXT NOT NULL,
+            DefaultTopN INTEGER NULL,
+            MetricKey TEXT NULL,
+            DimensionKey TEXT NULL,
+            DefaultTimeScopeKey TEXT NULL,
+            Priority INTEGER NOT NULL DEFAULT 100,
+            IsActive INTEGER NOT NULL DEFAULT 1,
+            CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UpdatedUtc TEXT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_QueryPatterns_Domain_IsActive_Priority
+            ON QueryPatterns(Domain, IsActive, Priority, Id);
+
+        CREATE TABLE IF NOT EXISTS QueryPatternTerms (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            PatternId INTEGER NOT NULL,
+            Term TEXT NOT NULL,
+            TermGroup TEXT NOT NULL,
+            MatchMode TEXT NOT NULL DEFAULT 'contains',
+            IsRequired INTEGER NOT NULL DEFAULT 1,
+            IsActive INTEGER NOT NULL DEFAULT 1,
+            CreatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (PatternId) REFERENCES QueryPatterns(Id)
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_QueryPatternTerms_PatternId_IsActive
+            ON QueryPatternTerms(PatternId, IsActive, IsRequired, Id);
+
+        CREATE TABLE IF NOT EXISTS DocDocuments (
+            DocId TEXT PRIMARY KEY,
+            Domain TEXT NOT NULL,
+            FileName TEXT NOT NULL,
+            UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_DocDocuments_Domain_UpdatedUtc
+            ON DocDocuments(Domain, UpdatedUtc DESC);
+
+        CREATE TABLE IF NOT EXISTS DocChunks (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            DocId TEXT NOT NULL,
+            PageNumber INTEGER NOT NULL,
+            Text TEXT NOT NULL,
+            FOREIGN KEY (DocId) REFERENCES DocDocuments(DocId)
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_DocChunks_DocId_PageNumber
+            ON DocChunks(DocId, PageNumber);
+    ";
+
+    await connection.ExecuteAsync(sql);
+    await EnsureDocumentSchemaAsync(connection);
+    await EnsureTrainingExamplesSchemaAsync(connection);
+}
+
+static async Task EnsureDocumentSchemaAsync(SqliteConnection connection)
+{
+    var docDocumentColumns = (await connection.QueryAsync<string>(
+        "SELECT name FROM pragma_table_info('DocDocuments');"))
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    if (docDocumentColumns.Count > 0)
+    {
+        if (!docDocumentColumns.Contains("FilePath"))
+            await connection.ExecuteAsync("ALTER TABLE DocDocuments ADD COLUMN FilePath TEXT NULL;");
+        if (!docDocumentColumns.Contains("Sha256"))
+            await connection.ExecuteAsync("ALTER TABLE DocDocuments ADD COLUMN Sha256 TEXT NULL;");
+        if (!docDocumentColumns.Contains("PageCount"))
+            await connection.ExecuteAsync("ALTER TABLE DocDocuments ADD COLUMN PageCount INTEGER NOT NULL DEFAULT 0;");
+        if (!docDocumentColumns.Contains("DocumentType"))
+            await connection.ExecuteAsync("ALTER TABLE DocDocuments ADD COLUMN DocumentType TEXT NULL;");
+        if (!docDocumentColumns.Contains("Title"))
+            await connection.ExecuteAsync("ALTER TABLE DocDocuments ADD COLUMN Title TEXT NULL;");
+    }
+
+    var docChunkColumns = (await connection.QueryAsync<string>(
+        "SELECT name FROM pragma_table_info('DocChunks');"))
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    if (docChunkColumns.Count > 0)
+    {
+        if (!docChunkColumns.Contains("ChunkKey"))
+            await connection.ExecuteAsync("ALTER TABLE DocChunks ADD COLUMN ChunkKey TEXT NULL;");
+        if (!docChunkColumns.Contains("ChunkOrder"))
+            await connection.ExecuteAsync("ALTER TABLE DocChunks ADD COLUMN ChunkOrder INTEGER NOT NULL DEFAULT 1;");
+        if (!docChunkColumns.Contains("ChunkTitle"))
+            await connection.ExecuteAsync("ALTER TABLE DocChunks ADD COLUMN ChunkTitle TEXT NULL;");
+        if (!docChunkColumns.Contains("SectionName"))
+            await connection.ExecuteAsync("ALTER TABLE DocChunks ADD COLUMN SectionName TEXT NULL;");
+        if (!docChunkColumns.Contains("PartNumbers"))
+            await connection.ExecuteAsync("ALTER TABLE DocChunks ADD COLUMN PartNumbers TEXT NULL;");
+        if (!docChunkColumns.Contains("NormalizedTokens"))
+            await connection.ExecuteAsync("ALTER TABLE DocChunks ADD COLUMN NormalizedTokens TEXT NULL;");
+        if (!docChunkColumns.Contains("TokenCount"))
+            await connection.ExecuteAsync("ALTER TABLE DocChunks ADD COLUMN TokenCount INTEGER NOT NULL DEFAULT 0;");
+        if (!docChunkColumns.Contains("IsCoverPage"))
+            await connection.ExecuteAsync("ALTER TABLE DocChunks ADD COLUMN IsCoverPage INTEGER NOT NULL DEFAULT 0;");
+        if (!docChunkColumns.Contains("UpdatedUtc"))
+            await connection.ExecuteAsync("ALTER TABLE DocChunks ADD COLUMN UpdatedUtc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP;");
+    }
+
+    await connection.ExecuteAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_DocChunks_ChunkKey ON DocChunks(ChunkKey);");
+    await connection.ExecuteAsync("CREATE INDEX IF NOT EXISTS IX_DocChunks_DocId_PageNumber_Order ON DocChunks(DocId, PageNumber, ChunkOrder);");
+    await connection.ExecuteAsync("CREATE INDEX IF NOT EXISTS IX_DocDocuments_Domain_UpdatedUtc ON DocDocuments(Domain, UpdatedUtc DESC);");
+}
+
+static async Task EnsureTrainingExamplesSchemaAsync(SqliteConnection connection)
+{
+    var columns = (await connection.QueryAsync<string>(
+        "SELECT name FROM pragma_table_info('TrainingExamples');"))
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    if (columns.Count == 0)
+    {
+        const string createTableSql = @"
+            CREATE TABLE IF NOT EXISTS TrainingExamples (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Question TEXT NOT NULL,
+                Sql TEXT NOT NULL,
+                TenantKey TEXT NOT NULL DEFAULT '',
+                Domain TEXT NOT NULL DEFAULT '',
+                ConnectionName TEXT NOT NULL DEFAULT '',
+                IntentName TEXT NULL,
+                IsVerified INTEGER NOT NULL DEFAULT 0,
+                Priority INTEGER NOT NULL DEFAULT 0,
+                CreatedUtc DATETIME NOT NULL,
+                LastUsedUtc DATETIME NOT NULL,
+                UseCount INTEGER NOT NULL DEFAULT 0
+            );";
+
+        await connection.ExecuteAsync(createTableSql);
+    }
+    else
+    {
+        var needsMigration =
+            !columns.Contains("TenantKey") ||
+            !columns.Contains("ConnectionName") ||
+            await HasLegacyTrainingExamplesUniqueConstraintAsync(connection);
+
+        if (needsMigration)
+        {
+            var tenantKeySelect = columns.Contains("TenantKey") ? "COALESCE(TenantKey, '')" : "''";
+            var domainSelect = columns.Contains("Domain") ? "COALESCE(Domain, '')" : "''";
+            var connectionNameSelect = columns.Contains("ConnectionName") ? "COALESCE(ConnectionName, '')" : "''";
+            var intentNameSelect = columns.Contains("IntentName") ? "IntentName" : "NULL";
+            var isVerifiedSelect = columns.Contains("IsVerified") ? "COALESCE(IsVerified, 0)" : "0";
+            var prioritySelect = columns.Contains("Priority") ? "COALESCE(Priority, 0)" : "0";
+            var createdUtcSelect = columns.Contains("CreatedUtc") ? "COALESCE(CreatedUtc, CURRENT_TIMESTAMP)" : "CURRENT_TIMESTAMP";
+            var lastUsedUtcSelect = columns.Contains("LastUsedUtc") ? "COALESCE(LastUsedUtc, CURRENT_TIMESTAMP)" : "CURRENT_TIMESTAMP";
+            var useCountSelect = columns.Contains("UseCount") ? "COALESCE(UseCount, 0)" : "0";
+
+            var migrationSql = $@"
+                BEGIN IMMEDIATE TRANSACTION;
+
+                DROP TABLE IF EXISTS TrainingExamples_new;
+
+                CREATE TABLE TrainingExamples_new (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Question TEXT NOT NULL,
+                    Sql TEXT NOT NULL,
+                    TenantKey TEXT NOT NULL DEFAULT '',
+                    Domain TEXT NOT NULL DEFAULT '',
+                    ConnectionName TEXT NOT NULL DEFAULT '',
+                    IntentName TEXT NULL,
+                    IsVerified INTEGER NOT NULL DEFAULT 0,
+                    Priority INTEGER NOT NULL DEFAULT 0,
+                    CreatedUtc DATETIME NOT NULL,
+                    LastUsedUtc DATETIME NOT NULL,
+                    UseCount INTEGER NOT NULL DEFAULT 0
+                );
+
+                INSERT INTO TrainingExamples_new
+                    (Id, Question, Sql, TenantKey, Domain, ConnectionName, IntentName, IsVerified, Priority, CreatedUtc, LastUsedUtc, UseCount)
+                SELECT
+                    Id,
+                    Question,
+                    Sql,
+                    {tenantKeySelect},
+                    {domainSelect},
+                    {connectionNameSelect},
+                    {intentNameSelect},
+                    {isVerifiedSelect},
+                    {prioritySelect},
+                    {createdUtcSelect},
+                    {lastUsedUtcSelect},
+                    {useCountSelect}
+                FROM TrainingExamples;
+
+                DROP TABLE IF EXISTS TrainingExamples;
+                ALTER TABLE TrainingExamples_new RENAME TO TrainingExamples;
+
+                COMMIT;";
+
+            await connection.ExecuteAsync(migrationSql);
+        }
+    }
+
+    const string indexSql = @"
+        CREATE UNIQUE INDEX IF NOT EXISTS IX_TrainingExamples_ContextQuestion
+            ON TrainingExamples(Question, TenantKey, Domain, ConnectionName);
+
+        CREATE INDEX IF NOT EXISTS IX_TrainingExamples_ContextIntentVerified
+            ON TrainingExamples(TenantKey, Domain, ConnectionName, IntentName, IsVerified, Priority DESC);";
+
+    await connection.ExecuteAsync(indexSql);
+}
+
+static async Task<bool> HasLegacyTrainingExamplesUniqueConstraintAsync(SqliteConnection connection)
+{
+    const string tableSql = @"
+        SELECT sql
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name = 'TrainingExamples';";
+
+    var createSql = await connection.ExecuteScalarAsync<string?>(tableSql);
+
+    if (!string.IsNullOrWhiteSpace(createSql) &&
+        createSql.Contains("Question TEXT NOT NULL UNIQUE", StringComparison.OrdinalIgnoreCase))
+    {
+        return true;
+    }
+
+    const string indexSql = @"
+        SELECT name
+        FROM pragma_index_list('TrainingExamples')
+        WHERE [unique] = 1;";
+
+    var uniqueIndexes = (await connection.QueryAsync<string>(indexSql)).ToList();
+
+    return uniqueIndexes.Any(name =>
+        string.Equals(name, "IX_TrainingExamples_Question", StringComparison.OrdinalIgnoreCase));
+}
 static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
     string sqlitePath,
     IConfiguration configuration,
@@ -738,5 +1333,8 @@ static async Task EnsureQueryPatternTimeScopeSeedsAsync(IServiceProvider service
         }
     }
 }
+
+
+
 
 

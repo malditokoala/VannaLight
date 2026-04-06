@@ -23,6 +23,7 @@ public interface ITrainingStore
     Task<long> InsertTrainingExampleAsync(string sqlitePath, string question, string sql, CancellationToken ct);
     Task TouchExampleAsync(string sqlitePath, long id, CancellationToken ct);
     Task<IReadOnlyList<TrainingExample>> GetAllTrainingExamplesAsync(string sqlitePath, CancellationToken ct);
+    Task<TrainingExample?> GetVerifiedExactMatchAsync(string sqlitePath, string question, AskExecutionContext executionContext, CancellationToken ct);
     Task UpsertAsync(TrainingExampleUpsert example, CancellationToken ct);
 
 }

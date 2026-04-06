@@ -5,7 +5,7 @@ public class TenantDomain
     public int Id { get; set; }
     public int TenantId { get; set; }
     public string Domain { get; set; } = string.Empty;
-    public string ConnectionName { get; set; } = "OperationalDb";
+    public string ConnectionName { get; set; } = string.Empty;
     public string? SystemProfileKey { get; set; }
     public bool IsDefault { get; set; }
     public bool IsActive { get; set; }

@@ -45,12 +45,11 @@ public class InferenceWorker(
                 string question = workItem.Question.ToString();
                 var domain = workItem.Domain.Trim();
                 var connectionName = string.IsNullOrWhiteSpace(workItem.ConnectionName)
-                    ? "OperationalDb"
+                    ? string.Empty
                     : workItem.ConnectionName.Trim();
                 var systemProfileKey = string.IsNullOrWhiteSpace(workItem.SystemProfileKey)
                     ? "default"
                     : workItem.SystemProfileKey.Trim();
-                var sqlServerConnString = await operationalConnectionResolver.ResolveConnectionStringAsync(connectionName, ct);
 
                 using var scope = scopeFactory.CreateScope();
                 var jobStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
@@ -72,7 +71,14 @@ public class InferenceWorker(
                     logger.LogInformation("[Worker] Ejecutando ML.NET para Job {Id}", jobId);
 
                     var askUseCase = scope.ServiceProvider.GetRequiredService<AskUseCase>();
-                    var mlResult = await askUseCase.PredictAsync(question, ct);
+                    var mlExecutionContext = new VannaLight.Core.Models.AskExecutionContext
+                    {
+                        TenantKey = string.IsNullOrWhiteSpace(workItem.TenantKey) ? "default" : workItem.TenantKey.Trim(),
+                        Domain = domain,
+                        ConnectionName = connectionName,
+                        SystemProfileKey = systemProfileKey
+                    };
+                    var mlResult = await askUseCase.PredictAsync(question, mlExecutionContext, ct);
 
                     if (mlResult.Success)
                     {
@@ -116,7 +122,13 @@ public class InferenceWorker(
 
                     if (docResult.Success)
                     {
-                        var jsonCitations = JsonSerializer.Serialize(docResult.Citations);
+                        var docsPayload = new
+                        {
+                            answer = docResult.AnswerText,
+                            citations = docResult.Citations,
+                            confidence = docResult.ConfidenceScore
+                        };
+                        var jsonCitations = JsonSerializer.Serialize(docsPayload);
 
                         await jobStore.UpdateJobAsync(
                             jobId,
@@ -150,6 +162,18 @@ public class InferenceWorker(
                 // CAMINO 3: DATOS (SQL SERVER)
                 // ========================================================
                 logger.LogInformation("[Worker] Ejecutando Text-to-SQL para Job {Id}", jobId);
+                if (string.IsNullOrWhiteSpace(connectionName))
+                {
+                    await HandleErrorAsync(
+                        jobId,
+                        connectionId,
+                        "El trabajo no tiene una conexión configurada. Guarda una conexión válida y vuelve a intentarlo.",
+                        jobStore,
+                        ct);
+                    continue;
+                }
+
+                var sqlServerConnString = await operationalConnectionResolver.ResolveConnectionStringAsync(connectionName, ct);
 
                 var sqlUseCase = scope.ServiceProvider.GetRequiredService<AskUseCase>();
                 var sqlResult = await sqlUseCase.ExecuteAsync(

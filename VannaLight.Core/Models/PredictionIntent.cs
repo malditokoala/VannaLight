@@ -7,10 +7,32 @@ public class PredictionIntent
 {
     // --- 1. Datos del Router (LLM) ---
     public bool IsPredictionRequest { get; set; }
+
+    /// <summary>
+    /// Identificador de la serie a proyectar. Puede ser un número de parte, producto, categoría,
+    /// país, cliente u otra clave de serie según el dominio.
+    /// </summary>
     public string? EntityName { get; set; }
 
     /// <summary>
-    /// Objetivo de la predicción (EndOfCurrentShift, NextShift, Tomorrow, NextMonth).
+    /// Métrica objetivo inferida para el forecast. Ejemplos: scrap_qty, units_sold,
+    /// net_sales, order_count, produced_qty, downtime_minutes.
+    /// </summary>
+    public string? MetricKey { get; set; }
+
+    /// <summary>
+    /// Tipo semántico de la serie. Ejemplos: part, product, category, customer,
+    /// ship_country, employee, press, department.
+    /// </summary>
+    public string? SeriesType { get; set; }
+
+    /// <summary>
+    /// Objetivo temporal normalizado del forecast.
+    /// Valores soportados actualmente:
+    /// EndOfCurrentShift = cierre del bucket actual,
+    /// NextShift = siguiente bucket disponible,
+    /// Tomorrow = siguiente día completo,
+    /// NextMonth = siguiente mes completo.
     /// </summary>
     public string? PredictionTarget { get; set; }
 
@@ -28,7 +50,7 @@ public class PredictionIntent
     public string? ForecastPeriodLabel { get; set; }
 
     /// <summary>
-    /// Cantidad de turnos históricos utilizados para alimentar el autoregresor.
+    /// Cantidad de buckets históricos utilizados para alimentar el autoregresor.
     /// </summary>
     public int HistoryShiftsUsed { get; set; }
 

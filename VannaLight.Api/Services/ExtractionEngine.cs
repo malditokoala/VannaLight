@@ -3,14 +3,12 @@ using System.Text.RegularExpressions;
 
 namespace VannaLight.Api.Services;
 
-// --- MODELOS DEL ESQUEMA ---
 public record DocTypeSchema(string TypeId, string DisplayName, ScoringConfig Scoring, List<FieldDef> Fields);
 public record ScoringConfig(List<string> BoostLabels);
 public record FieldDef(string Key, string DisplayLabel, int Order, List<string> Tags, string PatternType,
     List<string> AnchorLabels, List<string>? ExpectedUnits = null, Dictionary<string, string>? UnitMap = null,
     string? Prefix = null, bool IsList = false);
 
-// --- EL MOTOR GENÉRICO ---
 public static class ExtractionEngine
 {
     public static Dictionary<string, string> ExtractAll(DocTypeSchema schema, string text)
@@ -18,7 +16,6 @@ public static class ExtractionEngine
         var facts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(text)) return facts;
 
-        // Normalizar una sola vez
         text = Regex.Replace(text.Replace('\n', ' ').Replace('\r', ' '), @"\s{2,}", " ");
 
         foreach (var field in schema.Fields)
@@ -36,11 +33,9 @@ public static class ExtractionEngine
         var matches = valueRegex.Matches(text);
         if (matches.Count == 0) return string.Empty;
 
-        // ✅ CAMBIO 1: encontrar TODAS las ocurrencias de anchors (no solo la primera con IndexOf)
         var anchorIdx = FindAllAnchorIndexes(text, field.AnchorLabels);
-        if (anchorIdx.Count == 0) return string.Empty; // sin ancla => no es seguro extraer
+        if (anchorIdx.Count == 0) return string.Empty;
 
-        // ✅ CAMBIO 2: score contra TODOS los anchors (min distancia)
         var scoredMatches = matches.Cast<Match>()
             .Select(m => new
             {
@@ -50,7 +45,6 @@ public static class ExtractionEngine
             .OrderBy(x => x.Dist)
             .ToList();
 
-        // --- MANEJO DE LISTAS (Empaque, Separadores, etc.) ---
         if (field.IsList)
         {
             if (field.PatternType == "number-unit")
@@ -67,23 +61,17 @@ public static class ExtractionEngine
             }
             else
             {
-                // Para listas de Part Numbers (como los empaques N/P)
                 var uniqueParts = scoredMatches.Where(x => x.Dist < 350)
-                                               .Select(x => x.Match.Value) // Atrapa el string completo (ej. 700009-0030)
+                                               .Select(x => x.Match.Value)
                                                .Distinct()
                                                .ToList();
 
                 return string.Join(", ", uniqueParts);
             }
-            // Retorna aquí y corta la ejecución si es una lista.
         }
 
-        // --- MANEJO DE CAMPOS SIMPLES (Resina, Molde, Estándar, etc.) ---
-
-        // ✅ CAMBIO 3: Para campos normales, guardar el MEJOR (menor distancia) por unidad.
         var bestByUnit = new Dictionary<string, (int Dist, string Value)>(StringComparer.OrdinalIgnoreCase);
 
-        // radio razonable (puedes subir/bajar)
         const int radius = 300;
 
         foreach (var item in scoredMatches.Where(x => x.Dist < radius))
@@ -96,20 +84,18 @@ public static class ExtractionEngine
                 var unitRaw = item.Match.Groups["u"].Value.ToLowerInvariant();
                 var unitCanon = field.UnitMap?.GetValueOrDefault(unitRaw) ?? unitRaw;
                 val = $"{item.Match.Groups["n"].Value} {unitCanon}";
-                groupingKey = unitCanon; // Agrupamos por unidad (lbs, pzs)
+                groupingKey = unitCanon;
             }
             else
             {
-                // Para códigos como H-321 o 910035-0001
                 val = item.Match.Value;
-                groupingKey = "default"; // Solo guardamos el mejor de todos
+                groupingKey = "default";
             }
 
             if (!bestByUnit.TryGetValue(groupingKey, out var cur) || item.Dist < cur.Dist)
                 bestByUnit[groupingKey] = (item.Dist, val);
         }
 
-        // Orden por cercanía al anchor (más cercano primero)
         return string.Join(", ", bestByUnit.Values.OrderBy(x => x.Dist).Select(x => x.Value));
     }
 
@@ -138,7 +124,6 @@ public static class ExtractionEngine
 
     private static Regex BuildRegex(FieldDef field)
     {
-        // Construcción segura y dinámica de Regex con Timeout (Evita ReDoS)
         var options = RegexOptions.IgnoreCase | RegexOptions.Compiled;
         var timeout = TimeSpan.FromMilliseconds(50);
 

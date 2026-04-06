@@ -50,6 +50,7 @@ public sealed class SqlServerSchemaIngestor : ISchemaIngestor
             foreach (var o in objects)
             {
                 var cols = await ReadColumnsAsync(c, o.Schema, o.Name, ct);
+
                 var pks = o.Type == "U"
                     ? await ReadPrimaryKeysAsync(c, o.Schema, o.Name, ct)
                     : new List<string>();
@@ -73,10 +74,15 @@ public sealed class SqlServerSchemaIngestor : ISchemaIngestor
         }
     }
 
-    private async Task<List<ColumnSchema>> ReadColumnsAsync(SqlConnection c, string schema, string table, CancellationToken ct)
+    private async Task<List<ColumnSchema>> ReadColumnsAsync(
+        SqlConnection c,
+        string schema,
+        string table,
+        CancellationToken ct)
     {
         var cols = new List<ColumnSchema>();
         await using var cmd = c.CreateCommand();
+
         cmd.CommandText = @"
             SELECT 
                 c.name,
@@ -96,6 +102,7 @@ public sealed class SqlServerSchemaIngestor : ISchemaIngestor
               AND o.name = @Table
               AND o.type IN ('U', 'V')
             ORDER BY c.column_id;";
+
         cmd.Parameters.AddWithValue("@Schema", schema);
         cmd.Parameters.AddWithValue("@Table", table);
 
@@ -108,16 +115,22 @@ public sealed class SqlServerSchemaIngestor : ISchemaIngestor
                 r.GetBoolean(2),
                 r.IsDBNull(3) ? null : r.GetInt16(3),
                 r.IsDBNull(4) ? null : r.GetByte(4),
-                r.IsDBNull(5) ? null : r.GetByte(5)));
+                r.IsDBNull(5) ? null : r.GetByte(5)
+            ));
         }
 
         return cols;
     }
 
-    private async Task<List<string>> ReadPrimaryKeysAsync(SqlConnection c, string schema, string table, CancellationToken ct)
+    private async Task<List<string>> ReadPrimaryKeysAsync(
+        SqlConnection c,
+        string schema,
+        string table,
+        CancellationToken ct)
     {
         var pks = new List<string>();
         await using var cmd = c.CreateCommand();
+
         cmd.CommandText = @"
             SELECT c.name
             FROM sys.indexes i
@@ -134,6 +147,7 @@ public sealed class SqlServerSchemaIngestor : ISchemaIngestor
             WHERE i.is_primary_key = 1
               AND s.name = @Schema
               AND t.name = @Table;";
+
         cmd.Parameters.AddWithValue("@Schema", schema);
         cmd.Parameters.AddWithValue("@Table", table);
 
@@ -146,10 +160,15 @@ public sealed class SqlServerSchemaIngestor : ISchemaIngestor
         return pks;
     }
 
-    private async Task<List<ForeignKeyInfo>> ReadForeignKeysAsync(SqlConnection c, string schema, string table, CancellationToken ct)
+    private async Task<List<ForeignKeyInfo>> ReadForeignKeysAsync(
+        SqlConnection c,
+        string schema,
+        string table,
+        CancellationToken ct)
     {
         var fks = new List<ForeignKeyInfo>();
         await using var cmd = c.CreateCommand();
+
         cmd.CommandText = @"
             SELECT 
                 fk.name,
@@ -177,6 +196,7 @@ public sealed class SqlServerSchemaIngestor : ISchemaIngestor
                AND fkc.referenced_column_id = cr.column_id
             WHERE sp.name = @Schema
               AND tp.name = @Table;";
+
         cmd.Parameters.AddWithValue("@Schema", schema);
         cmd.Parameters.AddWithValue("@Table", table);
 
@@ -190,7 +210,8 @@ public sealed class SqlServerSchemaIngestor : ISchemaIngestor
                 r.GetString(2),
                 r.GetString(5),
                 r.GetString(3),
-                r.GetString(4)));
+                r.GetString(4)
+            ));
         }
 
         return fks;

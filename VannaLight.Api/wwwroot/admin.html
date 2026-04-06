@@ -69,6 +69,24 @@
                     Hardware LLM
                 </button>
 
+                <button class="tab-btn" id="tab-documents" onclick="switchTab('documents')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 3h7l5 5v13a1 1 0 0 1-1 1H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+                        <path d="M15 3v6h6" />
+                        <path d="M9 13h6" />
+                        <path d="M9 17h8" />
+                    </svg>
+                    Documents PDF
+                </button>
+
+                <button class="tab-btn" id="tab-ml" onclick="switchTab('ml')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+                        <polyline points="16 7 22 7 22 13" />
+                    </svg>
+                    ML / Forecasting
+                </button>
+
                 <button class="tab-btn" id="tab-onboarding" onclick="switchTab('onboarding')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 3v18" />
@@ -153,6 +171,7 @@
                             <button class="filter-btn" id="filter-negative" onclick="setFilter('negative')">Con 👎</button>
                             <button class="filter-btn" id="filter-verified" onclick="setFilter('verified')">Verificados</button>
                         </div>
+                        <div class="context-active-banner" id="ragActiveContextBanner">Sin contexto activo: muestra historial SQL global.</div>
                         <div class="history-scroll" id="historyList">
                             <div class="empty-state">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -244,6 +263,471 @@
                                     </svg>
                                     Guardar en Memoria RAG
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ══ TAB: DOCUMENTS ══ -->
+            <div class="tab-content" id="pane-documents">
+                <div class="rag-layout">
+
+                    <div class="panel-left">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M8 3h7l5 5v13a1 1 0 0 1-1 1H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+                                    <path d="M15 3v6h6" />
+                                </svg>
+                                Documentos indexados
+                            </div>
+                            <span class="panel-count" id="documentCount">—</span>
+                        </div>
+                        <div class="editor-wrap-compact">
+                            <div class="field-group">
+                                <label class="field-label">Dominio de documentos</label>
+                                <input type="text" id="txtDocumentDomainFilter" class="field-input" placeholder="Vacío = default configurado" />
+                                <div class="field-hint">Usa este filtro para revisar un dominio documental específico. Si lo dejas vacío, se usa el dominio default del sistema.</div>
+                            </div>
+                            <button class="btn btn-ghost" type="button" onclick="loadDocumentsAdmin()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+                                    <polyline points="23 4 23 10 17 10" />
+                                    <polyline points="1 20 1 14 7 14" />
+                                    <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
+                                    <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
+                                </svg>
+                                Recargar
+                            </button>
+                        </div>
+                        <div class="history-scroll" id="documentList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M8 3h7l5 5v13a1 1 0 0 1-1 1H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+                                    <path d="M15 3v6h6" />
+                                </svg>
+                                Cargando documentos...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-right">
+                        <div class="editor-wrap">
+                            <div class="section-header">
+                                <div class="section-header-icon si-documents">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M8 3h7l5 5v13a1 1 0 0 1-1 1H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+                                        <path d="M15 3v6h6" />
+                                        <path d="M9 13h6" />
+                                        <path d="M9 17h8" />
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Gestión de Documentos PDF</div>
+                                    <div class="sh-sub">Sube PDFs, ejecuta reindex, revisa metadata y valida cómo quedó el chunking antes de probar el modo documental.</div>
+                                </div>
+                            </div>
+
+                            <div class="context-active-banner" id="documentsActiveBanner">Modo documental listo para administración.</div>
+
+                            <div class="form-grid-2">
+                                <div class="field-group">
+                                    <label class="field-label">Subir PDF nuevo</label>
+                                    <input type="file" id="fileDocumentUpload" class="field-input" accept="application/pdf,.pdf" multiple />
+                                    <div class="field-hint">Puedes seleccionar uno o varios PDFs. Los archivos se copian a la carpeta configurada en <strong>Docs:RootPath</strong> y luego se reindexan desde esta misma pantalla.</div>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Acciones de indexación</label>
+                                    <div class="inline-actions">
+                                        <button class="btn btn-ghost" type="button" onclick="uploadDocumentAdmin()">
+                                            <div class="btn-spinner" id="documentsUploadSpinner"></div>
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                <polyline points="7 10 12 5 17 10" />
+                                                <line x1="12" y1="5" x2="12" y2="17" />
+                                            </svg>
+                                            Subir PDFs
+                                        </button>
+                                        <button class="btn btn-primary" type="button" onclick="reindexDocumentsAdmin()">
+                                            <div class="btn-spinner" id="documentsReindexSpinner"></div>
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="23 4 23 10 17 10" />
+                                                <polyline points="1 20 1 14 7 14" />
+                                                <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
+                                                <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
+                                            </svg>
+                                            Reindex Documents
+                                        </button>
+                                    </div>
+                                    <div class="field-hint">El reindex ahora usa chunks más pequeños con overlap y metadata adicional por bloque.</div>
+                                </div>
+                            </div>
+
+                            <div class="rag-banner" id="documentsBanner"></div>
+
+                            <div class="documents-summary-grid">
+                                <div class="hero-card">
+                                    <div class="hero-kicker">Carpeta configurada</div>
+                                    <div class="hero-value" id="txtDocumentsRootExists">—</div>
+                                    <div class="hero-sub" id="txtDocumentsRootPath">Cargando ruta de documentos...</div>
+                                </div>
+                                <div class="hero-card">
+                                    <div class="hero-kicker">Documento seleccionado</div>
+                                    <div class="hero-value" id="txtDocumentSelectedName">—</div>
+                                    <div class="hero-sub" id="txtDocumentSelectedMeta">Selecciona un documento de la lista para ver sus chunks.</div>
+                                </div>
+                                <div class="hero-card">
+                                    <div class="hero-kicker">Chunks</div>
+                                    <div class="hero-value" id="txtDocumentChunkCount">0</div>
+                                    <div class="hero-sub">Bloques indexados del documento seleccionado</div>
+                                </div>
+                                <div class="hero-card">
+                                    <div class="hero-kicker">Cobertura</div>
+                                    <div class="hero-value" id="txtDocumentPageCount">0</div>
+                                    <div class="hero-sub">Páginas detectadas y procesadas</div>
+                                </div>
+                                <div class="hero-card">
+                                    <div class="hero-kicker">PDFs en disco</div>
+                                    <div class="hero-value" id="txtDocumentsFilesOnDisk">0</div>
+                                    <div class="hero-sub" id="txtDocumentsDefaultDomain">Dominio documental default: —</div>
+                                </div>
+                                <div class="hero-card">
+                                    <div class="hero-kicker">Documentos indexados</div>
+                                    <div class="hero-value" id="txtDocumentsIndexedCount">0</div>
+                                    <div class="hero-sub">Conteo total de documentos presentes en memoria documental</div>
+                                </div>
+                            </div>
+
+                            <div class="subpanel">
+                                <div class="subpanel-header">
+                                    <div>
+                                        <div class="subpanel-title">Chunks extraídos</div>
+                                        <div class="subpanel-desc">Cada chunk conserva página, orden, sección, part numbers y texto normalizado para mejorar el retrieval.</div>
+                                    </div>
+                                </div>
+                                <div class="documents-chunk-list" id="documentChunkList">
+                                    <div class="empty-state">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <path d="M4 6h16" />
+                                            <path d="M4 12h16" />
+                                            <path d="M4 18h10" />
+                                        </svg>
+                                        Selecciona un documento para revisar sus chunks y metadata.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ══ TAB: ML ══ -->
+            <div class="tab-content" id="pane-ml">
+                <div class="rag-layout">
+
+                    <div class="panel-left">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+                                    <polyline points="16 7 22 7 22 13" />
+                                </svg>
+                                Estado ML
+                            </div>
+                            <span class="panel-count" id="mlStatusBadge">—</span>
+                        </div>
+                        <div class="editor-wrap-compact">
+                            <div class="field-group">
+                                <label class="field-label">Modelo actual</label>
+                                <div class="field-hint" id="txtMlStatusSummary">Cargando estado del modelo...</div>
+                            </div>
+                            <button class="btn btn-ghost" type="button" onclick="loadMlAdmin()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+                                    <polyline points="23 4 23 10 17 10" />
+                                    <polyline points="1 20 1 14 7 14" />
+                                    <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
+                                    <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
+                                </svg>
+                                Recargar
+                            </button>
+                        </div>
+                        <div class="history-scroll" id="mlStatusList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+                                    <polyline points="16 7 22 7 22 13" />
+                                </svg>
+                                Cargando estado de ML...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-right">
+                        <div class="editor-wrap">
+                            <div class="section-header">
+                                <div class="section-header-icon si-ml">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+                                        <polyline points="16 7 22 7 22 13" />
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">ML.NET Forecasting</div>
+                                    <div class="sh-sub">Revisa el modelo activo, las vistas KPI configuradas y lanza entrenamiento manual desde Admin sin tocar código.</div>
+                                </div>
+                            </div>
+
+                            <div class="context-active-banner" id="mlActiveBanner">Módulo ML listo para revisión operativa.</div>
+
+                            <div class="form-grid-2">
+                                    <div class="field-group">
+                                        <label class="field-label">Acciones de entrenamiento</label>
+                                        <div class="inline-actions">
+                                            <button class="btn btn-ghost" type="button" onclick="saveMlProfileAdmin()">
+                                                Guardar perfil
+                                            </button>
+                                            <button class="btn btn-primary" type="button" onclick="trainMlModelAdmin()">
+                                                <div class="btn-spinner" id="mlTrainSpinner"></div>
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+                                                    <polyline points="16 7 22 7 22 13" />
+                                            </svg>
+                                            Entrenar modelo
+                                        </button>
+                                    </div>
+                                    <div class="field-hint">Guarda primero el perfil ML. Luego puedes entrenar contra una conexión nombrada o contra la conexión operacional por defecto.</div>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Ruta del modelo</label>
+                                    <div class="field-input field-readonly" id="txtMlModelPath">Cargando ruta...</div>
+                                    <div class="field-hint" id="txtMlModelDirectory">Directorio de modelos: —</div>
+                                </div>
+                            </div>
+
+                            <div class="rag-banner" id="mlBanner"></div>
+
+                            <div class="documents-summary-grid">
+                                <div class="hero-card">
+                                    <div class="hero-kicker">Modelo</div>
+                                    <div class="hero-value" id="txtMlModelExists">—</div>
+                                    <div class="hero-sub" id="txtMlModelUpdated">Última actualización: —</div>
+                                </div>
+                                <div class="hero-card">
+                                    <div class="hero-kicker">Tamaño</div>
+                                    <div class="hero-value" id="txtMlModelSize">0 B</div>
+                                    <div class="hero-sub">Archivo del modelo serializado</div>
+                                </div>
+                                <div class="hero-card">
+                                    <div class="hero-kicker">Conexión resuelta</div>
+                                    <div class="hero-value" id="txtMlConnectionReady">—</div>
+                                    <div class="hero-sub">Disponibilidad real de la fuente SQL del perfil</div>
+                                </div>
+                            </div>
+
+                            <div class="subpanel" style="margin-top:16px">
+                                <div class="subpanel-header">
+                                    <div>
+                                        <div class="subpanel-title">Perfil de entrenamiento ML</div>
+                                        <div class="subpanel-desc">Define una fuente profesional para el dataset. Puedes usar el modo clásico de vistas KPI o una consulta SQL canónica para otros sistemas.</div>
+                                    </div>
+                                </div>
+                                <div id="mlModeNotice" class="ml-mode-callout"></div>
+                                <div class="ml-preset-row">
+                                    <button class="btn btn-secondary btn-sm" onclick="applyMlSourcePreset('industrial')">Preset industrial KPI</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="applyMlSourcePreset('northwind-daily-units')">Preset Northwind · unidades diarias</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="applyMlSourcePreset('northwind-monthly-sales')">Preset Northwind · unidades mensuales</button>
+                                </div>
+                                <div class="form-grid-2">
+                                    <div class="field-group">
+                                        <label class="field-label">Nombre del perfil</label>
+                                        <input id="txtMlProfileName" class="field-input" placeholder="default-forecast" />
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Nombre visible</label>
+                                        <input id="txtMlDisplayName" class="field-input" placeholder="Forecasting Profile" />
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Modo de fuente</label>
+                                        <select id="selMlSourceMode" class="field-input" onchange="toggleMlSourceModeFields()">
+                                            <option value="KpiViews">KPI Views</option>
+                                            <option value="CustomSql">Custom SQL</option>
+                                        </select>
+                                        <div class="field-hint">KpiViews sirve para plantas estilo ERP; CustomSql te deja usar cualquier consulta canónica que devuelva las columnas requeridas.</div>
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Conexión SQL</label>
+                                        <select id="selMlConnectionName" class="field-input" onchange="renderMlModeNotice()"></select>
+                                        <div class="field-hint">Vacío = usar la conexión operacional por defecto. También puedes apuntar a cualquier `ConnectionProfile` activo.</div>
+                                    </div>
+                                    <div class="field-group" style="grid-column:1 / -1">
+                                        <label class="field-label">Descripción</label>
+                                        <input id="txtMlDescription" class="field-input" placeholder="Perfil para forecasting de scrap por turno en planta A" />
+                                    </div>
+                                </div>
+
+                                <div id="mlKpiConfigFields">
+                                    <div class="form-grid-2">
+                                        <div class="field-group">
+                                            <label class="field-label">Tabla de turnos</label>
+                                            <input id="txtMlShiftTableName" class="field-input" placeholder="dbo.Turnos" />
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">Vista de Producción</label>
+                                            <input id="txtMlProductionView" class="field-input" placeholder="dbo.vw_KpiProduction_v1" />
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">Vista de Scrap</label>
+                                            <input id="txtMlScrapView" class="field-input" placeholder="dbo.vw_KpiScrap_v1" />
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">Vista de Downtime</label>
+                                            <input id="txtMlDowntimeView" class="field-input" placeholder="dbo.vw_KpiDownTime_v1" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="mlCustomSqlFields" style="display:none; margin-top:14px">
+                                    <div class="field-group">
+                                        <label class="field-label">Training SQL canónico</label>
+                                        <textarea id="txtMlTrainingSql" class="field-input sql-editor" rows="12" placeholder="La consulta debe devolver: SeriesKey, ObservedOn, BucketKey, BucketLabel, BucketStartTick, BucketEndTick, TargetValue"></textarea>
+                                        <div class="field-hint">Usa este modo para otros sistemas. La consulta debe devolver exactamente esas columnas canónicas para que entrenamiento y predicción compartan la misma fuente sin asumir scrap, producción o downtime.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="subpanel" style="margin-top:16px">
+                                <div class="subpanel-header">
+                                    <div>
+                                        <div class="subpanel-title">Prediction Profiles</div>
+                                        <div class="subpanel-desc">Aquí definimos perfiles predictivos por dominio. Esta es la capa correcta para Northwind, ventas, demanda o cualquier otro sistema que no sea industrial.</div>
+                                    </div>
+                                </div>
+
+                                <div id="predictionProfileBanner" class="alert-banner" style="display:none"></div>
+
+                                <div class="form-grid-2">
+                                    <div class="field-group">
+                                        <label class="field-label">Dominio activo para perfiles</label>
+                                        <input id="txtPredictionProfileDomain" class="field-input" placeholder="northwind-sales" />
+                                        <div class="field-hint">Se usa para cargar perfiles y para pedir el Domain Pack que describe métricas y dimensiones del dominio.</div>
+                                    </div>
+                                    <div class="field-group prediction-toolbar">
+                                        <button class="btn btn-secondary" onclick="refreshPredictionProfilesAdmin()">Recargar perfiles</button>
+                                        <button class="btn btn-secondary" onclick="newPredictionProfileAdmin()">Nuevo perfil</button>
+                                    </div>
+                                </div>
+
+                                <div id="predictionDomainPackSummary" class="ml-mode-callout is-soft"></div>
+
+                                <div class="prediction-layout">
+                                    <div class="mini-scroll" id="predictionProfileList"></div>
+
+                                    <div class="prediction-editor">
+                                        <div class="form-grid-2">
+                                            <div class="field-group">
+                                                <label class="field-label">Profile Key</label>
+                                                <input id="txtPredictionProfileKey" class="field-input" placeholder="northwind-sales-daily-units" />
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Nombre visible</label>
+                                                <input id="txtPredictionProfileDisplayName" class="field-input" placeholder="Northwind Sales Daily Units Forecast" />
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Domain Pack</label>
+                                                <input id="txtPredictionDomainPackKey" class="field-input" placeholder="northwind-sales" />
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Métrica objetivo</label>
+                                                <input id="txtPredictionTargetMetricKey" class="field-input" placeholder="units_sold" oninput="renderPredictionGuidedSelectors()" />
+                                                <div class="field-hint">Elige la serie principal que el modelo va a pronosticar.</div>
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Calendar Profile</label>
+                                                <input id="txtPredictionCalendarProfileKey" class="field-input" placeholder="standard-calendar" />
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Conexión SQL</label>
+                                                <select id="selPredictionConnectionName" class="field-input"></select>
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Source Mode</label>
+                                                <select id="selPredictionSourceMode" class="field-input">
+                                                    <option value="CustomSql">Custom SQL</option>
+                                                    <option value="KpiViews">KPI Views</option>
+                                                </select>
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Modelo</label>
+                                                <input id="txtPredictionModelType" class="field-input" placeholder="FastTree" />
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Grain</label>
+                                                <input id="txtPredictionGrain" class="field-input" placeholder="day" />
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Horizonte</label>
+                                                <div class="form-grid-2">
+                                                    <input id="txtPredictionHorizon" class="field-input" type="number" min="1" placeholder="7" />
+                                                    <input id="txtPredictionHorizonUnit" class="field-input" placeholder="day" />
+                                                </div>
+                                            </div>
+                                            <div class="field-group" style="grid-column:1 / -1">
+                                                <label class="field-label">Target Series Source</label>
+                                                <textarea id="txtPredictionTargetSeriesSource" class="field-input sql-editor" rows="8" placeholder="SQL canónico o clave de fuente, según el SourceMode del perfil."></textarea>
+                                                <div class="field-hint">Para `CustomSql`, aquí vive la consulta canónica que devuelve `SeriesKey`, `ObservedOn`, `BucketKey`, `BucketLabel`, `BucketStartTick`, `BucketEndTick`, `TargetValue`.</div>
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Feature Sources JSON</label>
+                                                <input id="txtPredictionFeatureSourcesJson" class="field-input" placeholder='["net_sales","order_count"]' oninput="renderPredictionGuidedSelectors()" />
+                                                <div class="field-hint">Puedes escribir JSON manual, pero lo ideal es usar los selectores de métricas de abajo.</div>
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Group By JSON</label>
+                                                <input id="txtPredictionGroupByJson" class="field-input" placeholder='["product"]' oninput="renderPredictionGuidedSelectors()" />
+                                                <div class="field-hint">Puedes escribir JSON manual, pero lo ideal es usar los selectores de dimensiones de abajo.</div>
+                                            </div>
+                                            <div class="field-group" style="grid-column:1 / -1">
+                                                <label class="field-label">Selector guiado de métrica objetivo</label>
+                                                <div id="predictionTargetMetricSelector" class="onboarding-suggestion-list">
+                                                    <span class="meta-empty">Carga un Domain Pack para elegir la métrica objetivo.</span>
+                                                </div>
+                                            </div>
+                                            <div class="field-group" style="grid-column:1 / -1">
+                                                <label class="field-label">Selector guiado de métricas auxiliares</label>
+                                                <div id="predictionFeatureSourceSelector" class="onboarding-suggestion-list">
+                                                    <span class="meta-empty">Carga un Domain Pack para elegir métricas auxiliares.</span>
+                                                </div>
+                                            </div>
+                                            <div class="field-group" style="grid-column:1 / -1">
+                                                <label class="field-label">Selector guiado de dimensiones</label>
+                                                <div id="predictionGroupBySelector" class="onboarding-suggestion-list">
+                                                    <span class="meta-empty">Carga un Domain Pack para elegir dimensiones de agrupación.</span>
+                                                </div>
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Filters JSON</label>
+                                                <input id="txtPredictionFiltersJson" class="field-input" placeholder='{"country":"USA"}' />
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Activo</label>
+                                                <label class="checkbox-line">
+                                                    <input id="chkPredictionProfileIsActive" type="checkbox" checked />
+                                                    <span>Usar este perfil para el dominio</span>
+                                                </label>
+                                            </div>
+                                            <div class="field-group" style="grid-column:1 / -1">
+                                                <label class="field-label">Notas</label>
+                                                <textarea id="txtPredictionNotes" class="field-input" rows="4" placeholder="Describe la intención del perfil, el horizonte y la naturaleza de la serie."></textarea>
+                                            </div>
+                                        </div>
+
+                                        <div class="profile-actions" style="padding:0; border-top:none; background:transparent; justify-content:flex-start">
+                                            <button class="btn btn-primary" onclick="savePredictionProfileAdmin()">Guardar Prediction Profile</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -486,19 +970,19 @@
                                 <div class="subpanel-title">¿Por dónde empiezo?</div>
                                 <div class="onboarding-guide-copy">Sigue estos 4 pasos en orden. Cada uno habilita al siguiente — no puedes saltarte ninguno.</div>
                                 <div class="onboarding-guide-list">
-                                    <div class="onboarding-guide-item">
+                                    <div class="onboarding-guide-item" id="guideItem1">
                                         <span class="guide-item-num">1</span>
                                         <span>Define el <strong>workspace</strong>: nombre, dominio y conexión a la base de datos.</span>
                                     </div>
-                                    <div class="onboarding-guide-item">
+                                    <div class="onboarding-guide-item" id="guideItem2">
                                         <span class="guide-item-num">2</span>
                                         <span>Descubre el <strong>schema</strong> y marca solo las tablas que el motor puede consultar.</span>
                                     </div>
-                                    <div class="onboarding-guide-item">
+                                    <div class="onboarding-guide-item" id="guideItem3">
                                         <span class="guide-item-num">3</span>
                                         <span><strong>Prepara el dominio</strong>: genera contexto técnico, schema docs y pistas semánticas.</span>
                                     </div>
-                                    <div class="onboarding-guide-item">
+                                    <div class="onboarding-guide-item" id="guideItem4">
                                         <span class="guide-item-num">4</span>
                                         <span>Corre una <strong>pregunta real</strong> para confirmar que el dominio responde correctamente.</span>
                                     </div>
@@ -575,6 +1059,69 @@
                                             <input type="text" id="txtOnboardingNewConnectionDescription" class="field-input" placeholder="SQL Server local para Northwind" />
                                             <div class="field-hint">Útil para distinguir entre ambientes similares (dev, staging, producción).</div>
                                         </div>
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Modo de captura</label>
+                                        <div class="connection-picker">
+                                            <select id="txtOnboardingConnectionMode" class="field-input" onchange="handleOnboardingConnectionModeChange()">
+                                                <option value="wizard">Asistente</option>
+                                                <option value="manual">Manual</option>
+                                            </select>
+                                            <button class="btn btn-ghost" type="button" onclick="buildOnboardingConnectionString(true)">Generar cadena</button>
+                                        </div>
+                                        <div class="field-hint">Usa el asistente para construir la cadena sin memorizar la sintaxis de SQL Server.</div>
+                                    </div>
+                                    <div class="subpanel" id="onboardingConnectionWizard">
+                                        <div class="form-grid-2">
+                                            <div class="field-group">
+                                                <label class="field-label">Servidor <span class="field-required">*</span></label>
+                                                <input type="text" id="txtOnboardingConnServer" class="field-input" placeholder="localhost" />
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Puerto <span class="field-optional">opcional</span></label>
+                                                <input type="text" id="txtOnboardingConnPort" class="field-input" placeholder="1433" />
+                                            </div>
+                                        </div>
+                                        <div class="form-grid-2">
+                                            <div class="field-group">
+                                                <label class="field-label">Base de datos <span class="field-required">*</span></label>
+                                                <input type="text" id="txtOnboardingConnDatabase" class="field-input" placeholder="Northwind" />
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Autenticación <span class="field-required">*</span></label>
+                                                <select id="txtOnboardingConnAuthMode" class="field-input" onchange="handleOnboardingAuthModeChange()">
+                                                    <option value="sql">SQL Server</option>
+                                                    <option value="windows">Windows / integrada</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="form-grid-2">
+                                            <div class="field-group">
+                                                <label class="field-label">Usuario</label>
+                                                <input type="text" id="txtOnboardingConnUser" class="field-input" placeholder="sa" />
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Password</label>
+                                                <input type="password" id="txtOnboardingConnPassword" class="field-input" placeholder="••••••••" />
+                                            </div>
+                                        </div>
+                                        <div class="form-grid-2">
+                                            <div class="field-group">
+                                                <label class="field-label">Encrypt</label>
+                                                <select id="txtOnboardingConnEncrypt" class="field-input" onchange="buildOnboardingConnectionString()">
+                                                    <option value="True" selected>True</option>
+                                                    <option value="False">False</option>
+                                                </select>
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">TrustServerCertificate</label>
+                                                <select id="txtOnboardingConnTrustCert" class="field-input" onchange="buildOnboardingConnectionString()">
+                                                    <option value="True" selected>True</option>
+                                                    <option value="False">False</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="field-hint">El asistente genera la connection string completa en el campo de abajo. Puedes ajustarla manualmente si hace falta.</div>
                                     </div>
                                     <div class="field-group">
                                         <label class="field-label">Connection String <span class="field-required">*</span></label>
@@ -842,7 +1389,7 @@
                                 <span class="meta-empty">Comienza llenando el Paso 1 y presiona "Guardar workspace".</span>
                             </div>
                             <div class="inline-actions">
-                                <button class="btn btn-ghost" type="button" onclick="resetOnboardingForm()">+ Nuevo workspace</button>
+                                <button class="btn btn-ghost" type="button" onclick="startNewOnboardingWorkspace()">+ Nuevo workspace</button>
                                 <button class="btn btn-ghost" type="button" id="btnOnboardingExportPack" onclick="exportOnboardingDomainPack()">
                                     <div class="btn-spinner" id="onboardingExportPackSpinner"></div>
                                     Exportar pack
@@ -879,6 +1426,17 @@
                                 <button class="btn btn-ghost" type="button" id="btnOnboardingTourPrev" onclick="prevOnboardingTourStep()">Anterior</button>
                                 <button class="btn btn-ghost" type="button" onclick="closeOnboardingTour()">Cerrar</button>
                                 <button class="btn btn-primary" type="button" id="btnOnboardingTourNext" onclick="nextOnboardingTourStep()">Siguiente</button>
+                            </div>
+                        </div>
+                        <div class="tour-overlay" id="onboardingCompletionOverlay" style="display:none" onclick="closeOnboardingCompletionModal()"></div>
+                        <div class="completion-modal" id="onboardingCompletionModal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="onboardingCompletionTitle">
+                            <div class="completion-kicker">Paso 4 completado</div>
+                            <div class="completion-title" id="onboardingCompletionTitle">Configuración completada satisfactoriamente</div>
+                            <div class="completion-body" id="onboardingCompletionBody">La prueba final respondió correctamente.</div>
+                            <div class="action-meta" id="onboardingCompletionMeta"></div>
+                            <div class="completion-actions">
+                                <button class="btn btn-ghost" type="button" onclick="closeOnboardingCompletionModal()">Seguir ajustando</button>
+                                <button class="btn btn-primary" type="button" onclick="closeOnboardingCompletionModal()">Entendido</button>
                             </div>
                         </div>
                     </div>
@@ -1511,14 +2069,14 @@
                                 </div>
                                 <div class="field-group">
                                     <label class="field-label">Tipo <span class="field-label-hint" title="Clasifica la pista para que el motor la interprete correctamente.">ⓘ</span></label>
-                                    <input type="text" id="txtSemanticHintType" class="field-input" list="semanticHintTypeOptions" placeholder="measure" />
-                                    <datalist id="semanticHintTypeOptions">
-                                        <option value="entity"></option>
-                                        <option value="measure"></option>
-                                        <option value="dimension"></option>
-                                        <option value="time_field"></option>
-                                        <option value="synonym"></option>
-                                    </datalist>
+                                    <select id="txtSemanticHintType" class="field-input">
+                                        <option value="">Selecciona un tipo...</option>
+                                        <option value="entity">entity</option>
+                                        <option value="measure">measure</option>
+                                        <option value="dimension">dimension</option>
+                                        <option value="time_field">time_field</option>
+                                        <option value="synonym">synonym</option>
+                                    </select>
                                     <div class="field-hint">entity · measure · dimension · time_field · synonym</div>
                                 </div>
                                 <div class="field-group">
@@ -1838,3 +2396,4 @@
     <script src="/js/admin.js"></script>
 </body>
 </html>
+

@@ -2,19 +2,33 @@
 
 namespace VannaLight.Core.Models;
 
-public record DocCitation(string DocId, string FileName, int PageNumber);
+public record DocCitation(
+    string DocId,
+    string FileName,
+    int PageNumber,
+    string? Snippet = null,
+    string? Section = null,
+    double? Confidence = null);
 
 public record DocsAnswerResult(
     bool Success,
-    string? AnswerText, // Nota: En tu DocsAnswerService lo llamas AnswerText, asegúrate de que coincida
+    string? AnswerText,
     IReadOnlyList<DocCitation> Citations,
-    string? ErrorMessage = null // Igual aquí, verifica si tu servicio espera ErrorMessage o Error
+    string? ErrorMessage = null,
+    double? ConfidenceScore = null
 );
 
-// Puedes dejar WiReindexResult aquí también si quieres centralizarlo
-public record WiReindexResult(
+public record DocumentReindexResult(
     int TotalFiles,
     int Indexed,
     int Skipped,
     int Errors
 );
+
+// Compatibilidad temporal con el naming legacy.
+public record WiReindexResult(
+    int TotalFiles,
+    int Indexed,
+    int Skipped,
+    int Errors
+) : DocumentReindexResult(TotalFiles, Indexed, Skipped, Errors);

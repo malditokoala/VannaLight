@@ -15,9 +15,21 @@ public class PredictionAnswerService : IPredictionAnswerService
 
         var qty = System.Math.Round(intent.PredictedValue.Value, 0);
 
-        // Mensaje inequívoco
-        string message = $"Pronóstico estimado para {intent.ForecastPeriodLabel} - N/P {intent.EntityName}: {qty.ToString("N0", CultureInfo.InvariantCulture)} piezas de scrap.\n\n" +
-                         "Nota: Este valor representa la predicción estadística del total para el periodo completo indicado, no el acumulado en tiempo real.";
+        string entityLabel = string.IsNullOrWhiteSpace(intent.EntityName) ? "serie consultada" : intent.EntityName!;
+        string periodLabel = string.IsNullOrWhiteSpace(intent.ForecastPeriodLabel) ? "el periodo solicitado" : intent.ForecastPeriodLabel!;
+        string metricLabel = intent.MetricKey switch
+        {
+            "net_sales" => "ventas netas estimadas",
+            "units_sold" => "unidades estimadas",
+            "order_count" => "ordenes estimadas",
+            "produced_qty" => "produccion estimada",
+            "downtime_minutes" => "minutos estimados",
+            "scrap_qty" => "scrap estimado",
+            _ => "unidades objetivo"
+        };
+
+        string message = $"Pronóstico estimado para {periodLabel} - serie {entityLabel}: {qty.ToString("N0", CultureInfo.InvariantCulture)} {metricLabel}.\n\n" +
+                         "Nota: Este valor representa la predicción estadística del total para el periodo indicado. La semántica exacta de la unidad depende de la métrica configurada en el perfil predictivo.";
 
         intent.HumanizedMessage = message;
         return Task.FromResult(message);

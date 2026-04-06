@@ -1,173 +1,183 @@
-锘縰sing Dapper;
+using Dapper;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
 using Microsoft.ML;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.Models;
+using VannaLight.Core.Settings;
 
 namespace VannaLight.Api.Services.Predictions;
 
 /// <summary>
-/// Informaci贸n de soporte para calcular la pertenencia de la hora actual a un turno.
+/// Informaci髇 de soporte para calcular la pertenencia de la hora actual a un turno.
 /// </summary>
-internal class ActiveShiftInfo
+internal class ActiveBucketInfo
 {
-    public int ShiftId { get; set; }
-    public string ShiftName { get; set; } = string.Empty;
-    public long TicksInicio { get; set; }
-    public long TicksFin { get; set; }
+    public int BucketKey { get; set; }
+    public string BucketLabel { get; set; } = string.Empty;
+    public long BucketStartTick { get; set; }
+    public long BucketEndTick { get; set; }
 
     public bool ContainsTime(long currentTicks)
     {
-        if (TicksInicio < TicksFin)
-            return currentTicks >= TicksInicio && currentTicks < TicksFin;
+        if (BucketStartTick < BucketEndTick)
+            return currentTicks >= BucketStartTick && currentTicks < BucketEndTick;
         else
-            return currentTicks >= TicksInicio || currentTicks < TicksFin; // Caso: Turno Nocturno
+            return currentTicks >= BucketStartTick || currentTicks < BucketEndTick;
     }
 }
 
 public class ForecastingService : IForecastingService
 {
     private readonly MLContext _mlContext;
-    private readonly string _connectionString;
+    private readonly IMlTrainingProfileProvider _profileProvider;
+    private readonly IPredictionProfileStore _predictionProfileStore;
+    private readonly SqliteOptions _sqliteOptions;
     private ITransformer? _model;
+    private MlTrainingProfile? _activeProfile;
+    private PredictionProfile? _activePredictionProfile;
+    private string? _connectionString;
 
-    public ForecastingService(IConfiguration config)
+    public ForecastingService(
+        IMlTrainingProfileProvider profileProvider,
+        IPredictionProfileStore predictionProfileStore,
+        SqliteOptions sqliteOptions)
     {
         _mlContext = new MLContext(seed: 0);
-        _connectionString = config.GetConnectionString("OperationalDb")
-            ?? throw new Exception("Falta ConnectionString 'OperationalDb'.");
-
-        EnsureModelExistsAndLoad();
+        _profileProvider = profileProvider;
+        _predictionProfileStore = predictionProfileStore;
+        _sqliteOptions = sqliteOptions;
     }
 
-    private void EnsureModelExistsAndLoad()
+    private async Task EnsureModelExistsAndLoadAsync(AskExecutionContext executionContext, PredictionIntent intent, CancellationToken ct = default)
     {
-        if (!File.Exists(MlModelTrainer.ModelPath))
-            MlModelTrainer.TrainAndSaveModel(_connectionString);
+        _activePredictionProfile = await ResolvePredictionProfileAsync(executionContext, intent, ct);
+        _activeProfile = await BuildEffectiveTrainingProfileAsync(_activePredictionProfile, ct);
+        _connectionString = await _profileProvider.ResolveConnectionStringAsync(_activeProfile, ct);
+
+        if (!File.Exists(MlModelTrainer.ModelPath) || !MlModelTrainer.IsModelAlignedWithProfile(_activeProfile))
+            MlModelTrainer.TrainAndSaveModel(_connectionString, _activeProfile);
 
         _model = _mlContext.Model.Load(MlModelTrainer.ModelPath, out _);
     }
 
-    public Task<PredictionIntent> PredictAsync(PredictionIntent intent)
+    public async Task<PredictionIntent> PredictAsync(PredictionIntent intent, AskExecutionContext executionContext, CancellationToken ct = default)
     {
         if (!intent.IsPredictionRequest || !intent.IsSupportedByCurrentModel)
         {
             intent.IsSuccess = false;
-            return Task.FromResult(intent);
+            return intent;
         }
 
-        if (string.IsNullOrWhiteSpace(intent.EntityName) || _model == null)
+        await EnsureModelExistsAndLoadAsync(executionContext, intent, ct);
+
+        if (string.IsNullOrWhiteSpace(intent.EntityName) || _model == null || _activeProfile is null || string.IsNullOrWhiteSpace(_connectionString))
         {
             intent.IsSuccess = false;
-            intent.UnsupportedReason = "N煤mero de parte inv谩lido o motor ML no inicializado.";
-            return Task.FromResult(intent);
+            intent.UnsupportedReason = "Serie objetivo invalida o motor ML no inicializado.";
+            return intent;
         }
 
         try
         {
-            var partNumber = intent.EntityName.Trim();
+            var seriesKey = intent.EntityName.Trim();
 
-            // 1. Obtener la definici贸n de turnos de la planta
-            var activeShifts = LoadActiveShifts();
-            if (activeShifts.Count == 0) throw new Exception("No hay turnos productivos definidos en la tabla [Turnos].");
+            // 1. Obtener la definicion de buckets activos de la serie
+            var activeBuckets = LoadActiveBuckets();
+            if (activeBuckets.Count == 0)
+                throw new InvalidOperationException("No hay buckets temporales configurados para la serie.");
 
-            // 2. Determinar contexto actual (Fecha Operativa y Turno Actual)
+            // 2. Determinar el contexto temporal actual
             var now = DateTime.Now;
             var currentTicks = now.TimeOfDay.Ticks;
-            var currentShift = activeShifts.FirstOrDefault(s => s.ContainsTime(currentTicks)) ?? activeShifts.First();
+            var currentBucket = activeBuckets.FirstOrDefault(s => s.ContainsTime(currentTicks)) ?? activeBuckets.First();
 
-            // L贸gica de fecha operativa para turnos que cruzan medianoche
-            var currentOperationDate = (currentShift.TicksInicio > currentShift.TicksFin && currentTicks < currentShift.TicksFin)
+            var currentObservedOn = (currentBucket.BucketStartTick > currentBucket.BucketEndTick && currentTicks < currentBucket.BucketEndTick)
                 ? now.Date.AddDays(-1)
                 : now.Date;
 
-            // 3. Cargar historial Shift-Level
-            var rawHistory = LoadShiftHistory(partNumber);
+            var rawHistory = LoadSeriesHistory(seriesKey);
             if (rawHistory.Count == 0)
             {
                 intent.IsSuccess = false;
-                intent.UnsupportedReason = $"No hay historial de producci贸n/scrap para el N/P {partNumber}.";
-                return Task.FromResult(intent);
+                intent.UnsupportedReason = $"No hay historial para la serie {seriesKey}.";
+                return intent;
             }
 
-            // 4. Definir pasos de predicci贸n seg煤n el Target del Router
+            // 4. Definir pasos de predicci髇 seg鷑 el Target del Router
             int shiftsToPredict = intent.PredictionTarget switch
             {
                 "EndOfCurrentShift" => 1,
                 "NextShift" => 2,
-                "Tomorrow" => activeShifts.Count + 1,
-                "NextMonth" => activeShifts.Count * 30,
+                "Tomorrow" => activeBuckets.Count + 1,
+                "NextMonth" => activeBuckets.Count * 30,
                 _ => 1
             };
 
-            // 5. Rellenado de huecos (Gap-Filling) hasta el turno previo al actual
             var firstRecord = rawHistory.First();
-            var historyDict = rawHistory.ToDictionary(x => $"{x.OperationDate:yyyyMMdd}-{x.ShiftId}", x => x.ScrapQty);
+            var historyDict = rawHistory.ToDictionary(x => $"{x.ObservedOn:yyyyMMdd}-{x.BucketKey}", x => x.TargetValue);
             var continuousSeries = new List<float>();
 
-            DateTime iterDate = firstRecord.OperationDate;
+            DateTime iterDate = firstRecord.ObservedOn;
             bool reachedTarget = false;
 
             while (!reachedTarget)
             {
-                foreach (var s in activeShifts)
+                foreach (var s in activeBuckets)
                 {
-                    if (iterDate == currentOperationDate && s.ShiftId == currentShift.ShiftId)
+                    if (iterDate == currentObservedOn && s.BucketKey == currentBucket.BucketKey)
                     {
                         reachedTarget = true;
                         break;
                     }
-                    var key = $"{iterDate:yyyyMMdd}-{s.ShiftId}";
+                    var key = $"{iterDate:yyyyMMdd}-{s.BucketKey}";
                     continuousSeries.Add(historyDict.ContainsKey(key) ? historyDict[key] : 0);
                 }
                 if (!reachedTarget) iterDate = iterDate.AddDays(1);
             }
 
-            intent.HistoryShiftsUsed = continuousSeries.Count;
+            intent.HistoryShiftsUsed = continuousSeries.Count; // Compatibilidad temporal de nombre
 
-            // 6. Inferencia Autoregresiva
-            var engine = _mlContext.Model.CreatePredictionEngine<ModelInput, ModelOutput>(_model);
+            var engine = _mlContext.Model.CreatePredictionEngine<ForecastModelInput, ForecastModelOutput>(_model);
             float accumulatedValue = 0;
-            DateTime predictDate = currentOperationDate;
-            int predictShiftIndex = activeShifts.FindIndex(s => s.ShiftId == currentShift.ShiftId);
+            DateTime predictDate = currentObservedOn;
+            int predictBucketIndex = activeBuckets.FindIndex(s => s.BucketKey == currentBucket.BucketKey);
 
             for (int step = 1; step <= shiftsToPredict; step++)
             {
-                var targetShift = activeShifts[predictShiftIndex];
+                var targetBucket = activeBuckets[predictBucketIndex];
                 int dow = predictDate.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)predictDate.DayOfWeek;
 
-                var input = new ModelInput
+                var input = new ForecastModelInput
                 {
-                    PartNumber = partNumber,
-                    ShiftId = targetShift.ShiftId,
+                    SeriesKey = seriesKey,
+                    BucketKey = targetBucket.BucketKey,
                     DayOfWeekIso = dow,
-                    Lag1ScrapQty = continuousSeries.LastOrDefault(),
-                    Avg3ScrapQty = continuousSeries.Count >= 3 ? continuousSeries.TakeLast(3).Average() : continuousSeries.LastOrDefault(),
-                    ScrapQty = 0
+                    Lag1Value = continuousSeries.LastOrDefault(),
+                    Avg3Value = continuousSeries.Count >= 3 ? continuousSeries.TakeLast(3).Average() : continuousSeries.LastOrDefault(),
+                    TargetValue = 0
                 };
 
                 var prediction = engine.Predict(input);
-                float val = Math.Max(0, prediction.PredictedScrapQty);
+                float val = Math.Max(0, prediction.PredictedValue);
                 continuousSeries.Add(val);
 
-                // L贸gica de acumulaci贸n por Target
+                // L骻ica de acumulaci髇 por target temporal
                 if (intent.PredictionTarget == "EndOfCurrentShift" && step == 1) accumulatedValue = val;
                 else if (intent.PredictionTarget == "NextShift" && step == 2) accumulatedValue = val;
                 else if (intent.PredictionTarget == "Tomorrow" && predictDate == now.Date.AddDays(1)) accumulatedValue += val;
                 else if (intent.PredictionTarget == "NextMonth") accumulatedValue += val;
 
-                // Avanzar al siguiente turno
-                predictShiftIndex++;
-                if (predictShiftIndex >= activeShifts.Count)
+                // Avanzar al siguiente bucket
+                predictBucketIndex++;
+                if (predictBucketIndex >= activeBuckets.Count)
                 {
-                    predictShiftIndex = 0;
+                    predictBucketIndex = 0;
                     predictDate = predictDate.AddDays(1);
                 }
             }
@@ -177,57 +187,150 @@ public class ForecastingService : IForecastingService
             intent.PredictedValue = accumulatedValue;
             intent.ForecastPeriodLabel = intent.PredictionTarget switch
             {
-                "EndOfCurrentShift" => $"Cierre de {currentShift.ShiftName} ({currentOperationDate:dd/MMM})",
-                "NextShift" => "Pr贸ximo turno disponible",
-                "Tomorrow" => $"D铆a completo {now.AddDays(1):dd/MMM}",
+                "EndOfCurrentShift" => $"Cierre de {currentBucket.BucketLabel} ({currentObservedOn:dd/MMM})",
+                "NextShift" => "Proximo bucket disponible",
+                "Tomorrow" => $"Dia completo {now.AddDays(1):dd/MMM}",
                 _ => "Periodo proyectado"
             };
 
-            return Task.FromResult(intent);
+            return intent;
         }
         catch (Exception ex)
         {
             intent.IsSuccess = false;
-            intent.UnsupportedReason = "Fallo interno en el motor de predicci贸n.";
-            return Task.FromResult(intent);
+            intent.UnsupportedReason = "Fallo interno en el motor de prediccion.";
+            return intent;
         }
     }
 
-    private List<ActiveShiftInfo> LoadActiveShifts()
+    private List<ActiveBucketInfo> LoadActiveBuckets()
     {
+        if (_activeProfile is null || string.IsNullOrWhiteSpace(_connectionString))
+            return new List<ActiveBucketInfo>();
+
         using var conn = new SqlConnection(_connectionString);
-        return conn.Query<ActiveShiftInfo>(@"
-            SELECT Id AS ShiftId, nombre AS ShiftName, inicio AS TicksInicio, fin AS TicksFin 
-            FROM [dbo].[Turnos] 
-            WHERE disponibleProduccion = 1 
-            ORDER BY inicio").ToList();
+        return conn.Query<ActiveBucketInfo>(MlTrainingSqlBuilder.BuildActiveShiftsSql(_activeProfile)).ToList();
     }
 
-    private List<ShiftScrapRow> LoadShiftHistory(string partNumber)
+    private List<TemporalObservationRow> LoadSeriesHistory(string seriesKey)
     {
-        using var connection = new SqlConnection(_connectionString);
-        const string sql = @"
-            WITH TurnosActivos AS (
-                SELECT Id AS ShiftId, inicio AS TicksInicio FROM [dbo].[Turnos] WHERE disponibleProduccion = 1
-            ),
-            BaseTimeline AS (
-                SELECT LTRIM(RTRIM(PartNumber)) AS PartNumber, OperationDate, ShiftId
-                FROM dbo.vw_KpiProduction_v1 WHERE OperationDate IS NOT NULL AND LTRIM(RTRIM(PartNumber)) = @PartNumber
-                UNION
-                SELECT LTRIM(RTRIM(PartNumber)) AS PartNumber, OperationDate, ShiftId
-                FROM dbo.vw_KpiScrap_v1 WHERE OperationDate IS NOT NULL AND LTRIM(RTRIM(PartNumber)) = @PartNumber
-            ),
-            ScrapShift AS (
-                SELECT LTRIM(RTRIM(PartNumber)) AS PartNumber, OperationDate, ShiftId, SUM(CAST(ISNULL(ScrapQty, 0) AS float)) AS ScrapQty
-                FROM dbo.vw_KpiScrap_v1 WHERE OperationDate IS NOT NULL AND LTRIM(RTRIM(PartNumber)) = @PartNumber
-                GROUP BY LTRIM(RTRIM(PartNumber)), OperationDate, ShiftId
-            )
-            SELECT b.PartNumber, b.OperationDate, b.ShiftId, CAST(ISNULL(s.ScrapQty, 0) AS float) AS ScrapQty
-            FROM BaseTimeline b
-            JOIN TurnosActivos t ON b.ShiftId = t.ShiftId
-            LEFT JOIN ScrapShift s ON b.PartNumber = s.PartNumber AND b.OperationDate = s.OperationDate AND b.ShiftId = s.ShiftId
-            ORDER BY b.OperationDate, t.TicksInicio;";
+        if (_activeProfile is null || string.IsNullOrWhiteSpace(_connectionString))
+            return new List<TemporalObservationRow>();
 
-        return connection.Query<ShiftScrapRow>(sql, new { PartNumber = partNumber.Trim() }).ToList();
+        using var connection = new SqlConnection(_connectionString);
+        return connection.Query<TemporalObservationRow>(MlTrainingSqlBuilder.BuildShiftHistorySql(_activeProfile), new { SeriesKey = seriesKey.Trim() }).ToList();
+    }
+
+    private async Task<PredictionProfile?> ResolvePredictionProfileAsync(AskExecutionContext executionContext, PredictionIntent intent, CancellationToken ct)
+    {
+        var domain = string.IsNullOrWhiteSpace(executionContext?.Domain) ? "erp-kpi-pilot" : executionContext.Domain.Trim();
+        var profiles = await _predictionProfileStore.GetAllAsync(_sqliteOptions.DbPath, domain, ct);
+        if (profiles.Count == 0)
+            return null;
+
+        var normalizedConnection = string.IsNullOrWhiteSpace(executionContext?.ConnectionName)
+            ? string.Empty
+            : executionContext.ConnectionName.Trim();
+        var metricKey = string.IsNullOrWhiteSpace(intent?.MetricKey)
+            ? string.Empty
+            : intent.MetricKey.Trim();
+        var seriesType = string.IsNullOrWhiteSpace(intent?.SeriesType)
+            ? string.Empty
+            : intent.SeriesType.Trim();
+
+        static bool ProfileSupportsSeriesType(PredictionProfile profile, string seriesType)
+        {
+            if (string.IsNullOrWhiteSpace(seriesType))
+                return false;
+
+            if (string.IsNullOrWhiteSpace(profile.GroupByJson))
+                return false;
+
+            try
+            {
+                var values = JsonSerializer.Deserialize<string[]>(profile.GroupByJson) ?? Array.Empty<string>();
+                return values.Any(x => string.Equals(x?.Trim(), seriesType, StringComparison.OrdinalIgnoreCase));
+            }
+            catch
+            {
+                return profile.GroupByJson.Contains(seriesType, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        static int ScoreProfile(PredictionProfile profile, string connectionName, string metricKey, string seriesType)
+        {
+            var score = 0;
+
+            if (profile.IsActive)
+                score += 100;
+
+            if (!string.IsNullOrWhiteSpace(metricKey) &&
+                string.Equals(profile.TargetMetricKey?.Trim(), metricKey, StringComparison.OrdinalIgnoreCase))
+            {
+                score += 40;
+            }
+
+            if (ProfileSupportsSeriesType(profile, seriesType))
+                score += 30;
+
+            if (!string.IsNullOrWhiteSpace(connectionName) &&
+                !string.IsNullOrWhiteSpace(profile.ConnectionName) &&
+                string.Equals(profile.ConnectionName.Trim(), connectionName, StringComparison.OrdinalIgnoreCase))
+            {
+                score += 25;
+            }
+
+            if (string.Equals(profile.SourceMode, MlTrainingProfile.CustomSqlMode, StringComparison.OrdinalIgnoreCase))
+                score += 5;
+
+            return score;
+        }
+
+        return profiles
+            .OrderByDescending(profile => ScoreProfile(profile, normalizedConnection, metricKey, seriesType))
+            .ThenBy(profile => profile.ProfileKey, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+    }
+
+    private async Task<MlTrainingProfile> BuildEffectiveTrainingProfileAsync(PredictionProfile? predictionProfile, CancellationToken ct)
+    {
+        var baseProfile = await _profileProvider.GetActiveProfileAsync(ct);
+        if (predictionProfile is null)
+            return baseProfile;
+
+        if (string.Equals(predictionProfile.SourceMode, MlTrainingProfile.CustomSqlMode, StringComparison.OrdinalIgnoreCase))
+        {
+            return new MlTrainingProfile
+            {
+                ProfileName = predictionProfile.ProfileKey,
+                DisplayName = predictionProfile.DisplayName,
+                SourceMode = MlTrainingProfile.CustomSqlMode,
+                ConnectionName = string.IsNullOrWhiteSpace(predictionProfile.ConnectionName) ? baseProfile.ConnectionName : predictionProfile.ConnectionName,
+                Description = predictionProfile.Notes,
+                TrainingSql = predictionProfile.TargetSeriesSource
+            };
+        }
+
+        return new MlTrainingProfile
+        {
+            ProfileName = predictionProfile.ProfileKey,
+            DisplayName = predictionProfile.DisplayName,
+            SourceMode = MlTrainingProfile.KpiViewsMode,
+            ConnectionName = string.IsNullOrWhiteSpace(predictionProfile.ConnectionName) ? baseProfile.ConnectionName : predictionProfile.ConnectionName,
+            Description = predictionProfile.Notes,
+            ShiftTableName = baseProfile.ShiftTableName,
+            ProductionViewName = baseProfile.ProductionViewName,
+            ScrapViewName = baseProfile.ScrapViewName,
+            DowntimeViewName = baseProfile.DowntimeViewName
+        };
     }
 }
+
+
+
+
+
+
+
+
+

@@ -16,11 +16,6 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.4" />
     <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
   </ItemGroup>
-	<ItemGroup>
-		<Content Include="Data\vanna_memory.db">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</Content>
-	</ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\VannaLight.Core\VannaLight.Core.csproj" />
     <ProjectReference Include="..\VannaLight.Infrastructure\VannaLight.Infrastructure.csproj" />
