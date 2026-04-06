@@ -29,54 +29,226 @@
   - `Domain`
   - `ConnectionName`
   - `Question`
+- Reutilizacion exacta de `TrainingExamples` verificados por contexto en el flujo SQL.
+- Self-correction con maximo 1 reintento para SQL fallido:
+  - usa la pregunta original
+  - usa el SQL fallido
+  - usa el error exacto de validacion/dry-run
+- `index` con UX reforzada:
+  - banner visible de estado/error
+  - contexto activo mas visible
+  - historial local Top 10 de consultas
+  - acciones para reutilizar o re-ejecutar consultas recientes
+- Modo documental (`PDF`) mas robusto:
+  - dominio documental atado al contexto activo del piloto
+  - Admin docs con mejor feedback visual de upload/reindex
+  - timeout explicito para evitar pendientes eternos en consultas documentales
+  - carga lazy del router/modelo documental
+  - instrumentacion de tiempos en el pipeline documental (`DocsPerf`)
+- Admin/System Config con controles mas seguros:
+  - filtro por seccion en dropdown
+  - dropdowns de dominio donde antes se tecleaba manualmente
+  - assets versionados para evitar frontend viejo en cache
+- Contextos locales por maquina mas robustos:
+  - `appsettings.Local.json` como override local no versionado
+  - poda de contextos/tenants/conexiones ajenos al ambiente actual
+  - aislamiento mas claro entre PC de trabajo y PC de casa
+- Reindex documental mas consistente por dominio:
+  - upload/reindex y status conscientes del dominio activo
+  - si un PDF ya existe por hash pero cambia de dominio, ahora se reasigna al dominio nuevo
+- Admin con mejor claridad visual:
+  - barra/contexto visible en tabs de dominio
+  - filtros ligados al contexto activo
+  - contextos filtrados por workspace seleccionado
+- Perfiles de conexion separados para ERP y Northwind:
+  - `ErpDb`
+  - `NorthwindDb`
 
 ## Pendiente para cerrar el piloto
 
-### P0
-- Implementar fast path para `TrainingExamples` verificados por contexto.
-  - Si hay match exacto verificado, reutilizar SQL sin pasar por LLM.
-- Implementar self-correction con maximo 1 reintento para SQL fallido.
-  - Aplicar solo en:
-    - `ValidationError`
-    - `DryRunError`
-  - En el segundo intento, no repetir el mismo prompt:
-    - reenviar la pregunta original
-    - incluir el SQL fallido
-    - incluir el error exacto de validacion o compilacion
-    - reforzar restricciones:
-      - usar solo objetos permitidos
-      - no inventar tablas ni columnas
-      - conservar la intencion original
-  - Mejorar la probabilidad de acierto del reintento con mas contexto:
-    - pasar el error exacto al modelo
-    - si aplica, inyectar mas y mejores ejemplos del mismo contexto
-    - priorizar ejemplos verificados del mismo `tenant/domain/connection`
-  - Si vuelve a fallar:
-    - responder `no pude`
-    - marcar `RequiresReview`
-- Revisar y aislar historico legado.
-  - Definir como tratar `QuestionJobs` y `TrainingExamples` previos al soporte multi-contexto.
-- Filtrar el editor/historial de entrenamiento RAG por contexto activo.
-- Correr validacion E2E formal en:
-  - ERP
-  - Northwind
-- Documentar checklist operativo de release:
+### P0 - Cierre del piloto esta semana
+
+#### 0. Optimizar primero el carril documental por parseo y prefiltrado
+Impacto: muy alto  
+Necesidad: critica
+
+- Siguiente sesion: tomar esto como primer frente de trabajo.
+- Hipotesis actual:
+  - el mayor costo del carril `PDF` probablemente esta en `ParseMs`
+  - es decir, en el router/modelo documental local
+- Mejora candidata de mayor retorno:
+  - prefiltrar chunks por numero de parte antes de pasar al modelo
+- Objetivo:
+  - bajar latencia de consultas documentales especificas
+  - reducir carga innecesaria sobre el router/modelo local
+  - mantener precision sin volver mas fragil el flujo
+- Validar con logs `DocsPerf`:
+  - `RetrieveMs`
+  - `ScoreMs`
+  - `ParseMs`
+  - `ComposeMs`
+  - `TotalMs`
+
+#### 1. Validacion E2E formal multi-contexto
+Impacto: muy alto  
+Necesidad: critica
+
+- Estado actual:
+  - pruebas principales corridas el fin de semana con los cambios recientes
+  - SQL y Admin multi-contexto validados a nivel funcional
+- Remate pendiente:
+  - consolidar evidencia minima del carril documental (`PDF`)
+  - dejar criterio de tiempo esperado documentado para consultas docs
+
+#### 2. Revisar y aislar historico legado
+Impacto: muy alto  
+Necesidad: critica
+
+- Estado actual:
+  - en progreso
+  - ya se saco del camino automatico el reuse/retrieval de registros sin contexto confiable
+- Definir como tratar `QuestionJobs` y `TrainingExamples` previos al soporte multi-contexto.
+- Evitar que el historico viejo contamine:
+  - retrieval
+  - fast path
+  - entrenamiento
+- Decidir si:
+  - se marca como `legacy`
+  - se excluye del reuse automatico
+  - o se migra/manualmente revalida
+
+#### 3. Filtrar el editor/historial de entrenamiento RAG por contexto activo
+Impacto: muy alto  
+Necesidad: critica
+
+- Estado actual:
+  - implementacion principal hecha en Admin
+  - sin contexto activo ya no muestra historial SQL global
+  - el editor de correccion solo trabaja sobre el contexto activo
+- El historial reciente y el editor de correccion deben mostrar solo consultas del contexto activo.
+- Evitar mezclar consultas ERP y Northwind en la revision admin.
+
+#### 4. Checklist operativo de release
+Impacto: alto  
+Necesidad: critica
+
+- Estado actual:
+  - en progreso
+  - ya existe override local por maquina con `appsettings.Local.json`
+  - ya se identifico que `vanna_memory.db` y `vanna_runtime.db` no deben tratarse como fuente compartida entre PCs
+- Documentar:
   - persistencia de `vanna_memory.db`
   - persistencia de `vanna_runtime.db`
   - persistencia de `dpkeys`
   - conexiones requeridas por ambiente
+  - pasos de arranque
+  - recuperacion basica ante cambio de connection string o contexto
 
-### P1
-- Mejorar visibilidad del contexto activo en todas las pantallas de Admin.
-- Confirmar que todas las pestanas de Admin queden bloqueadas o vacias si no hay contexto activo.
-- Revisar reutilizacion/cache por pregunta exacta:
+### P1 - Estabilidad y robustez inmediata
+
+#### 5. Endurecer la experiencia de error en `index`
+Impacto: alto  
+Necesidad: alta
+
+- Diferenciar visualmente:
+  - `ValidationError`
+  - `DryRunError`
+  - `ExecutionError`
+  - `RequiresReview`
+- Extender al carril `PDF`:
+  - timeout documental visible al usuario
+  - mensaje claro cuando el modelo documental tarda demasiado
+  - evitar estados `Pendiente` indefinidos
+- Mostrar siguiente accion sugerida cuando falle:
+  - ver SQL
+  - reintentar
+  - revisar en Admin
+
+#### 6. Revisar reutilizacion/cache por pregunta exacta
+Impacto: alto  
+Necesidad: alta
+
+- Confirmar el comportamiento por:
   - `UserId`
   - `TenantKey`
   - `Domain`
   - `ConnectionName`
-- Anadir estrategia explicita para contexto frio:
-  - que usa cuando no hay preguntas previas
-  - que seeds minimos conviene tener
+- Validar si el criterio actual es demasiado estricto para el piloto.
+
+#### 7. Estrategia explicita para contexto frio
+Impacto: medio-alto  
+Necesidad: alta
+
+- Definir que usa cuando no hay preguntas previas.
+- Definir que seeds minimos conviene tener:
+  - examples
+  - hints
+  - patterns
+  - rules
+
+#### 8. Mantener adapters, pero hacer el provider menos rigido
+Impacto: medio-alto  
+Necesidad: alta
+
+- Mantener `Industrial` y `Northwind` para el piloto.
+- Evitar que el provider crezca con branching manual por dominio.
+- Hacer que cada adapter exponga algo como:
+  - `CanHandle(context)`
+  - o `SupportedDomains`
+- El provider debe resolver por capacidad/registro y no por cadena codificada.
+
+#### 9. Asegurar que los adapters sean livianos
+Impacto: medio  
+Necesidad: alta
+
+- Un adapter no debe hacer I/O pesado en constructor.
+- Evitar trabajo pesado en startup.
+- Mover a carga lazy cualquier inicializacion costosa si existiera.
+
+#### 10. Medir el arranque real antes de optimizar
+Impacto: medio  
+Necesidad: media-alta
+
+- Medir:
+  - tiempo de arranque de la API
+  - tiempo de cada `Ensure...`
+  - tiempo de primera consulta SQL
+  - tiempo de primera consulta Docs
+  - tiempo de primera consulta Prediction
+- Optimizar con datos y no por intuicion.
+
+#### 11. Medir y ajustar performance del carril documental
+Impacto: medio-alto  
+Necesidad: media-alta
+
+- Estado actual:
+  - ya existe instrumentacion `DocsPerf` en backend
+  - ya hay timeout defensivo en parseo/composicion
+- Siguiente paso:
+  - correr consultas docs reales y capturar:
+    - `RetrieveMs`
+    - `ScoreMs`
+    - `ParseMs`
+    - `ComposeMs`
+    - `TotalMs`
+  - decidir si el primer cuello de botella esta en:
+    - retrieval/scoring
+    - o router/modelo documental
+  - bajar tiempo objetivo del carril docs hacia un rango mas consistente
+
+### P2 - Mejora evolutiva despues del piloto
+
+#### 12. Evolucionar domain packs/adapters hacia un modelo mas declarativo
+Impacto: medio-alto  
+Necesidad: media
+
+- Mantener los adapters actuales como solucion tactica.
+- Llevar gradualmente a configuracion:
+  - metricas
+  - dimensiones
+  - calendarios
+  - defaults del dominio
+- Dejar en codigo solo la logica realmente especial.
 
 ## Features WOW aprobadas
 
@@ -104,6 +276,11 @@ Fuera de alcance por ahora:
 - segundo modelo para interpretacion
 
 ### 2. Historial local Top 10 de consultas
+Estado: implementacion inicial hecha en `index`  
+Pendiente para completarla:
+- refinar UX de reutilizacion y contexto
+- decidir si se conecta o no con historial backend mas adelante
+
 Alcance aprobado:
 - guardar ultimas 10 consultas en `localStorage`
 - incluir:
@@ -135,6 +312,9 @@ Fuera de alcance por ahora:
 - Cada contexto consulta su propia base y su propia configuracion.
 - Admin no mezcla configuraciones entre ERP y Northwind.
 - Una pregunta verificada puede reutilizar SQL del contexto correcto.
+- El historico legado no contamina el contexto actual.
 - El sistema responde bien tanto en contexto frio como en contexto con historial.
 - El flujo de onboarding es suficientemente claro para un admin tecnico.
+- El historial y editor RAG respetan el contexto activo.
+- El arranque del sistema es aceptable y entendido con medicion basica.
 - Existe checklist operativo para levantar el piloto sin depender de memoria oral.

@@ -33,6 +33,7 @@ NativeLibraryConfig.All
     .SkipCheck(true);
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
 // Carga de secretos en desarrollo
 if (builder.Environment.IsDevelopment())
@@ -1135,6 +1136,7 @@ static async Task<bool> HasLegacyTrainingExamplesUniqueConstraintAsync(SqliteCon
     return uniqueIndexes.Any(name =>
         string.Equals(name, "IX_TrainingExamples_Question", StringComparison.OrdinalIgnoreCase));
 }
+
 static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
     string sqlitePath,
     IConfiguration configuration,
@@ -1145,6 +1147,36 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
     await connection.OpenAsync();
 
     var now = DateTime.UtcNow.ToString("o");
+    var pruneToSeeded = configuration.GetValue("PilotContexts:PruneToSeeded", true);
+    var configuredSeeds =
+        configuration.GetSection("PilotContexts:OverrideMappings").Get<List<PilotContextSeed>>() ??
+        configuration.GetSection("PilotContexts:Mappings").Get<List<PilotContextSeed>>() ??
+        [];
+    if (configuredSeeds.Count == 0)
+    {
+        configuredSeeds =
+        [
+            new PilotContextSeed("default", "Default", "Workspace principal del piloto ERP.", "erp-kpi-pilot", "ErpDb", true),
+            new PilotContextSeed("northwind-demo", "NorthWind Demo", "Workspace demo Northwind para validación local.", "northwind-sales", "NorthwindDb", true)
+        ];
+    }
+    configuredSeeds = configuredSeeds
+        .Where(seed => !string.IsNullOrWhiteSpace(seed.TenantKey)
+            && !string.IsNullOrWhiteSpace(seed.Domain)
+            && !string.IsNullOrWhiteSpace(seed.ConnectionName))
+        .GroupBy(seed => $"{seed.TenantKey.Trim().ToLowerInvariant()}|{seed.Domain.Trim().ToLowerInvariant()}")
+        .Select(group => group.First() with
+        {
+            TenantKey = group.First().TenantKey.Trim(),
+            DisplayName = string.IsNullOrWhiteSpace(group.First().DisplayName) ? group.First().TenantKey.Trim() : group.First().DisplayName.Trim(),
+            Description = string.IsNullOrWhiteSpace(group.First().Description) ? null : group.First().Description.Trim(),
+            Domain = group.First().Domain.Trim(),
+            ConnectionName = group.First().ConnectionName.Trim()
+        })
+        .ToList();
+
+    Console.WriteLine(
+        $"[PilotContexts] PruneToSeeded={pruneToSeeded} | Seeds={string.Join(", ", configuredSeeds.Select(x => $"{x.TenantKey}/{x.Domain}/{x.ConnectionName}"))}");
 
     async Task UpsertConnectionProfileFromConfigAsync(string connectionName, string? description = null)
     {
@@ -1203,20 +1235,48 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
             });
     }
 
-    async Task RemapTenantDomainAsync(string tenantKey, string domain, string connectionName)
+    async Task<long?> UpsertTenantAsync(PilotContextSeed seed)
     {
-        var tenantId = await connection.ExecuteScalarAsync<long?>(
+        var existingTenant = await connection.QueryFirstOrDefaultAsync<Tenant>(
             """
-            SELECT Id
+            SELECT *
             FROM Tenants
             WHERE TenantKey = @tenantKey
             LIMIT 1;
             """,
-            new { tenantKey });
+            new { tenantKey = seed.TenantKey });
 
-        if (tenantId is null)
-            return;
+        const string upsertTenantSql = @"
+            INSERT INTO Tenants
+                (TenantKey, DisplayName, Description, IsActive, CreatedUtc, UpdatedUtc)
+            VALUES
+                (@TenantKey, @DisplayName, @Description, 1, @CreatedUtc, @UpdatedUtc)
+            ON CONFLICT(TenantKey)
+            DO UPDATE SET
+                DisplayName = excluded.DisplayName,
+                Description = excluded.Description,
+                IsActive = 1,
+                UpdatedUtc = excluded.UpdatedUtc;
 
+            SELECT Id
+            FROM Tenants
+            WHERE TenantKey = @TenantKey
+            LIMIT 1;";
+
+        return await connection.ExecuteScalarAsync<long?>(
+            upsertTenantSql,
+            new
+            {
+                TenantKey = seed.TenantKey,
+                DisplayName = seed.DisplayName,
+                Description = seed.Description,
+                CreatedUtc = existingTenant?.CreatedUtc ?? now,
+                UpdatedUtc = now
+            });
+    }
+
+    async Task RemapTenantDomainAsync(long tenantId, PilotContextSeed seed)
+    {
         var existing = await connection.QueryFirstOrDefaultAsync<TenantDomain>(
             """
             SELECT *
@@ -1225,7 +1285,7 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
               AND Domain = @domain
             LIMIT 1;
             """,
-            new { tenantId, domain });
+            new { tenantId, domain = seed.Domain });
 
         const string upsertTenantDomainSql = @"
             UPDATE TenantDomains
@@ -1251,29 +1311,115 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
             upsertTenantDomainSql,
             new
             {
-                TenantId = tenantId.Value,
-                Domain = domain,
-                ConnectionName = connectionName,
+                TenantId = tenantId,
+                Domain = seed.Domain,
+                ConnectionName = seed.ConnectionName,
                 SystemProfileKey = defaultSystemProfile,
-                IsDefault = existing?.IsDefault ?? true,
+                IsDefault = seed.IsDefault,
                 IsActive = existing?.IsActive ?? true,
                 CreatedUtc = existing?.CreatedUtc ?? now,
                 UpdatedUtc = now
             });
     }
 
-    await UpsertConnectionProfileFromConfigAsync("ErpDb", "ERP VerificationProcess");
-    await UpsertConnectionProfileFromConfigAsync("NorthwindDb", "Northwind local SQL Server");
+    var activeConnectionNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var activeTenantKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var activeMappingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-    if (!string.IsNullOrWhiteSpace(configuration.GetConnectionString("ErpDb")))
+    foreach (var seed in configuredSeeds)
     {
-        await RemapTenantDomainAsync("default", "erp-kpi-pilot", "ErpDb");
+        var connectionString = configuration.GetConnectionString(seed.ConnectionName);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            Console.WriteLine($"[PilotContexts] Omitiendo seed '{seed.TenantKey}/{seed.Domain}' porque no existe ConnectionStrings:{seed.ConnectionName}.");
+            continue;
+        }
+
+        await UpsertConnectionProfileFromConfigAsync(seed.ConnectionName, seed.Description);
+        var tenantId = await UpsertTenantAsync(seed);
+        if (tenantId is null)
+            continue;
+
+        await RemapTenantDomainAsync(tenantId.Value, seed);
+
+        activeConnectionNames.Add(seed.ConnectionName);
+        activeTenantKeys.Add(seed.TenantKey);
+        activeMappingKeys.Add($"{seed.TenantKey}|{seed.Domain}");
     }
 
-    if (!string.IsNullOrWhiteSpace(configuration.GetConnectionString("NorthwindDb")))
+    if (!pruneToSeeded)
     {
-        await RemapTenantDomainAsync("northwind-demo", "northwind-sales", "NorthwindDb");
+        Console.WriteLine("[PilotContexts] Prune desactivado; se conservaran contextos locales heredados.");
+        return;
     }
+
+    var runtimeMappings = await connection.QueryAsync<(long Id, string TenantKey, string Domain)>(
+        """
+        SELECT td.Id, t.TenantKey, td.Domain
+        FROM TenantDomains td
+        INNER JOIN Tenants t ON t.Id = td.TenantId;
+        """);
+
+    foreach (var mapping in runtimeMappings)
+    {
+        var key = $"{mapping.TenantKey}|{mapping.Domain}";
+        if (activeMappingKeys.Contains(key))
+            continue;
+
+        await connection.ExecuteAsync(
+            """
+            UPDATE TenantDomains
+            SET IsActive = 0,
+                IsDefault = 0,
+                UpdatedUtc = @UpdatedUtc
+            WHERE Id = @Id;
+            """,
+            new { Id = mapping.Id, UpdatedUtc = now });
+    }
+
+    var tenantRows = await connection.QueryAsync<(long Id, string TenantKey)>(
+        """
+        SELECT Id, TenantKey
+        FROM Tenants;
+        """);
+
+    foreach (var tenant in tenantRows)
+    {
+        var keepActive = activeTenantKeys.Contains(tenant.TenantKey);
+        await connection.ExecuteAsync(
+            """
+            UPDATE Tenants
+            SET IsActive = @IsActive,
+                UpdatedUtc = @UpdatedUtc
+            WHERE Id = @Id;
+            """,
+            new { Id = tenant.Id, IsActive = keepActive, UpdatedUtc = now });
+    }
+
+    var profiles = await connection.QueryAsync<(long Id, string ConnectionName)>(
+        """
+        SELECT Id, ConnectionName
+        FROM ConnectionProfiles
+        WHERE EnvironmentName = @EnvironmentName
+          AND ProfileKey = @ProfileKey;
+        """,
+        new { EnvironmentName = environmentName, ProfileKey = defaultSystemProfile });
+
+    foreach (var profile in profiles)
+    {
+        var keepActive = activeConnectionNames.Contains(profile.ConnectionName);
+        await connection.ExecuteAsync(
+            """
+            UPDATE ConnectionProfiles
+            SET IsActive = @IsActive,
+                UpdatedUtc = @UpdatedUtc
+            WHERE Id = @Id;
+            """,
+            new { Id = profile.Id, IsActive = keepActive, UpdatedUtc = now });
+    }
+
+    Console.WriteLine(
+        $"[PilotContexts] Activos en esta maquina => Workspaces: {string.Join(", ", activeTenantKeys.OrderBy(x => x))} | Contextos: {string.Join(", ", activeMappingKeys.OrderBy(x => x))}");
 }
 
 static async Task EnsureQueryPatternTimeScopeSeedsAsync(IServiceProvider services)

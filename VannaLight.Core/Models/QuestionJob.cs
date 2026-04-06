@@ -30,4 +30,11 @@ public class QuestionJob
     public string? UserFeedback { get; set; }
     public DateTime? FeedbackUtc { get; set; }
     public string? FeedbackComment { get; set; }
+
+    public bool HasTrustedContext =>
+        !string.IsNullOrWhiteSpace(TenantKey)
+        && !string.IsNullOrWhiteSpace(Domain)
+        && !string.IsNullOrWhiteSpace(ConnectionName);
+
+    public bool IsLegacyContext => !HasTrustedContext;
 }

@@ -31,6 +31,7 @@ let selectedQueryPatternTermId = null;
 let globalDocuments = [];
 let globalDocumentChunks = [];
 let selectedDocumentId = null;
+let adminToastSeq = 0;
 let globalMlStatus = null;
 let globalPredictionProfiles = [];
 let globalPredictionDomainPack = null;
@@ -245,6 +246,9 @@ function setScopedTabContextBanner(config, message, isEmpty = false) {
 
 function buildRagHistoryQuery() {
     const context = getActiveAdminContext();
+    if (!context?.tenantKey || !context?.domain || !context?.connectionName) {
+        return null;
+    }
     const params = new URLSearchParams();
     if (context?.tenantKey) params.set('tenantKey', context.tenantKey);
     if (context?.domain) params.set('domain', context.domain);
@@ -259,13 +263,52 @@ function renderRagContextBanner() {
 
     const context = getActiveAdminContext();
     if (!context?.tenantKey || !context?.domain || !context?.connectionName) {
-        banner.textContent = 'Sin contexto activo: muestra historial SQL global.';
+        banner.textContent = 'Selecciona primero un workspace y un contexto válido en Onboarding.';
         banner.classList.add('is-empty');
         return;
     }
 
     banner.textContent = `Contexto activo: ${context.tenantDisplayName} / ${context.domain} / ${context.connectionName}`;
     banner.classList.remove('is-empty');
+}
+
+function resetRagEditor(message = 'Ninguna consulta seleccionada') {
+    setValue('txtJobId', '');
+    setValue('txtFeedbackComment', '');
+    setValue('txtQuestion', '');
+    setValue('txtSql', '');
+
+    const ragMeta = document.getElementById('ragMeta');
+    if (ragMeta) {
+        ragMeta.innerHTML = `<span class="meta-empty">${escHtml(message)}</span>`;
+    }
+
+    const badge = document.getElementById('ragVerifyBadge');
+    if (badge) {
+        badge.style.display = 'none';
+        badge.className = 'status-badge warn';
+        badge.textContent = '';
+    }
+
+    const btnSave = document.getElementById('btnSave');
+    if (btnSave) btnSave.disabled = true;
+}
+
+function renderRagEmptyState(message) {
+    const list = document.getElementById('historyList');
+    const count = document.getElementById('ragCount');
+    if (count) count.textContent = '0';
+    if (!list) return;
+
+    list.innerHTML = `
+        <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            ${escHtml(message)}
+        </div>`;
 }
 
 function renderScopedTabEmptyState(config, message) {
@@ -300,6 +343,103 @@ function getActiveAdminContext() {
     return globalAdminActiveContext;
 }
 
+function getAvailableAdminDomains(extraValues = []) {
+    const domains = new Map();
+    const addDomain = value => {
+        const domain = String(value || '').trim();
+        if (!domain) return;
+        const lower = domain.toLowerCase();
+        if (!domains.has(lower)) {
+            domains.set(lower, domain);
+        }
+    };
+
+    addDomain(globalAdminActiveContext?.domain);
+    addDomain(globalMlStatus?.ProfileDomain || globalMlStatus?.profileDomain);
+
+    globalOnboardingRuntimeContexts.forEach(item => {
+        addDomain(item?.domain || item?.Domain);
+    });
+
+    globalSystemConfigEntries.forEach(item => {
+        const section = String(item.section || item.Section || '').trim().toLowerCase();
+        const key = String(item.key || item.Key || '').trim().toLowerCase();
+        if ((section === 'docs' && key === 'defaultdomain')
+            || (section === 'retrieval' && key === 'domain')
+            || (section === 'uidefaults' && key === 'admindomain')) {
+            addDomain(item.value || item.Value);
+        }
+    });
+
+    extraValues.forEach(addDomain);
+    return Array.from(domains.values()).sort((a, b) => a.localeCompare(b));
+}
+
+function populateDomainSelect(selectId, options = {}) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+
+    const currentValue = String(select.value || '').trim();
+    const domains = getAvailableAdminDomains(options.extraValues || []);
+    const includeBlank = options.includeBlank !== false;
+    const blankLabel = options.blankLabel || 'Selecciona un dominio';
+
+    select.innerHTML = '';
+    if (includeBlank) {
+        const blankOption = document.createElement('option');
+        blankOption.value = '';
+        blankOption.textContent = blankLabel;
+        select.appendChild(blankOption);
+    }
+
+    domains.forEach(domain => {
+        const option = document.createElement('option');
+        option.value = domain;
+        option.textContent = domain;
+        select.appendChild(option);
+    });
+
+    const preferredValue = String(options.preferredValue || currentValue || '').trim();
+    const selectedValue = domains.find(domain => domain.toLowerCase() === preferredValue.toLowerCase())
+        || (includeBlank ? '' : (domains[0] || ''));
+    setValue(selectId, selectedValue);
+}
+
+function refreshAdminDomainSelectors() {
+    const documentsSelect = document.getElementById('txtDocumentDomainFilter');
+    const documentsHint = document.getElementById('documentsDomainHint');
+    const activeDocsDomain = getActiveAdminContext()?.domain?.trim() || '';
+
+    if (documentsSelect) {
+        if (activeDocsDomain) {
+            populateDomainSelect('txtDocumentDomainFilter', {
+                includeBlank: false,
+                preferredValue: activeDocsDomain,
+                extraValues: [activeDocsDomain]
+            });
+            documentsSelect.disabled = true;
+            if (documentsHint) {
+                documentsHint.innerHTML = `Para el piloto, el dominio documental queda amarrado al contexto activo: <strong>${escHtml(activeDocsDomain)}</strong>.`;
+            }
+        } else {
+            populateDomainSelect('txtDocumentDomainFilter', {
+                includeBlank: true,
+                blankLabel: 'Default configurado',
+                preferredValue: getValue('txtDocumentDomainFilter')
+            });
+            documentsSelect.disabled = false;
+            if (documentsHint) {
+                documentsHint.textContent = 'Si no hay contexto activo, se usa el dominio default configurado o el que selecciones aquí.';
+            }
+        }
+    }
+
+    populateDomainSelect('txtPredictionProfileDomain', {
+        includeBlank: false,
+        preferredValue: getValue('txtPredictionProfileDomain') || getDefaultPredictionDomain()
+    });
+}
+
 function syncAdminScopedFiltersToContext(context) {
     const normalized = normalizeAdminContext(context);
     const domain = normalized?.domain || '';
@@ -329,6 +469,8 @@ function syncAdminScopedFiltersToContext(context) {
             setScopedTabContextBanner(config, 'Selecciona un workspace y un contexto válido en Onboarding.', true);
         }
     });
+
+    refreshAdminDomainSelectors();
 }
 
 function renderContextRequiredState(tabKey, message = 'Selecciona primero un contexto en Onboarding.') {
@@ -2738,6 +2880,8 @@ async function loadSystemConfig() {
             ? (payload.Entries || payload.entries)
             : [];
 
+        populateSystemConfigSectionFilter();
+        refreshAdminDomainSelectors();
         applyAdminDomainDefault();
         populatePromptConfigEditor();
         populateRetrievalConfigEditor();
@@ -2753,6 +2897,43 @@ async function loadSystemConfig() {
                 Error al cargar system config
             </div>`;
     }
+}
+
+function populateSystemConfigSectionFilter() {
+    const select = document.getElementById('txtSystemConfigSectionFilter');
+    if (!select) return;
+
+    const currentValue = getValue('txtSystemConfigSectionFilter').trim();
+    const preferredOrder = ['Prompting', 'Retrieval', 'UiDefaults', 'Docs'];
+    const knownSections = new Map();
+
+    preferredOrder.forEach(section => knownSections.set(section.toLowerCase(), section));
+    globalSystemConfigEntries.forEach(item => {
+        const section = String(item.section || item.Section || '').trim();
+        if (!section) return;
+        const lower = section.toLowerCase();
+        if (!knownSections.has(lower)) {
+            knownSections.set(lower, section);
+        }
+    });
+
+    const orderedSections = [
+        ...preferredOrder.filter(section => knownSections.has(section.toLowerCase())),
+        ...Array.from(knownSections.values())
+            .filter(section => !preferredOrder.includes(section))
+            .sort((a, b) => a.localeCompare(b))
+    ];
+
+    select.innerHTML = '<option value="">Todas las secciones</option>';
+    orderedSections.forEach(section => {
+        const option = document.createElement('option');
+        option.value = section;
+        option.textContent = section;
+        select.appendChild(option);
+    });
+
+    const matchedCurrent = orderedSections.find(section => section.toLowerCase() === currentValue.toLowerCase());
+    setValue('txtSystemConfigSectionFilter', matchedCurrent || (orderedSections.includes('Prompting') ? 'Prompting' : ''));
 }
 
 function getSystemConfigEntry(section, key) {
@@ -3036,23 +3217,28 @@ async function loadHistory() {
     if (!list) return;
     renderRagContextBanner();
 
+    const historyQuery = buildRagHistoryQuery();
+    if (!historyQuery) {
+        globalJobs = [];
+        hideRagBanner();
+        resetRagEditor('Selecciona un contexto en Onboarding para revisar consultas.');
+        renderRagEmptyState('Selecciona primero un workspace y un contexto válido en Onboarding.');
+        return;
+    }
+
     try {
-        const res = await fetch(`/api/admin/history${buildRagHistoryQuery()}`);
+        const res = await fetch(`/api/admin/history${historyQuery}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const jobs = await res.json();
         globalJobs = Array.isArray(jobs) ? jobs : [];
+        hideRagBanner();
+        resetRagEditor(globalJobs.length ? 'Selecciona una consulta del historial.' : 'No hay consultas del contexto activo para revisar.');
         renderHistory();
     } catch (e) {
-        list.innerHTML = `
-            <div class="empty-state">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-                Error al cargar historial
-            </div>`;
+        globalJobs = [];
+        resetRagEditor('No se pudo cargar el historial del contexto activo.');
+        renderRagEmptyState('Error al cargar historial');
     }
 }
 
@@ -3263,8 +3449,13 @@ async function saveCorrection() {
     const question = getValue('txtQuestion');
     const sql = getValue('txtSql');
     const feedbackComment = getValue('txtFeedbackComment');
+    const context = getActiveAdminContext();
 
     if (!jobId || !question || !sql) return;
+    if (!context?.tenantKey || !context?.domain || !context?.connectionName) {
+        showRagBanner('warn', 'Selecciona primero un contexto válido en Onboarding antes de guardar en memoria RAG.');
+        return;
+    }
 
     const btn = document.getElementById('btnSave');
     const spin = document.getElementById('ragSpinner');
@@ -4896,6 +5087,8 @@ function hideAlert() {
 // DOCUMENTS TAB
 // -----------------------------------------------------------
 function getDocumentsDomainFilter() {
+    const activeDomain = getActiveAdminContext()?.domain?.trim();
+    if (activeDomain) return activeDomain;
     return getValue('txtDocumentDomainFilter').trim();
 }
 
@@ -4915,13 +5108,90 @@ function hideDocumentsBanner() {
     el.textContent = '';
 }
 
-function ensureDocumentsDomainPrefill() {
-    const input = document.getElementById('txtDocumentDomainFilter');
-    if (!input || String(input.value || '').trim()) return;
-    const contextDomain = getActiveAdminContext()?.domain?.trim();
-    if (contextDomain) {
-        input.value = contextDomain;
+function showAdminToast(type, message, title = '', timeoutMs = 4200) {
+    const host = document.getElementById('adminToastHost');
+    if (!host || !message) return;
+
+    const toast = document.createElement('div');
+    toast.className = `admin-toast ${type || 'ok'}`;
+
+    const toastTitle = title || (type === 'ok'
+        ? 'Operación completada'
+        : type === 'warn'
+            ? 'Atención'
+            : 'Ocurrió un error');
+
+    toast.innerHTML = `
+        <button type="button" class="admin-toast-close" aria-label="Cerrar notificación">×</button>
+        <div class="admin-toast-title">${escHtml(toastTitle)}</div>
+        <div class="admin-toast-body">${escHtml(message)}</div>`;
+
+    const currentToastId = ++adminToastSeq;
+    toast.dataset.toastId = String(currentToastId);
+
+    const dismiss = () => {
+        if (toast.parentElement) {
+            toast.parentElement.removeChild(toast);
+        }
+    };
+
+    toast.querySelector('.admin-toast-close')?.addEventListener('click', dismiss);
+    host.appendChild(toast);
+
+    window.setTimeout(() => {
+        if (toast.dataset.toastId === String(currentToastId)) {
+            dismiss();
+        }
+    }, Math.max(1800, timeoutMs || 0));
+}
+
+function setDocumentsBusy(isBusy, message = '') {
+    const uploadBtn = document.getElementById('btnDocumentsUpload');
+    const reindexBtn = document.getElementById('btnDocumentsReindex');
+    const uploadSpinner = document.getElementById('documentsUploadSpinner');
+    const reindexSpinner = document.getElementById('documentsReindexSpinner');
+    const uploadLabel = document.getElementById('txtDocumentsUploadLabel');
+    const reindexLabel = document.getElementById('txtDocumentsReindexLabel');
+    const activeBanner = document.getElementById('documentsActiveBanner');
+
+    if (uploadBtn) uploadBtn.disabled = isBusy || uploadBtn.dataset.blocked === 'true';
+    if (reindexBtn) reindexBtn.disabled = isBusy || reindexBtn.dataset.blocked === 'true';
+    if (uploadSpinner) uploadSpinner.style.display = isBusy && message.includes('Subiendo') ? 'block' : 'none';
+    if (reindexSpinner) reindexSpinner.style.display = isBusy && message.includes('Reindex') ? 'block' : 'none';
+    if (uploadLabel) uploadLabel.textContent = isBusy && message.includes('Subiendo') ? 'Subiendo...' : 'Subir PDFs';
+    if (reindexLabel) reindexLabel.textContent = isBusy && message.includes('Reindex') ? 'Reindexando...' : 'Reindex Documents';
+    if (activeBanner && message) activeBanner.textContent = message;
+}
+
+function applyDocumentsStatusUi(status) {
+    const uploadBtn = document.getElementById('btnDocumentsUpload');
+    const reindexBtn = document.getElementById('btnDocumentsReindex');
+    const activeBanner = document.getElementById('documentsActiveBanner');
+    const rootExists = !!(status?.rootExists ?? status?.RootExists);
+    const filesOnDisk = Number(status?.filesOnDisk ?? status?.FilesOnDisk ?? 0);
+    const indexedDocuments = Number(status?.indexedDocuments ?? status?.IndexedDocuments ?? 0);
+    const effectiveDomain =
+        status?.effectiveDomain ||
+        status?.EffectiveDomain ||
+        status?.defaultDomain ||
+        status?.DefaultDomain ||
+        getDocumentsDomainFilter() ||
+        '—';
+
+    if (uploadBtn) uploadBtn.dataset.blocked = rootExists ? 'false' : 'true';
+    if (reindexBtn) reindexBtn.dataset.blocked = rootExists ? 'false' : 'true';
+    if (uploadBtn) uploadBtn.disabled = !rootExists;
+    if (reindexBtn) reindexBtn.disabled = !rootExists;
+
+    if (activeBanner) {
+        activeBanner.textContent = rootExists
+            ? `Contexto documental listo. Dominio activo: ${effectiveDomain}. PDFs en disco: ${filesOnDisk}. Indexados: ${indexedDocuments}.`
+            : `Contexto documental activo: ${effectiveDomain}. Falta configurar una carpeta válida en Docs:RootPath antes de subir o reindexar.`;
     }
+}
+
+function ensureDocumentsDomainPrefill() {
+    refreshAdminDomainSelectors();
 }
 
 function formatAdminDateTime(value) {
@@ -5059,10 +5329,13 @@ function renderDocumentChunks() {
     }).join('');
 }
 
-async function loadDocumentsAdmin() {
+async function loadDocumentsAdmin(preserveBanner = false) {
     ensureDocumentsDomainPrefill();
     const list = document.getElementById('documentList');
     const domain = getDocumentsDomainFilter();
+    if (!preserveBanner) {
+        hideDocumentsBanner();
+    }
     if (list) {
         list.innerHTML = `
             <div class="empty-state">
@@ -5093,8 +5366,6 @@ async function loadDocumentsAdmin() {
             globalDocumentChunks = [];
             renderDocumentChunks();
         }
-
-        hideDocumentsBanner();
     } catch (e) {
         globalDocuments = [];
         selectedDocumentId = null;
@@ -5107,21 +5378,35 @@ async function loadDocumentsAdmin() {
 
 async function loadDocumentsStatus() {
     try {
-        const res = await fetch('/api/admin/documents/status');
+        const domain = getDocumentsDomainFilter();
+        const suffix = domain ? `?domain=${encodeURIComponent(domain)}` : '';
+        const res = await fetch(`/api/admin/documents/status${suffix}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const body = await res.json();
+        const normalized = {
+            rootExists: !!(body?.rootExists ?? body?.RootExists),
+            rootPath: body?.rootPath || body?.RootPath || '',
+            filesOnDisk: Number(body?.filesOnDisk ?? body?.FilesOnDisk ?? 0),
+            indexedDocuments: Number(body?.indexedDocuments ?? body?.IndexedDocuments ?? 0),
+            effectiveDomain: body?.effectiveDomain || body?.EffectiveDomain || '',
+            defaultDomain: body?.defaultDomain || body?.DefaultDomain || ''
+        };
 
-        setText('txtDocumentsRootExists', body?.RootExists ? 'Lista' : 'Falta');
-        setText('txtDocumentsRootPath', body?.RootPath || 'Sin ruta configurada');
-        setText('txtDocumentsFilesOnDisk', String(body?.FilesOnDisk ?? 0));
-        setText('txtDocumentsIndexedCount', String(body?.IndexedDocuments ?? 0));
-        setText('txtDocumentsDefaultDomain', `Dominio documental default: ${body?.DefaultDomain || '—'}`);
+        setText('txtDocumentsRootExists', normalized.rootExists ? 'Lista' : 'Falta');
+        setText('txtDocumentsRootPath', normalized.rootPath || 'Sin ruta configurada');
+        setText('txtDocumentsFilesOnDisk', String(normalized.filesOnDisk));
+        setText('txtDocumentsIndexedCount', String(normalized.indexedDocuments));
+        setText('txtDocumentsDefaultDomain', `Dominio documental activo: ${normalized.effectiveDomain || normalized.defaultDomain || '—'}`);
+        applyDocumentsStatusUi(normalized);
+        return normalized;
     } catch (e) {
         setText('txtDocumentsRootExists', 'Error');
         setText('txtDocumentsRootPath', 'No pude leer la configuración documental.');
         setText('txtDocumentsFilesOnDisk', '0');
         setText('txtDocumentsIndexedCount', '0');
-        setText('txtDocumentsDefaultDomain', 'Dominio documental default: —');
+        setText('txtDocumentsDefaultDomain', 'Dominio documental activo: —');
+        applyDocumentsStatusUi({ RootExists: false, EffectiveDomain: getDocumentsDomainFilter() || '—', FilesOnDisk: 0, IndexedDocuments: 0 });
+        return null;
     }
 }
 
@@ -5150,38 +5435,65 @@ async function selectDocumentAdmin(docId, updateList = true) {
 }
 
 async function reindexDocumentsAdmin() {
-    const spinner = document.getElementById('documentsReindexSpinner');
-    if (spinner) spinner.style.display = 'block';
+    const domain = getDocumentsDomainFilter();
+    const status = await loadDocumentsStatus();
+    if (!(status?.rootExists ?? status?.RootExists)) {
+        showDocumentsBanner('warn', 'No puedo reindexar porque no hay una carpeta documental válida configurada en Docs:RootPath.');
+        showAdminToast('warn', 'Falta una carpeta documental válida antes de reindexar.', 'Reindex no disponible');
+        return;
+    }
 
     try {
-        const res = await fetch('/api/admin/reindex-docs', { method: 'POST' });
+        setDocumentsBusy(true, `Reindexando documentos del dominio ${domain || 'default'}...`);
+        const suffix = domain ? `?domain=${encodeURIComponent(domain)}` : '';
+        const res = await fetch(`/api/admin/reindex-docs${suffix}`, { method: 'POST' });
         const body = await safeJson(res);
         if (!res.ok) {
             throw new Error(body?.Error || body?.Message || `HTTP ${res.status}`);
         }
 
-        showDocumentsBanner('ok', `${body?.Message || 'Reindex completado.'} Total: ${body?.TotalFiles ?? 0} · Indexados: ${body?.Indexed ?? 0} · Omitidos: ${body?.Skipped ?? 0} · Errores: ${body?.Errors ?? 0}`);
-        await loadDocumentsAdmin();
+        const resultDomain = body?.domain || body?.Domain || domain || '—';
+        const totalFiles = Number(body?.totalFiles ?? body?.TotalFiles ?? 0);
+        const indexed = Number(body?.indexed ?? body?.Indexed ?? 0);
+        const skipped = Number(body?.skipped ?? body?.Skipped ?? 0);
+        const errors = Number(body?.errors ?? body?.Errors ?? 0);
+        const message = body?.message || body?.Message || 'Reindex completado.';
+
+        showDocumentsBanner('ok', `${message} Dominio: ${resultDomain} · Total: ${totalFiles} · Indexados: ${indexed} · Omitidos: ${skipped} · Errores: ${errors}`);
+        showAdminToast(
+            'ok',
+            `Dominio ${resultDomain} · Total ${totalFiles} · Indexados ${indexed} · Omitidos ${skipped} · Errores ${errors}`,
+            'Reindex completado'
+        );
+        await loadDocumentsAdmin(true);
     } catch (e) {
         showDocumentsBanner('err', 'Error reindexando documentos: ' + e.message);
+        showAdminToast('err', String(e.message || e), 'Reindex falló', 5200);
     } finally {
-        if (spinner) spinner.style.display = 'none';
+        setDocumentsBusy(false, '');
     }
 }
 
 async function uploadDocumentAdmin() {
     const input = document.getElementById('fileDocumentUpload');
-    const spinner = document.getElementById('documentsUploadSpinner');
     const files = Array.from(input?.files || []);
+    const domain = getDocumentsDomainFilter();
 
     if (!files.length) {
         showDocumentsBanner('warn', 'Selecciona al menos un archivo PDF antes de subirlo.');
+        showAdminToast('warn', 'Selecciona al menos un PDF antes de subirlo.', 'Sin archivos');
         return;
     }
 
-    if (spinner) spinner.style.display = 'block';
+    const status = await loadDocumentsStatus();
+    if (!(status?.rootExists ?? status?.RootExists)) {
+        showDocumentsBanner('warn', 'No puedo subir PDFs porque no hay una carpeta documental válida configurada en Docs:RootPath.');
+        showAdminToast('warn', 'Falta una carpeta documental válida antes de subir PDFs.', 'Carga no disponible');
+        return;
+    }
 
     try {
+        setDocumentsBusy(true, `Subiendo PDFs al dominio ${domain || 'default'}...`);
         const form = new FormData();
         for (const file of files) {
             form.append(files.length > 1 ? 'files' : 'file', file);
@@ -5199,16 +5511,19 @@ async function uploadDocumentAdmin() {
         }
 
         if (files.length > 1) {
-            showDocumentsBanner('ok', `${body?.Message || 'Carga masiva completada.'} Se ejecutará reindex para dejar todos los documentos disponibles.`);
+            showDocumentsBanner('ok', `${body?.message || body?.Message || 'Carga masiva completada.'} Se ejecutará reindex para dejar todos los documentos disponibles.`);
+            showAdminToast('ok', 'Carga masiva completada. Se ejecutará el reindex a continuación.', 'PDFs cargados');
         } else {
-            showDocumentsBanner('ok', `${body?.Message || 'Documento cargado.'} Se ejecutará reindex para dejarlo disponible.`);
+            showDocumentsBanner('ok', `${body?.message || body?.Message || 'Documento cargado.'} Se ejecutará reindex para dejarlo disponible.`);
+            showAdminToast('ok', 'Documento cargado correctamente. Se ejecutará el reindex a continuación.', 'PDF cargado');
         }
         if (input) input.value = '';
         await reindexDocumentsAdmin();
     } catch (e) {
         showDocumentsBanner('err', 'Error subiendo documento: ' + e.message);
+        showAdminToast('err', String(e.message || e), 'Carga falló', 5200);
     } finally {
-        if (spinner) spinner.style.display = 'none';
+        setDocumentsBusy(false, '');
     }
 }
 
@@ -6018,6 +6333,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const documentsDomainFilter = document.getElementById('txtDocumentDomainFilter');
     if (documentsDomainFilter) {
         documentsDomainFilter.addEventListener('change', () => loadDocumentsAdmin());
+    }
+
+    const predictionProfileDomain = document.getElementById('txtPredictionProfileDomain');
+    if (predictionProfileDomain) {
+        predictionProfileDomain.addEventListener('change', () => refreshPredictionProfilesAdmin());
     }
 });
 

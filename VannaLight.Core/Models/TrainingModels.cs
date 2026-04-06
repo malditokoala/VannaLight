@@ -14,6 +14,13 @@ public sealed record TrainingExample
     public DateTime CreatedUtc { get; init; }
     public DateTime LastUsedUtc { get; init; }
     public long UseCount { get; init; }
+
+    public bool HasTrustedContext =>
+        !string.IsNullOrWhiteSpace(TenantKey)
+        && !string.IsNullOrWhiteSpace(Domain)
+        && !string.IsNullOrWhiteSpace(ConnectionName);
+
+    public bool IsLegacyContext => !HasTrustedContext;
 }
 
 public sealed record TrainingExampleUpsert(

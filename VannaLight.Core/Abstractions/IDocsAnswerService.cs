@@ -7,5 +7,5 @@ namespace VannaLight.Core.Abstractions;
 
 public interface IDocsAnswerService
 {
-    Task<DocsAnswerResult> AnswerAsync(string question, CancellationToken ct);
+    Task<DocsAnswerResult> AnswerAsync(string question, string? domain, CancellationToken ct);
 }

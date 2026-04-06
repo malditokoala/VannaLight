@@ -118,7 +118,7 @@ public class InferenceWorker(
                     logger.LogInformation("[Worker] Ejecutando Búsqueda RAG (Docs) para Job {Id}", jobId);
 
                     var docsService = scope.ServiceProvider.GetRequiredService<IDocsAnswerService>();
-                    var docResult = await docsService.AnswerAsync(question, ct);
+                    var docResult = await docsService.AnswerAsync(question, domain, ct);
 
                     if (docResult.Success)
                     {

@@ -165,6 +165,9 @@ public class SqliteTrainingStore : ITrainingStore
               AND TenantKey = @TenantKey
               AND Domain = @Domain
               AND ConnectionName = @ConnectionName
+              AND TenantKey <> ''
+              AND Domain <> ''
+              AND ConnectionName <> ''
             ORDER BY Priority DESC, LastUsedUtc DESC, Id DESC
             LIMIT 1;";
 

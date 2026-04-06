@@ -14,7 +14,7 @@ public sealed class WiDocIngestor
 
     public async Task<WiReindexResult> ReindexAsync(CancellationToken ct)
     {
-        var result = await _inner.ReindexAsync(ct);
+        var result = await _inner.ReindexAsync(null, ct);
         return new WiReindexResult(result.TotalFiles, result.Indexed, result.Skipped, result.Errors);
     }
 }

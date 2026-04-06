@@ -74,6 +74,7 @@ public class LocalRetriever : IRetriever
         var allExamples = await _trainingStore.GetAllTrainingExamplesAsync(sqlitePath, ct);
         var normalizedIntent = string.IsNullOrWhiteSpace(intentName) ? null : intentName.Trim();
         var rankedExamples = allExamples
+            .Where(ex => ex.HasTrustedContext)
             .Where(ex => string.Equals(ex.TenantKey, normalizedTenantKey, StringComparison.OrdinalIgnoreCase))
             .Where(ex => string.Equals(ex.Domain ?? string.Empty, normalizedDomain, StringComparison.OrdinalIgnoreCase))
             .Where(ex => string.Equals(ex.ConnectionName, normalizedConnectionName, StringComparison.OrdinalIgnoreCase))

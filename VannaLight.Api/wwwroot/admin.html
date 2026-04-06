@@ -6,9 +6,10 @@
     <title>VannaLight — Administración</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
-    <link href="/css/admin.css" rel="stylesheet" />
+    <link href="/css/admin.css?v=20260406-docs-feedback-1" rel="stylesheet" />
 </head>
 <body>
+    <div class="admin-toast-host" id="adminToastHost" aria-live="polite" aria-atomic="true"></div>
     <div class="app">
 
         <input type="hidden" id="txtJobId" />
@@ -171,7 +172,7 @@
                             <button class="filter-btn" id="filter-negative" onclick="setFilter('negative')">Con 👎</button>
                             <button class="filter-btn" id="filter-verified" onclick="setFilter('verified')">Verificados</button>
                         </div>
-                        <div class="context-active-banner" id="ragActiveContextBanner">Sin contexto activo: muestra historial SQL global.</div>
+                        <div class="context-active-banner" id="ragActiveContextBanner">Selecciona primero un workspace y un contexto válido en Onboarding.</div>
                         <div class="history-scroll" id="historyList">
                             <div class="empty-state">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -288,8 +289,10 @@
                         <div class="editor-wrap-compact">
                             <div class="field-group">
                                 <label class="field-label">Dominio de documentos</label>
-                                <input type="text" id="txtDocumentDomainFilter" class="field-input" placeholder="Vacío = default configurado" />
-                                <div class="field-hint">Usa este filtro para revisar un dominio documental específico. Si lo dejas vacío, se usa el dominio default del sistema.</div>
+                                <select id="txtDocumentDomainFilter" class="field-input">
+                                    <option value="">Default configurado</option>
+                                </select>
+                                <div class="field-hint" id="documentsDomainHint">Para el piloto, este dominio sigue el contexto activo del workspace seleccionado en Onboarding.</div>
                             </div>
                             <button class="btn btn-ghost" type="button" onclick="loadDocumentsAdmin()">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
@@ -340,16 +343,16 @@
                                 <div class="field-group">
                                     <label class="field-label">Acciones de indexación</label>
                                     <div class="inline-actions">
-                                        <button class="btn btn-ghost" type="button" onclick="uploadDocumentAdmin()">
+                                        <button class="btn btn-ghost" type="button" id="btnDocumentsUpload" onclick="uploadDocumentAdmin()">
                                             <div class="btn-spinner" id="documentsUploadSpinner"></div>
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                                                 <polyline points="7 10 12 5 17 10" />
                                                 <line x1="12" y1="5" x2="12" y2="17" />
                                             </svg>
-                                            Subir PDFs
+                                            <span id="txtDocumentsUploadLabel">Subir PDFs</span>
                                         </button>
-                                        <button class="btn btn-primary" type="button" onclick="reindexDocumentsAdmin()">
+                                        <button class="btn btn-primary" type="button" id="btnDocumentsReindex" onclick="reindexDocumentsAdmin()">
                                             <div class="btn-spinner" id="documentsReindexSpinner"></div>
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                 <polyline points="23 4 23 10 17 10" />
@@ -357,7 +360,7 @@
                                                 <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
                                                 <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
                                             </svg>
-                                            Reindex Documents
+                                            <span id="txtDocumentsReindexLabel">Reindex Documents</span>
                                         </button>
                                     </div>
                                     <div class="field-hint">El reindex ahora usa chunks más pequeños con overlap y metadata adicional por bloque.</div>
@@ -610,7 +613,9 @@
                                 <div class="form-grid-2">
                                     <div class="field-group">
                                         <label class="field-label">Dominio activo para perfiles</label>
-                                        <input id="txtPredictionProfileDomain" class="field-input" placeholder="northwind-sales" />
+                                        <select id="txtPredictionProfileDomain" class="field-input">
+                                            <option value="">Selecciona un dominio</option>
+                                        </select>
                                         <div class="field-hint">Se usa para cargar perfiles y para pedir el Domain Pack que describe métricas y dimensiones del dominio.</div>
                                     </div>
                                     <div class="field-group prediction-toolbar">
@@ -1465,7 +1470,13 @@
                         <div class="editor-wrap-compact">
                             <div class="field-group">
                                 <label class="field-label">Filtro por sección</label>
-                                <input type="text" id="txtSystemConfigSectionFilter" class="field-input" value="Prompting" placeholder="Prompting, Retrieval, UiDefaults, Docs..." />
+                                <select id="txtSystemConfigSectionFilter" class="field-input" onchange="renderSystemConfig()">
+                                    <option value="">Todas las secciones</option>
+                                    <option value="Prompting" selected>Prompting</option>
+                                    <option value="Retrieval">Retrieval</option>
+                                    <option value="UiDefaults">UiDefaults</option>
+                                    <option value="Docs">Docs</option>
+                                </select>
                             </div>
                             <button class="btn btn-ghost" type="button" onclick="loadSystemConfig()">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
@@ -2393,7 +2404,7 @@
         </div><!-- /main-area -->
     </div><!-- /app -->
 
-    <script src="/js/admin.js"></script>
+    <script src="/js/admin.js?v=20260406-docs-feedback-1"></script>
 </body>
 </html>
 

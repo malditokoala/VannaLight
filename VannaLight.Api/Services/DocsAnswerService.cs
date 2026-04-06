@@ -1,5 +1,8 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.DependencyInjection;
+using VannaLight.Api.Contracts;
 using VannaLight.Api.Services.Docs;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.Models;
@@ -11,8 +14,8 @@ public sealed class DocsAnswerService : IDocsAnswerService
     private readonly IConfiguration _config;
     private readonly DocTypeSchema _schema;
     private readonly ILogger<DocsAnswerService> _log;
+    private readonly IServiceProvider _services;
     private readonly IHostEnvironment _env;
-    private readonly IDocsIntentRouter _router;
     private readonly IDocChunkRepository _repository;
     private readonly IDocChunkScorer _scorer;
     private readonly IDocAnswerComposer _answerComposer;
@@ -20,21 +23,22 @@ public sealed class DocsAnswerService : IDocsAnswerService
     private readonly string _docsDomain;
     private readonly int _topK;
     private readonly int _maxCites;
+    private readonly int _intentTimeoutSeconds;
     private readonly bool _debugLogs;
 
     public DocsAnswerService(
         IConfiguration config,
+        IServiceProvider services,
         IHostEnvironment env,
         ILogger<DocsAnswerService> log,
-        IDocsIntentRouter router,
         IDocChunkRepository repository,
         IDocChunkScorer scorer,
         IDocAnswerComposer answerComposer)
     {
         _config = config;
+        _services = services;
         _env = env;
         _log = log;
-        _router = router;
         _repository = repository;
         _scorer = scorer;
         _answerComposer = answerComposer;
@@ -46,6 +50,9 @@ public sealed class DocsAnswerService : IDocsAnswerService
         _docsDomain = _config["Docs:DefaultDomain"] ?? "work-instructions";
         _topK = int.TryParse(_config["Docs:TopKChunks"] ?? _config["Docs:TopKPages"], out var k) ? k : 6;
         _maxCites = int.TryParse(_config["Docs:MaxAnswerCitations"], out var mc) ? mc : 4;
+        _intentTimeoutSeconds = int.TryParse(_config["Docs:IntentTimeoutSeconds"], out var timeoutSeconds)
+            ? Math.Clamp(timeoutSeconds, 5, 120)
+            : 25;
         _debugLogs = _env.IsDevelopment() || _config.GetValue<bool>("Docs:DebugLogs");
 
         var schemaRel = _config["Paths:SchemasPath"] ?? "Schemas";
@@ -67,18 +74,22 @@ public sealed class DocsAnswerService : IDocsAnswerService
         }
     }
 
-    public async Task<DocsAnswerResult> AnswerAsync(string question, CancellationToken ct)
+    public async Task<DocsAnswerResult> AnswerAsync(string question, string? domain, CancellationToken ct)
     {
+        var totalStopwatch = Stopwatch.StartNew();
         var q = (question ?? string.Empty).Trim();
         if (q.Length == 0)
             return new DocsAnswerResult(false, null, Array.Empty<DocCitation>(), "Pregunta vacia.");
 
+        var effectiveDomain = string.IsNullOrWhiteSpace(domain) ? _docsDomain : domain.Trim();
         var partNumbers = ExtractPartNumbers(q);
         var keywords = BuildDynamicKeywords(q, _schema);
-        var chunks = (await _repository.GetRecentChunksByDomainAsync(_sqlitePath, _docsDomain, 3000, ct)).ToList();
+        var retrieveStopwatch = Stopwatch.StartNew();
+        var chunks = (await _repository.GetRecentChunksByDomainAsync(_sqlitePath, effectiveDomain, 3000, ct)).ToList();
+        retrieveStopwatch.Stop();
 
         if (chunks.Count == 0)
-            return new DocsAnswerResult(false, null, Array.Empty<DocCitation>(), "No hay documentos indexados para este dominio.");
+            return new DocsAnswerResult(false, null, Array.Empty<DocCitation>(), $"No hay documentos indexados para el dominio '{effectiveDomain}'.");
 
         if (partNumbers.Count > 0 && !chunks.Any(c => ContainsAny(c.Text, partNumbers) || ContainsAny(c.PartNumbers, partNumbers)))
         {
@@ -89,6 +100,7 @@ public sealed class DocsAnswerService : IDocsAnswerService
                 $"No encontre evidencia para el numero de parte ({string.Join(", ", partNumbers)}) en los documentos indexados.");
         }
 
+        var scoreStopwatch = Stopwatch.StartNew();
         var scored = chunks
             .Select(chunk => new ScoredDocChunk(chunk, _scorer.Score(chunk, q, keywords, partNumbers, _schema)))
             .Where(x => x.Score > 0)
@@ -97,6 +109,7 @@ public sealed class DocsAnswerService : IDocsAnswerService
             .ThenBy(x => x.Chunk.ChunkOrder)
             .Take(_topK)
             .ToList();
+        scoreStopwatch.Stop();
 
         if (scored.Count == 0)
             return new DocsAnswerResult(false, null, Array.Empty<DocCitation>(), "No encontre evidencia relevante en los documentos indexados.");
@@ -104,23 +117,116 @@ public sealed class DocsAnswerService : IDocsAnswerService
         if (_debugLogs)
         {
             var best = scored[0];
-            _log.LogInformation("[Docs] Domain={Domain} Best={File} p{Page}#{Chunk} Score={Score}",
-                _docsDomain, best.Chunk.FileName, best.Chunk.PageNumber, best.Chunk.ChunkOrder, best.Score);
+            _log.LogInformation(
+                "[Docs] Domain={Domain} Best={File} p{Page}#{Chunk} Score={Score}",
+                effectiveDomain,
+                best.Chunk.FileName,
+                best.Chunk.PageNumber,
+                best.Chunk.ChunkOrder,
+                best.Score);
         }
 
         var confidence = _scorer.NormalizeConfidence(scored[0].Score);
-        var intent = await _router.ParseAsync(q, _schema, ct);
+        IDocsIntentRouter router;
+        try
+        {
+            router = _services.GetRequiredService<IDocsIntentRouter>();
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "[Docs] No se pudo inicializar el router documental para Domain={Domain}", effectiveDomain);
+            return BuildRouterInitializationError();
+        }
 
-        return await _answerComposer.ComposeAsync(
-            _sqlitePath,
-            _schema,
-            intent,
-            scored,
-            chunks,
-            partNumbers,
-            _maxCites,
-            confidence,
-            ct);
+        DocsIntent intent;
+        var parseStopwatch = Stopwatch.StartNew();
+        using (var parseTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+        {
+            parseTimeoutCts.CancelAfter(TimeSpan.FromSeconds(_intentTimeoutSeconds));
+            try
+            {
+                intent = await router.ParseAsync(q, _schema, parseTimeoutCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                if (ct.IsCancellationRequested)
+                    throw;
+
+                _log.LogWarning(
+                    "[Docs] Timeout parseando intención documental para Domain={Domain} después de {TimeoutSeconds}s",
+                    effectiveDomain,
+                    _intentTimeoutSeconds);
+                return BuildRouterTimeoutError(_intentTimeoutSeconds);
+            }
+        catch (TimeoutException ex)
+        {
+                _log.LogWarning(
+                    ex,
+                    "[Docs] TimeoutException parseando intención documental para Domain={Domain} después de {TimeoutSeconds}s",
+                    effectiveDomain,
+                    _intentTimeoutSeconds);
+                return BuildRouterTimeoutError(_intentTimeoutSeconds);
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "[Docs] Fallo el parseo de intención documental para Domain={Domain}", effectiveDomain);
+                return BuildRouterInitializationError();
+            }
+        }
+        parseStopwatch.Stop();
+
+        var composeTimeoutSeconds = Math.Max(_intentTimeoutSeconds, 15);
+        using var composeTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        composeTimeoutCts.CancelAfter(TimeSpan.FromSeconds(composeTimeoutSeconds));
+
+        try
+        {
+            var composeStopwatch = Stopwatch.StartNew();
+            var result = await _answerComposer.ComposeAsync(
+                _sqlitePath,
+                _schema,
+                intent,
+                scored,
+                chunks,
+                partNumbers,
+                _maxCites,
+                confidence,
+                composeTimeoutCts.Token);
+            composeStopwatch.Stop();
+            totalStopwatch.Stop();
+
+            if (_debugLogs)
+            {
+                _log.LogInformation(
+                    "[DocsPerf] Domain={Domain} Chunks={ChunkCount} Top={TopCount} RetrieveMs={RetrieveMs} ScoreMs={ScoreMs} ParseMs={ParseMs} ComposeMs={ComposeMs} TotalMs={TotalMs}",
+                    effectiveDomain,
+                    chunks.Count,
+                    scored.Count,
+                    retrieveStopwatch.ElapsedMilliseconds,
+                    scoreStopwatch.ElapsedMilliseconds,
+                    parseStopwatch.ElapsedMilliseconds,
+                    composeStopwatch.ElapsedMilliseconds,
+                    totalStopwatch.ElapsedMilliseconds);
+            }
+
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            if (ct.IsCancellationRequested)
+                throw;
+
+            _log.LogWarning(
+                "[Docs] Timeout componiendo respuesta documental para Domain={Domain} después de {TimeoutSeconds}s",
+                effectiveDomain,
+                composeTimeoutSeconds);
+            return BuildComposeTimeoutError(composeTimeoutSeconds);
+        }
+        catch (TimeoutException ex)
+        {
+            _log.LogWarning(ex, "[Docs] TimeoutException componiendo respuesta documental para Domain={Domain}", effectiveDomain);
+            return BuildComposeTimeoutError(composeTimeoutSeconds);
+        }
     }
 
     private static List<string> ExtractPartNumbers(string q)
@@ -139,7 +245,7 @@ public sealed class DocsAnswerService : IDocsAnswerService
         foreach (var x in parenParts)
         {
             if (x.Suffix.Length == 1 && x.Base.Length >= 1)
-                baseParts.Add(x.Base.Substring(0, x.Base.Length - 1) + x.Suffix);
+                baseParts.Add(x.Base[..^1] + x.Suffix);
             else
                 baseParts.Add($"{x.Base}({x.Suffix})");
         }
@@ -179,4 +285,30 @@ public sealed class DocsAnswerService : IDocsAnswerService
         return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    private static DocsAnswerResult BuildRouterInitializationError()
+    {
+        return new DocsAnswerResult(
+            false,
+            null,
+            Array.Empty<DocCitation>(),
+            "No se pudo inicializar el modelo documental local. Revisa la configuración del modelo o el backend de aceleración local.");
+    }
+
+    private static DocsAnswerResult BuildRouterTimeoutError(int timeoutSeconds)
+    {
+        return new DocsAnswerResult(
+            false,
+            null,
+            Array.Empty<DocCitation>(),
+            $"El análisis documental tardó más de {timeoutSeconds} segundos y se canceló. Intenta refinar la pregunta o vuelve a intentarlo.");
+    }
+
+    private static DocsAnswerResult BuildComposeTimeoutError(int timeoutSeconds)
+    {
+        return new DocsAnswerResult(
+            false,
+            null,
+            Array.Empty<DocCitation>(),
+            $"La respuesta documental tardó más de {timeoutSeconds} segundos en completarse y se canceló. Intenta con una pregunta más específica.");
+    }
 }

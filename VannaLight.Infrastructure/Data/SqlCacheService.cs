@@ -49,6 +49,9 @@ public class SqlCacheService : ISqlCacheService
               AND TenantKey = @tenantKey
               AND Domain = @domain
               AND ConnectionName = @connectionName
+              AND TenantKey <> ''
+              AND Domain <> ''
+              AND ConnectionName <> ''
               AND Status = 'Completed'
               AND SqlText IS NOT NULL
             ORDER BY UpdatedUtc DESC

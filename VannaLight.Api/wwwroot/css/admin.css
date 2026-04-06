@@ -2557,6 +2557,96 @@ body.modal-open {
     background: transparent;
 }
 
+.admin-toast-host {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 2600;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: min(420px, calc(100vw - 32px));
+    pointer-events: none;
+}
+
+.admin-toast {
+    position: relative;
+    pointer-events: auto;
+    border-radius: 14px;
+    border: 1px solid rgba(123, 150, 255, 0.22);
+    background: rgba(11, 16, 28, 0.96);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+    padding: 14px 16px;
+    color: rgba(235, 244, 255, 0.92);
+    animation: admin-toast-enter 180ms ease-out;
+}
+
+.admin-toast.ok {
+    border-color: rgba(63, 219, 141, 0.35);
+    box-shadow: 0 20px 40px rgba(12, 36, 23, 0.34);
+}
+
+.admin-toast.warn {
+    border-color: rgba(255, 184, 0, 0.35);
+    box-shadow: 0 20px 40px rgba(44, 31, 4, 0.34);
+}
+
+.admin-toast.err {
+    border-color: rgba(255, 108, 124, 0.35);
+    box-shadow: 0 20px 40px rgba(46, 9, 14, 0.34);
+}
+
+.admin-toast-title {
+    font: 700 12px/1 "IBM Plex Sans", sans-serif;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.admin-toast.ok .admin-toast-title {
+    color: #7df5af;
+}
+
+.admin-toast.warn .admin-toast-title {
+    color: #ffd36a;
+}
+
+.admin-toast.err .admin-toast-title {
+    color: #ff9aa7;
+}
+
+.admin-toast-body {
+    font: 500 13px/1.45 "IBM Plex Sans", sans-serif;
+    color: rgba(235, 244, 255, 0.88);
+}
+
+.admin-toast-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    border: 0;
+    background: transparent;
+    color: rgba(235, 244, 255, 0.55);
+    cursor: pointer;
+    font: 700 14px/1 "IBM Plex Sans", sans-serif;
+}
+
+.admin-toast-close:hover {
+    color: rgba(235, 244, 255, 0.9);
+}
+
+@keyframes admin-toast-enter {
+    from {
+        transform: translateY(-8px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
 /* ── PANEL HEADER IMPROVEMENTS ───────────────────────────── */
 .panel-header {
     padding: 14px 18px;

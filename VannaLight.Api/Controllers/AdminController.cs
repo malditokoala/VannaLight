@@ -286,13 +286,15 @@ public class AdminController(
     }
 
     [HttpPost("reindex-docs")]
-    public async Task<IActionResult> ReindexDocuments(CancellationToken ct)
+    public async Task<IActionResult> ReindexDocuments([FromQuery] string? domain, CancellationToken ct)
     {
-        var result = await documentIngestor.ReindexAsync(ct);
+        var effectiveDomain = await documentIngestor.ResolveDocumentsDomainAsync(domain, ct);
+        var result = await documentIngestor.ReindexAsync(effectiveDomain, ct);
 
         return Ok(new
         {
             Message = "Reindex de documentos completado.",
+            Domain = effectiveDomain,
             result.TotalFiles,
             result.Indexed,
             result.Skipped,
@@ -301,34 +303,34 @@ public class AdminController(
     }
 
     [HttpPost("reindex-wi")]
-    public Task<IActionResult> ReindexWi(CancellationToken ct)
-        => ReindexDocuments(ct);
+    public Task<IActionResult> ReindexWi([FromQuery] string? domain, CancellationToken ct)
+        => ReindexDocuments(domain, ct);
 
     [HttpGet("documents")]
     public async Task<IActionResult> GetDocuments([FromQuery] string? domain, [FromQuery] int limit = 200, CancellationToken ct = default)
     {
-        var docsDomain = string.IsNullOrWhiteSpace(domain)
-            ? (configuration["Docs:DefaultDomain"] ?? "work-instructions")
-            : domain.Trim();
+        var docsDomain = await documentIngestor.ResolveDocumentsDomainAsync(domain, ct);
 
         var documents = await docChunkRepository.GetDocumentsByDomainAsync(sqliteOptions.DbPath, docsDomain, Math.Clamp(limit, 1, 500), ct);
         return Ok(documents);
     }
 
     [HttpGet("documents/status")]
-    public async Task<IActionResult> GetDocumentsStatus(CancellationToken ct = default)
+    public async Task<IActionResult> GetDocumentsStatus([FromQuery] string? domain, CancellationToken ct = default)
     {
-        var rootPath = await documentIngestor.ResolveDocumentsRootPathAsync(ct);
         var defaultDomain = await documentIngestor.ResolveDocumentsDomainAsync(ct);
+        var effectiveDomain = await documentIngestor.ResolveDocumentsDomainAsync(domain, ct);
+        var rootPath = await documentIngestor.ResolveDocumentsRootPathAsync(effectiveDomain, ct);
         var filesOnDisk = Directory.Exists(rootPath)
             ? Directory.EnumerateFiles(rootPath, "*.pdf", SearchOption.AllDirectories).Count()
             : 0;
-        var indexedDocuments = await docChunkRepository.GetDocumentsByDomainAsync(sqliteOptions.DbPath, null, 1000, ct);
+        var indexedDocuments = await docChunkRepository.GetDocumentsByDomainAsync(sqliteOptions.DbPath, effectiveDomain, 1000, ct);
 
         return Ok(new
         {
             RootPath = rootPath,
             DefaultDomain = defaultDomain,
+            EffectiveDomain = effectiveDomain,
             FilesOnDisk = filesOnDisk,
             IndexedDocuments = indexedDocuments.Count(),
             RootExists = Directory.Exists(rootPath)
@@ -347,12 +349,13 @@ public class AdminController(
 
     [HttpPost("documents/upload")]
     [RequestSizeLimit(50_000_000)]
-    public async Task<IActionResult> UploadDocument([FromForm] IFormFile? file, CancellationToken ct)
+    public async Task<IActionResult> UploadDocument([FromQuery] string? domain, [FromForm] IFormFile? file, CancellationToken ct)
     {
         if (file is null || file.Length <= 0)
             return BadRequest(new { Error = "Adjunta un archivo PDF vÃ¡lido." });
 
-        var saved = await SaveUploadedDocumentsAsync(new[] { file }, ct);
+        var effectiveDomain = await documentIngestor.ResolveDocumentsDomainAsync(domain, ct);
+        var saved = await SaveUploadedDocumentsAsync(new[] { file }, effectiveDomain, ct);
 
         return Ok(new
         {
@@ -364,19 +367,20 @@ public class AdminController(
 
     [HttpPost("documents/upload-bulk")]
     [RequestSizeLimit(250_000_000)]
-    public async Task<IActionResult> UploadDocumentsBulk([FromForm] List<IFormFile>? files, CancellationToken ct)
+    public async Task<IActionResult> UploadDocumentsBulk([FromQuery] string? domain, [FromForm] List<IFormFile>? files, CancellationToken ct)
     {
         if (files is null || files.Count == 0)
-            return BadRequest(new { Error = "Adjunta al menos un archivo PDF válido." });
+            return BadRequest(new { Error = "Adjunta al menos un archivo PDF vï¿½lido." });
 
         var results = new List<object>();
         var validFiles = new List<IFormFile>();
+        var effectiveDomain = await documentIngestor.ResolveDocumentsDomainAsync(domain, ct);
 
         foreach (var file in files)
         {
             if (file is null || file.Length <= 0)
             {
-                results.Add(new { FileName = file?.FileName ?? "(vacío)", Status = "failed", Error = "Archivo vacío o inválido." });
+                results.Add(new { FileName = file?.FileName ?? "(vacï¿½o)", Status = "failed", Error = "Archivo vacï¿½o o invï¿½lido." });
                 continue;
             }
 
@@ -391,7 +395,7 @@ public class AdminController(
 
         if (validFiles.Count > 0)
         {
-            var saved = await SaveUploadedDocumentsAsync(validFiles, ct);
+            var saved = await SaveUploadedDocumentsAsync(validFiles, effectiveDomain, ct);
             results.AddRange(saved.Select(item => new
             {
                 item.FileName,
@@ -406,15 +410,16 @@ public class AdminController(
         return Ok(new
         {
             Message = $"Carga masiva completada. Subidos: {uploaded}. Fallidos: {failed}.",
+            Domain = effectiveDomain,
             Uploaded = uploaded,
             Failed = failed,
             Files = results
         });
     }
 
-    private async Task<List<(string FileName, string Path)>> SaveUploadedDocumentsAsync(IEnumerable<IFormFile> files, CancellationToken ct)
+    private async Task<List<(string FileName, string Path)>> SaveUploadedDocumentsAsync(IEnumerable<IFormFile> files, string? domain, CancellationToken ct)
     {
-        var rootPath = await documentIngestor.ResolveDocumentsRootPathAsync(ct);
+        var rootPath = await documentIngestor.ResolveDocumentsRootPathAsync(domain, ct);
         Directory.CreateDirectory(rootPath);
 
         var saved = new List<(string FileName, string Path)>();
@@ -487,7 +492,7 @@ public class AdminController(
     public async Task<IActionResult> SaveMlProfile([FromBody] MlTrainingProfileUpsertRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invï¿½lido." });
 
         var profile = await GetActiveSystemConfigProfileAsync(ct);
         if (profile is null)
@@ -507,13 +512,13 @@ public class AdminController(
         await UpsertSystemConfigValueAsync(profile.Id, "ML", "ProfileName", string.IsNullOrWhiteSpace(request.ProfileName) ? "default-forecast" : request.ProfileName.Trim(), "string", "Identificador del perfil ML activo.", now, ct);
         await UpsertSystemConfigValueAsync(profile.Id, "ML", "DisplayName", string.IsNullOrWhiteSpace(request.DisplayName) ? "Forecasting Profile" : request.DisplayName.Trim(), "string", "Nombre visible del perfil ML.", now, ct);
         await UpsertSystemConfigValueAsync(profile.Id, "ML", "SourceMode", sourceMode, "string", "Modo de fuente del dataset ML.", now, ct);
-        await UpsertSystemConfigValueAsync(profile.Id, "ML", "ConnectionName", request.ConnectionName?.Trim() ?? string.Empty, "string", "Nombre lógico de la conexión SQL usada por el entrenamiento ML.", now, ct);
-        await UpsertSystemConfigValueAsync(profile.Id, "ML", "Description", request.Description?.Trim() ?? string.Empty, "string", "Descripción operativa del perfil ML.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "ConnectionName", request.ConnectionName?.Trim() ?? string.Empty, "string", "Nombre lï¿½gico de la conexiï¿½n SQL usada por el entrenamiento ML.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "Description", request.Description?.Trim() ?? string.Empty, "string", "Descripciï¿½n operativa del perfil ML.", now, ct);
         await UpsertSystemConfigValueAsync(profile.Id, "ML", "ShiftTableName", request.ShiftTableName?.Trim() ?? "dbo.Turnos", "string", "Tabla de turnos usada por el perfil ML cuando SourceMode = KpiViews.", now, ct);
-        await UpsertSystemConfigValueAsync(profile.Id, "ML", "ProductionViewName", request.ProductionViewName?.Trim() ?? string.Empty, "string", "Vista de producción para el perfil ML.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "ProductionViewName", request.ProductionViewName?.Trim() ?? string.Empty, "string", "Vista de producciï¿½n para el perfil ML.", now, ct);
         await UpsertSystemConfigValueAsync(profile.Id, "ML", "ScrapViewName", request.ScrapViewName?.Trim() ?? string.Empty, "string", "Vista de scrap para el perfil ML.", now, ct);
         await UpsertSystemConfigValueAsync(profile.Id, "ML", "DowntimeViewName", request.DowntimeViewName?.Trim() ?? string.Empty, "string", "Vista de downtime para el perfil ML.", now, ct);
-        await UpsertSystemConfigValueAsync(profile.Id, "ML", "TrainingSql", request.TrainingSql?.Trim() ?? string.Empty, "string", "Consulta canónica para entrenamiento ML cuando SourceMode = CustomSql.", now, ct);
+        await UpsertSystemConfigValueAsync(profile.Id, "ML", "TrainingSql", request.TrainingSql?.Trim() ?? string.Empty, "string", "Consulta canï¿½nica para entrenamiento ML cuando SourceMode = CustomSql.", now, ct);
 
         var savedProfile = await mlTrainingProfileProvider.GetActiveProfileAsync(ct);
 
@@ -547,7 +552,7 @@ public class AdminController(
         {
             return BadRequest(new
             {
-                Error = $"No hay una conexión válida para entrenar el modelo ML. {ex.Message}"
+                Error = $"No hay una conexiï¿½n vï¿½lida para entrenar el modelo ML. {ex.Message}"
             });
         }
 
@@ -594,7 +599,7 @@ public class AdminController(
     public async Task<IActionResult> UpsertPredictionProfile([FromBody] PredictionProfileUpsertRequest request, CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { Error = "Body inválido." });
+            return BadRequest(new { Error = "Body invï¿½lido." });
 
         if (string.IsNullOrWhiteSpace(request.Domain))
             return BadRequest(new { Error = "Domain es requerido." });
@@ -2501,6 +2506,7 @@ public class AdminController(
             ServerVersion: serverVersion);
     }
 }
+
 
 
 

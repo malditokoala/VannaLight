@@ -16,26 +16,29 @@ public sealed class DocumentIngestor
     private static readonly Regex TokenRegex = new(@"[a-z0-9][a-z0-9\-_/]{2,}", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private readonly ISystemConfigProvider _systemConfigProvider;
+    private readonly IConfiguration _configuration;
     private readonly IHostEnvironment _environment;
     private readonly SqliteOptions _sqliteOptions;
     private readonly ILogger<DocumentIngestor> _logger;
 
     public DocumentIngestor(
         ISystemConfigProvider systemConfigProvider,
+        IConfiguration configuration,
         IHostEnvironment environment,
         SqliteOptions sqliteOptions,
         ILogger<DocumentIngestor> logger)
     {
         _systemConfigProvider = systemConfigProvider;
+        _configuration = configuration;
         _environment = environment;
         _sqliteOptions = sqliteOptions;
         _logger = logger;
     }
 
-    public async Task<DocumentReindexResult> ReindexAsync(CancellationToken ct)
+    public async Task<DocumentReindexResult> ReindexAsync(string? domainOverride, CancellationToken ct)
     {
-        string docsRoot = await ResolveDocumentsRootPathAsync(ct);
-        string domain = await ResolveDocumentsDomainAsync(ct);
+        string domain = await ResolveDocumentsDomainAsync(domainOverride, ct);
+        string docsRoot = await ResolveDocumentsRootPathAsync(domain, ct);
         string sqlitePath = _sqliteOptions.DbPath;
 
         if (!Directory.Exists(docsRoot))
@@ -64,9 +67,27 @@ public sealed class DocumentIngestor
                 var existingSha = await conn.QueryFirstOrDefaultAsync<string?>(
                     "SELECT Sha256 FROM DocDocuments WHERE FilePath = @FilePath LIMIT 1;",
                     new { FilePath = filePath });
+                var existingDomain = await conn.QueryFirstOrDefaultAsync<string?>(
+                    "SELECT Domain FROM DocDocuments WHERE FilePath = @FilePath LIMIT 1;",
+                    new { FilePath = filePath });
 
                 if (!string.IsNullOrWhiteSpace(existingSha) && string.Equals(existingSha, sha256, StringComparison.OrdinalIgnoreCase))
                 {
+                    if (!string.Equals(existingDomain, domain, StringComparison.OrdinalIgnoreCase))
+                    {
+                        await conn.ExecuteAsync(@"
+                            UPDATE DocDocuments
+                            SET Domain = @Domain,
+                                UpdatedUtc = @UpdatedUtc
+                            WHERE FilePath = @FilePath;",
+                            new
+                            {
+                                Domain = domain,
+                                UpdatedUtc = DateTime.UtcNow.ToString("o"),
+                                FilePath = filePath
+                            });
+                    }
+
                     skipped++;
                     continue;
                 }
@@ -154,17 +175,49 @@ public sealed class DocumentIngestor
 
     public async Task<string> ResolveDocumentsRootPathAsync(CancellationToken ct)
     {
-        var configured = (await _systemConfigProvider.GetValueAsync("Docs", "RootPath", ct: ct))?.Trim();
-        configured ??= (await _systemConfigProvider.GetValueAsync("Docs", "WiRootPath", ct: ct))?.Trim();
-        configured ??= "Data/docs";
+        return await ResolveDocumentsRootPathAsync(null, ct);
+    }
 
-        return Path.IsPathRooted(configured)
-            ? configured
-            : Path.GetFullPath(Path.Combine(_environment.ContentRootPath, configured));
+    public async Task<string> ResolveDocumentsRootPathAsync(string? domainOverride, CancellationToken ct)
+    {
+        var candidates = new[]
+        {
+            (await _systemConfigProvider.GetValueAsync("Docs", "RootPath", ct: ct))?.Trim(),
+            (await _systemConfigProvider.GetValueAsync("Docs", "WiRootPath", ct: ct))?.Trim(),
+            _configuration["Docs:RootPath"]?.Trim(),
+            _configuration["Docs:WiRootPath"]?.Trim(),
+            "Data/docs"
+        }
+        .Where(value => !string.IsNullOrWhiteSpace(value))
+        .Select(ToAbsolutePath)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+        var existing = candidates.FirstOrDefault(Directory.Exists);
+        var baseRoot = existing ?? candidates.FirstOrDefault() ?? ToAbsolutePath("Data/docs");
+        var domain = await ResolveDocumentsDomainAsync(domainOverride, ct);
+
+        if (!string.IsNullOrWhiteSpace(domain))
+        {
+            var domainFolderName = SanitizeFolderName(domain);
+            var domainSpecific = Path.Combine(baseRoot, domainFolderName);
+            if (Directory.Exists(domainSpecific))
+                return domainSpecific;
+        }
+
+        return baseRoot;
     }
 
     public async Task<string> ResolveDocumentsDomainAsync(CancellationToken ct)
     {
+        return await ResolveDocumentsDomainAsync(null, ct);
+    }
+
+    public async Task<string> ResolveDocumentsDomainAsync(string? domainOverride, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(domainOverride))
+            return domainOverride.Trim();
+
         var configured = (await _systemConfigProvider.GetValueAsync("Docs", "DefaultDomain", ct: ct))?.Trim();
         return string.IsNullOrWhiteSpace(configured) ? "work-instructions" : configured;
     }
@@ -409,5 +462,23 @@ public sealed class DocumentIngestor
         public bool IsCoverPage { get; init; }
         public string Text { get; init; } = string.Empty;
         public string UpdatedUtc { get; init; } = string.Empty;
+    }
+
+    private string ToAbsolutePath(string configured)
+    {
+        return Path.IsPathRooted(configured)
+            ? configured
+            : Path.GetFullPath(Path.Combine(_environment.ContentRootPath, configured));
+    }
+
+    private static string SanitizeFolderName(string value)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var sanitized = new string(value
+            .Trim()
+            .Select(ch => invalidChars.Contains(ch) ? '-' : ch)
+            .ToArray());
+
+        return string.IsNullOrWhiteSpace(sanitized) ? "docs" : sanitized;
     }
 }
