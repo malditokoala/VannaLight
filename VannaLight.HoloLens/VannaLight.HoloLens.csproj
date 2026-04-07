@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>uap10.0.19041</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <OutputType>AppContainerExe</OutputType>
+    <RootNamespace>VannaLight.HoloLens</RootNamespace>
+    <AssemblyName>VannaLight.HoloLens</AssemblyName>
+    <UseWinUI>true</UseWinUI>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
+    <AppxBundle>Never</AppxBundle>
+    <Platforms>x86;x64;ARM;ARM64</Platforms>
+    <RuntimeIdentifiers>win10-x86;win10-x64;win10-arm;win10-arm64</RuntimeIdentifiers>
+    <ApplicationManifest>Package.appxmanifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.UI.Xaml" Version="2.8.6" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3351.48" />
+    <PackageReference Include="Microsoft.NETCore.UniversalWindowsPlatform" Version="6.2.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AppxManifest Include="Package.appxmanifest" />
+    <ApplicationDefinition Include="App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </ApplicationDefinition>
+    <Compile Include="App.xaml.cs">
+      <DependentUpon>App.xaml</DependentUpon>
+    </Compile>
+    <Page Include="MainPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="MainPage.xaml.cs">
+      <DependentUpon>MainPage.xaml</DependentUpon>
+    </Compile>
+    <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\**\*.*" />
+  </ItemGroup>
+</Project>

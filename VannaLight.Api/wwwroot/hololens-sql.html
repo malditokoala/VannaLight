@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VannaLight SQL Lite</title>
+    <style>
+        :root {
+            --bg: #07131d;
+            --panel: rgba(10, 25, 39, 0.9);
+            --panel-2: #102131;
+            --line: rgba(117, 165, 210, 0.2);
+            --text: #edf6ff;
+            --muted: #8aa3bc;
+            --accent: #4cc9f0;
+            --accent-2: #9ef0d8;
+            --ok: #51d88a;
+            --warn: #ffd166;
+            --bad: #ff6b6b;
+            --shadow: 0 24px 54px rgba(0, 0, 0, 0.34);
+            font-family: "Segoe UI", Tahoma, sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(76, 201, 240, 0.18), transparent 24%),
+                radial-gradient(circle at 85% 0%, rgba(158, 240, 216, 0.16), transparent 20%),
+                linear-gradient(180deg, #040c13, #081622 52%, #02070b);
+            overflow-x: hidden;
+        }
+
+        .shell {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 24px;
+            display: grid;
+            gap: 18px;
+        }
+
+        .hero, .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 1.25fr .75fr;
+            gap: 18px;
+            overflow: hidden;
+        }
+
+        .hero-copy {
+            padding: 28px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(76, 201, 240, 0.1);
+            color: var(--accent);
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        h1 {
+            margin: 16px 0 10px;
+            font-size: clamp(2rem, 4vw, 3.3rem);
+            line-height: 1;
+        }
+
+        .lead {
+            margin: 0;
+            max-width: 58ch;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .meta {
+            padding: 22px;
+            display: grid;
+            gap: 12px;
+            align-content: start;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
+                linear-gradient(160deg, rgba(76, 201, 240, 0.08), transparent 55%);
+        }
+
+        .meta-card {
+            padding: 14px;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(255,255,255,0.03);
+        }
+
+        .meta-label {
+            color: var(--muted);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-size: 11px;
+            margin-bottom: 8px;
+        }
+
+        .meta-value {
+            font-family: Consolas, monospace;
+            word-break: break-word;
+        }
+
+        .workspace {
+            padding: 22px;
+            display: grid;
+            gap: 14px;
+        }
+
+        .mode-context {
+            border-radius: 18px;
+            border: 1px solid rgba(76, 201, 240, 0.24);
+            background: linear-gradient(135deg, rgba(76, 201, 240, 0.07), rgba(10, 25, 39, 0.82));
+            padding: 16px 18px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .mc-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            background: rgba(76, 201, 240, 0.12);
+            border: 1px solid rgba(76, 201, 240, 0.24);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .mc-icon svg {
+            width: 22px;
+            height: 22px;
+            stroke: var(--accent);
+        }
+
+        .mc-text {
+            flex: 1;
+        }
+
+        .mc-title {
+            font-size: 1.05rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            color: var(--accent);
+        }
+
+        .mc-desc {
+            color: var(--muted);
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+
+        .mc-shortcut {
+            color: var(--muted);
+            font-size: 0.72rem;
+            white-space: nowrap;
+        }
+
+        .context-strip {
+            display: grid;
+            gap: 12px;
+            padding: 18px;
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 18px;
+            background: rgba(255,255,255,0.02);
+        }
+
+        .context-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .context-title {
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .context-subtitle {
+            color: #cad9ea;
+            font-size: 0.92rem;
+        }
+
+        .context-controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .context-state {
+            color: var(--muted);
+            font-size: 0.88rem;
+        }
+
+        .context-hero {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 16px;
+            border: 1px solid rgba(76, 201, 240, 0.18);
+            background: rgba(76, 201, 240, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .context-hero.is-empty {
+            background: rgba(255,255,255,0.02);
+            border-color: rgba(255,255,255,0.06);
+        }
+
+        .context-hero-copy {
+            display: grid;
+            gap: 3px;
+        }
+
+        .context-hero-label {
+            color: var(--accent);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .context-hero-value {
+            color: var(--text);
+            font-family: Consolas, monospace;
+            font-size: 0.84rem;
+        }
+
+        .context-hero-meta {
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .workspace-grid {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 12px;
+            align-items: end;
+        }
+
+        label {
+            display: grid;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        select, textarea {
+            width: 100%;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 18px;
+            background: var(--panel-2);
+            color: var(--text);
+            padding: 14px 16px;
+            font: inherit;
+            outline: none;
+        }
+
+        select:focus, textarea:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(76, 201, 240, 0.12);
+        }
+
+        textarea {
+            min-height: 118px;
+            resize: vertical;
+            line-height: 1.5;
+        }
+
+        .input-panel {
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 18px;
+            background: rgba(255,255,255,0.02);
+            overflow: hidden;
+        }
+
+        .input-row {
+            display: flex;
+            align-items: stretch;
+            min-height: 88px;
+        }
+
+        .inp-pill {
+            width: 102px;
+            border-right: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(76, 201, 240, 0.08);
+            flex-shrink: 0;
+        }
+
+        .inp-key {
+            color: var(--accent);
+            font-size: 1rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+        }
+
+        .inp-sub {
+            color: var(--muted);
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            margin-top: 4px;
+        }
+
+        #questionInput {
+            flex: 1;
+            min-height: 88px;
+            border: none;
+            border-radius: 0;
+            background: transparent;
+            resize: none;
+            padding: 18px;
+        }
+
+        .input-actions {
+            display: flex;
+            align-items: stretch;
+            gap: 0;
+            border-left: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .iact-btn {
+            width: 58px;
+            border-radius: 0;
+            background: transparent;
+            color: var(--muted);
+            border-right: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .iact-btn:hover {
+            background: rgba(255,255,255,0.04);
+            color: var(--accent);
+        }
+
+        .btn-send {
+            min-width: 148px;
+            border-radius: 0;
+            background: linear-gradient(135deg, var(--accent), #3296ff);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border-radius: 999px;
+            border: 2px solid rgba(4, 18, 27, 0.26);
+            border-top-color: #04121b;
+            animation: spin 0.85s linear infinite;
+            display: none;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        button {
+            border: none;
+            border-radius: 16px;
+            padding: 13px 18px;
+            background: linear-gradient(135deg, var(--accent), #3296ff);
+            color: #04121b;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            color: var(--text);
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: wait;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .status-title {
+            font-weight: 700;
+        }
+
+        .status-message {
+            color: var(--muted);
+            font-size: 0.95rem;
+            margin-top: 4px;
+        }
+
+        .pill {
+            padding: 7px 11px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .pill.idle { background: rgba(255,255,255,0.08); color: var(--muted); }
+        .pill.pending { background: rgba(255,209,102,0.14); color: var(--warn); }
+        .pill.ok { background: rgba(81,216,138,0.14); color: var(--ok); }
+        .pill.bad { background: rgba(255,107,107,0.14); color: var(--bad); }
+
+        .query-status-banner {
+            display: none;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 16px 18px;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.03);
+        }
+
+        .query-status-banner.is-visible {
+            display: flex;
+        }
+
+        .query-status-banner.info {
+            border-color: rgba(76, 201, 240, 0.24);
+            background: rgba(10, 31, 46, 0.72);
+        }
+
+        .query-status-banner.success {
+            border-color: rgba(81, 216, 138, 0.24);
+            background: rgba(6, 18, 12, 0.82);
+        }
+
+        .query-status-banner.warning {
+            border-color: rgba(255, 209, 102, 0.24);
+            background: rgba(31, 24, 9, 0.86);
+        }
+
+        .query-status-banner.error {
+            border-color: rgba(255, 107, 107, 0.24);
+            background: rgba(36, 11, 16, 0.86);
+        }
+
+        .query-status-copy {
+            display: grid;
+            gap: 4px;
+        }
+
+        .query-status-kicker {
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .query-status-title {
+            font-weight: 700;
+        }
+
+        .query-status-message {
+            color: #c4d8eb;
+            font-size: 0.95rem;
+        }
+
+        .log-wrap {
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 18px;
+            background: rgba(255,255,255,0.02);
+            overflow: hidden;
+        }
+
+        .log-bar {
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            background: rgba(255,255,255,0.02);
+        }
+
+        .log-bar-label {
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        #logArea {
+            max-height: 180px;
+            overflow: auto;
+            padding: 12px 14px;
+            display: grid;
+            gap: 8px;
+        }
+
+        .log-line {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            font-family: Consolas, monospace;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .log-time {
+            color: var(--muted);
+            min-width: 72px;
+            flex-shrink: 0;
+        }
+
+        .c-ok { color: var(--ok); }
+        .c-err { color: var(--bad); }
+        .c-sys { color: var(--accent); }
+        .c-user { color: #e8f4ff; }
+
+        .results {
+            display: grid;
+            grid-template-columns: .95fr 1.05fr;
+            gap: 18px;
+        }
+
+        #resultArea {
+            display: none;
+            gap: 18px;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .result-label {
+            color: var(--accent);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            font-weight: 800;
+        }
+
+        .section {
+            padding: 22px;
+            display: grid;
+            gap: 12px;
+        }
+
+        .section h2 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        pre {
+            margin: 0;
+            padding: 16px;
+            border-radius: 18px;
+            background: #05101a;
+            border: 1px solid rgba(255,255,255,0.06);
+            color: #cae4ff;
+            font-size: 13px;
+            line-height: 1.55;
+            overflow: auto;
+            min-height: 160px;
+        }
+
+        .table-wrap {
+            overflow: auto;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.06);
+            background: #08131d;
+            min-height: 160px;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 10px;
+        }
+
+        .kpi-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 18px;
+            padding: 18px;
+        }
+
+        .kpi-label {
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            margin-bottom: 10px;
+        }
+
+        .kpi-value {
+            color: var(--accent);
+            font-size: 1.8rem;
+            font-weight: 800;
+            line-height: 1.05;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 680px;
+        }
+
+        th, td {
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background: #0c1824;
+            color: #dff1ff;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        td {
+            color: #c0d6eb;
+            font-family: Consolas, monospace;
+            font-size: 13px;
+        }
+
+        .empty {
+            padding: 18px;
+            color: var(--muted);
+        }
+
+        @media (max-width: 960px) {
+            .hero, .results, .workspace-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .shell {
+                padding: 14px;
+            }
+
+            .input-row {
+                flex-direction: column;
+            }
+
+            .inp-pill {
+                width: 100%;
+                min-height: 48px;
+                border-right: none;
+                border-bottom: 1px solid rgba(255,255,255,0.06);
+                flex-direction: row;
+                gap: 8px;
+            }
+
+            .input-actions {
+                border-left: none;
+                border-top: 1px solid rgba(255,255,255,0.06);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <section class="hero">
+            <div class="hero-copy">
+                <div class="eyebrow">Text to SQL</div>
+                <h1>VannaLight SQL Lite para HoloLens</h1>
+                <p class="lead">
+                    Version minima para PoC. Solo resuelve contexto, envia una pregunta al motor Text-to-SQL
+                    y muestra el SQL generado junto con la tabla devuelta por la API.
+                </p>
+            </div>
+            <aside class="meta">
+                <div class="meta-card">
+                    <div class="meta-label">API base</div>
+                    <div class="meta-value" id="apiBaseValue">Cargando...</div>
+                </div>
+                <div class="meta-card">
+                    <div class="meta-label">Frontend cargado</div>
+                    <div class="meta-value" id="frontendValue">Cargando...</div>
+                </div>
+                <div class="meta-card">
+                    <div class="meta-label">Contexto actual</div>
+                    <div class="meta-value" id="contextValue">Sin contexto seleccionado</div>
+                </div>
+            </aside>
+        </section>
+
+        <section class="mode-context">
+            <div class="mc-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <ellipse cx="12" cy="5" rx="9" ry="3" />
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                </svg>
+            </div>
+            <div class="mc-text">
+                <div class="mc-title">MODO DATOS - SQL</div>
+                <div class="mc-desc">Version reducida guiada por el frontend principal para validar Text-to-SQL.</div>
+            </div>
+            <div class="mc-shortcut">PoC HoloLens 2</div>
+        </section>
+
+        <section class="panel workspace">
+            <div class="workspace-grid">
+                <label>
+                    Contexto SQL activo
+                    <select id="contextSelect" class="context-select"></select>
+                </label>
+                <div class="actions">
+                    <button type="button" class="secondary" id="reloadContextsBtn">Recargar contextos</button>
+                </div>
+            </div>
+
+            <div class="status">
+                <div>
+                    <div class="status-title" id="statusTitle">Listo para consultar</div>
+                    <div class="status-message" id="statusMessage">Selecciona un contexto y escribe una pregunta.</div>
+                </div>
+                <div class="pill idle" id="statusPill">Idle</div>
+            </div>
+
+            <div class="context-strip">
+                <div class="context-copy">
+                    <div class="context-title">Base activa para consultas</div>
+                    <div class="context-subtitle">Selecciona el workspace y dominio que quieres consultar.</div>
+                </div>
+                <div class="context-controls">
+                    <button type="button" class="secondary" id="sampleBtn">Usar ejemplo</button>
+                </div>
+                <div class="context-state" id="runtimeContextState">Cargando contextos...</div>
+                <div class="context-hero is-empty" id="runtimeContextHero">
+                    <div class="context-hero-copy">
+                        <div class="context-hero-label">Contexto activo</div>
+                        <div class="context-hero-value" id="runtimeContextHeroValue">Sin contexto seleccionado</div>
+                    </div>
+                    <div class="context-hero-meta" id="runtimeContextHeroMeta">Selecciona una base antes de consultar.</div>
+                </div>
+            </div>
+
+            <div class="input-panel">
+                <div class="input-row">
+                    <div class="inp-pill">
+                        <span class="inp-key">SQL</span>
+                        <span class="inp-sub">datos</span>
+                    </div>
+                    <textarea id="questionInput" placeholder="Escribe tu consulta..."></textarea>
+                    <div class="input-actions">
+                        <button type="button" class="iact-btn" id="clearQuestionBtn">Limpiar</button>
+                        <button type="button" class="btn-send" id="askBtn">
+                            <div class="spinner" id="loadingSpinner"></div>
+                            <span>Consultar</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="log-wrap">
+            <div class="log-bar"><span class="log-bar-label">Consola del sistema</span></div>
+            <div id="logArea"></div>
+        </section>
+
+        <section class="query-status-banner" id="queryStatusBanner">
+            <div class="query-status-copy">
+                <div class="query-status-kicker" id="queryStatusKicker">Estado de consulta</div>
+                <div class="query-status-title" id="queryStatusTitle">Sin actividad reciente</div>
+                <div class="query-status-message" id="queryStatusMessage">Cuando una consulta falle o requiera revision, lo veras aqui con mas contexto.</div>
+            </div>
+            <button type="button" class="secondary" id="hideStatusBtn">Ocultar</button>
+        </section>
+
+        <section id="resultArea">
+            <div class="result-header">
+                <div class="result-label">Resultado - Datos</div>
+            </div>
+            <div class="results">
+                <article class="panel section">
+                    <h2>SQL generado</h2>
+                    <pre id="sqlOutput">Aun no hay SQL generado.</pre>
+                </article>
+
+                <article class="panel section">
+                    <h2>Resultado tabular</h2>
+                    <div class="kpi-grid" id="kpiContainer"></div>
+                    <div class="table-wrap" id="tableWrap">
+                        <div class="empty">Aun no hay datos.</div>
+                    </div>
+                </article>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const apiBaseUrl = (window.API_BASE_URL || window.API_URL || location.origin).replace(/\/$/, "");
+        const frontendUrl = window.VANNALIGHT_CONFIG?.frontendUrl || location.href;
+        const contextStorageKey = "vannalight.hololens.sql.context";
+        const sampleQuestion = "Cuales son los 5 numeros de parte con mas scrap en el turno actual?";
+
+        const contextSelect = document.getElementById("contextSelect");
+        const questionInput = document.getElementById("questionInput");
+        const askBtn = document.getElementById("askBtn");
+        const loadingSpinner = document.getElementById("loadingSpinner");
+        const sqlOutput = document.getElementById("sqlOutput");
+        const tableWrap = document.getElementById("tableWrap");
+        const contextValue = document.getElementById("contextValue");
+        const runtimeContextState = document.getElementById("runtimeContextState");
+        const runtimeContextHero = document.getElementById("runtimeContextHero");
+        const runtimeContextHeroValue = document.getElementById("runtimeContextHeroValue");
+        const runtimeContextHeroMeta = document.getElementById("runtimeContextHeroMeta");
+        const resultArea = document.getElementById("resultArea");
+
+        let runtimeContexts = [];
+        let currentContext = null;
+        let activePollHandle = null;
+
+        document.getElementById("apiBaseValue").textContent = apiBaseUrl;
+        document.getElementById("frontendValue").textContent = frontendUrl;
+
+        document.getElementById("reloadContextsBtn").addEventListener("click", loadContexts);
+        document.getElementById("hideStatusBtn").addEventListener("click", clearQueryStatus);
+        document.getElementById("clearQuestionBtn").addEventListener("click", () => {
+            questionInput.value = "";
+            questionInput.focus();
+        });
+        document.getElementById("sampleBtn").addEventListener("click", () => {
+            questionInput.value = sampleQuestion;
+            questionInput.focus();
+        });
+        document.getElementById("askBtn").addEventListener("click", submitQuestion);
+        contextSelect.addEventListener("change", onContextChanged);
+        questionInput.addEventListener("keydown", event => {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                submitQuestion();
+            }
+        });
+
+        logLine("Iniciando shell SQL Lite.", "sys");
+        loadContexts();
+
+        async function loadContexts() {
+            setStatus("pending", "Cargando contextos", "Solicitando contextos disponibles desde la API.");
+            setQueryStatus("info", "Cargando contextos", "Solicitando contextos SQL disponibles.");
+            runtimeContextState.textContent = "Cargando contextos...";
+            logLine("Solicitando contextos SQL...", "sys");
+
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/assistant/contexts`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                runtimeContexts = await response.json();
+                renderContextOptions();
+                setStatus("idle", "Contextos listos", "Selecciona un contexto y escribe una pregunta.");
+                clearQueryStatus();
+                logLine(`Contextos cargados: ${runtimeContexts.length}.`, "ok");
+            } catch (error) {
+                runtimeContexts = [];
+                renderContextOptions();
+                setStatus("bad", "No se pudieron cargar los contextos", String(error));
+                setQueryStatus("error", "No se pudieron cargar los contextos", String(error));
+                runtimeContextState.textContent = "No se pudieron cargar los contextos.";
+                logLine(`Error cargando contextos: ${String(error)}`, "err");
+            }
+        }
+
+        function renderContextOptions() {
+            contextSelect.innerHTML = "";
+
+            if (!runtimeContexts.length) {
+                const option = document.createElement("option");
+                option.value = "";
+                option.textContent = "No hay contextos disponibles";
+                contextSelect.appendChild(option);
+                contextSelect.disabled = true;
+                applyContext(null);
+                return;
+            }
+
+            const savedKey = safeStorageGet(contextStorageKey);
+
+            runtimeContexts.forEach(item => {
+                const option = document.createElement("option");
+                option.value = getContextKey(item);
+                option.textContent = item.label || `${item.tenantKey} · ${item.domain}`;
+                contextSelect.appendChild(option);
+            });
+
+            const selected = runtimeContexts.find(item => getContextKey(item) === savedKey)
+                || runtimeContexts.find(item => item.isDefault)
+                || runtimeContexts[0];
+
+            contextSelect.disabled = false;
+            contextSelect.value = getContextKey(selected);
+            applyContext(selected);
+        }
+
+        function onContextChanged() {
+            const selected = runtimeContexts.find(item => getContextKey(item) === contextSelect.value) || null;
+            applyContext(selected);
+        }
+
+        function applyContext(item) {
+            currentContext = item;
+            contextValue.textContent = item
+                ? `${item.tenantDisplayName || item.tenantKey} / ${item.domain} / ${item.connectionName}`
+                : "Sin contexto seleccionado";
+
+            if (item) {
+                safeStorageSet(contextStorageKey, getContextKey(item));
+                runtimeContextHero.classList.remove("is-empty");
+                runtimeContextHeroValue.textContent = item.label || `${item.tenantKey} / ${item.domain}`;
+                runtimeContextHeroMeta.textContent = `${item.tenantDisplayName || item.tenantKey} / ${item.domain} / ${item.connectionName}`;
+                runtimeContextState.textContent = `Activo: ${item.label || item.domain}`;
+                logLine(`Contexto activo -> ${item.label || item.domain}`, "sys");
+            } else {
+                runtimeContextHero.classList.add("is-empty");
+                runtimeContextHeroValue.textContent = "Sin contexto seleccionado";
+                runtimeContextHeroMeta.textContent = "Selecciona una base antes de consultar.";
+                runtimeContextState.textContent = "Selecciona una base antes de consultar.";
+            }
+        }
+
+        async function submitQuestion() {
+            const question = questionInput.value.trim();
+            if (!question) {
+                setStatus("bad", "Falta la pregunta", "Escribe una pregunta antes de consultar.");
+                setQueryStatus("warning", "Falta la pregunta", "Escribe una pregunta antes de consultar.");
+                logLine("Falta la pregunta.", "err");
+                questionInput.focus();
+                return;
+            }
+
+            if (!currentContext) {
+                setStatus("bad", "Falta contexto SQL", "Selecciona una base activa antes de consultar.");
+                setQueryStatus("warning", "Selecciona una base activa", "Necesitamos un contexto SQL activo antes de consultar.");
+                logLine("No hay contexto SQL activo.", "err");
+                return;
+            }
+
+            clearActivePolling();
+            askBtn.disabled = true;
+            loadingSpinner.style.display = "block";
+            resultArea.style.display = "grid";
+            sqlOutput.textContent = "Esperando respuesta...";
+            document.getElementById("kpiContainer").innerHTML = "";
+            tableWrap.innerHTML = '<div class="empty">Consultando...</div>';
+            setStatus("pending", "Consulta enviada", `Trabajando en ${currentContext.label || currentContext.domain}.`);
+            setQueryStatus("info", "Consulta enviada", `Trabajando en ${currentContext.label || currentContext.domain}.`);
+            logLine(`-> ${question}`, "user");
+
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/assistant/ask`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        question,
+                        userId: "hololens_poc",
+                        tenantKey: currentContext.tenantKey,
+                        domain: currentContext.domain,
+                        connectionName: currentContext.connectionName,
+                        mode: 0
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || `HTTP ${response.status}`);
+                }
+
+                const payload = await response.json();
+                await pollJobStatus(payload.jobId || payload.JobId);
+            } catch (error) {
+                askBtn.disabled = false;
+                loadingSpinner.style.display = "none";
+                setStatus("bad", "No se pudo enviar la consulta", String(error));
+                setQueryStatus("error", "No se pudo enviar la consulta", String(error));
+                sqlOutput.textContent = String(error);
+                logLine(`Error red: ${String(error)}`, "err");
+            }
+        }
+
+        async function pollJobStatus(jobId) {
+            if (!jobId) {
+                askBtn.disabled = false;
+                loadingSpinner.style.display = "none";
+                setStatus("bad", "No se recibio JobId", "La API no devolvio identificador de trabajo.");
+                logLine("La API no devolvio JobId.", "err");
+                return;
+            }
+
+            const startedAt = Date.now();
+
+            return new Promise((resolve) => {
+                activePollHandle = setInterval(async () => {
+                    try {
+                        const response = await fetch(`${apiBaseUrl}/api/assistant/status/${jobId}`);
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+
+                        const payload = await response.json();
+                        const status = String(payload.status || "").toLowerCase();
+
+                        if (status === "completed") {
+                            clearActivePolling();
+                            renderCompletedResult(payload);
+                            askBtn.disabled = false;
+                            loadingSpinner.style.display = "none";
+                            resolve();
+                            return;
+                        }
+
+                        if (status.includes("failed") || status.includes("review")) {
+                            clearActivePolling();
+                            renderFailedResult(payload);
+                            askBtn.disabled = false;
+                            loadingSpinner.style.display = "none";
+                            resolve();
+                            return;
+                        }
+
+                        const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+                        setStatus("pending", "Procesando consulta", `La API sigue trabajando. Tiempo transcurrido: ${seconds}s.`);
+                        setQueryStatus("info", "Analizando consulta", `Seguimos procesando la pregunta en ${currentContext?.label || currentContext?.domain || "el contexto activo"}. Tiempo: ${seconds}s.`);
+                    } catch (error) {
+                        clearActivePolling();
+                        askBtn.disabled = false;
+                        loadingSpinner.style.display = "none";
+                        setStatus("bad", "Error consultando estatus", String(error));
+                        setQueryStatus("error", "Error consultando estatus", String(error));
+                        sqlOutput.textContent = String(error);
+                        logLine(`Error estatus: ${String(error)}`, "err");
+                        resolve();
+                    }
+                }, 1500);
+            });
+        }
+
+        function renderCompletedResult(payload) {
+            const rows = extractRows(payload.resultJson);
+            const sql = payload.sqlText || "La API no devolvio SQL.";
+
+            sqlOutput.textContent = sql;
+            renderTable(rows);
+            setStatus("ok", "Consulta completada", rows.length
+                ? `Se recuperaron ${rows.length} filas.`
+                : "La consulta termino correctamente pero no devolvio filas.");
+            setQueryStatus("success", "Consulta completada", rows.length
+                ? `Se recuperaron ${rows.length} filas en ${currentContext?.label || currentContext?.domain || "el contexto activo"}.`
+                : "La consulta termino correctamente, pero no devolvio filas.");
+            logLine("Consulta completada.", "ok");
+        }
+
+        function renderFailedResult(payload) {
+            const message = payload.errorText || "La consulta no pudo completarse.";
+            sqlOutput.textContent = payload.sqlText || "No hay SQL disponible.";
+            document.getElementById("kpiContainer").innerHTML = "";
+            tableWrap.innerHTML = `<div class="empty">${escapeHtml(message)}</div>`;
+            setStatus("bad", "La consulta fallo o requiere revision", message);
+            setQueryStatus(String(payload.status || "").toLowerCase().includes("review") ? "warning" : "error", "La consulta fallo o requiere revision", message);
+            logLine(message, "err");
+        }
+
+        function renderTable(rows) {
+            if (!Array.isArray(rows) || rows.length === 0) {
+                document.getElementById("kpiContainer").innerHTML = "";
+                tableWrap.innerHTML = '<div class="empty">La consulta no devolvio filas.</div>';
+                return;
+            }
+
+            if (rows.length === 1) {
+                document.getElementById("kpiContainer").innerHTML = Object.entries(rows[0])
+                    .map(([key, value]) => `
+                        <div class="kpi-card">
+                            <div class="kpi-label">${escapeHtml(key)}</div>
+                            <div class="kpi-value">${escapeHtml(formatValue(value))}</div>
+                        </div>
+                    `)
+                    .join("");
+            } else {
+                document.getElementById("kpiContainer").innerHTML = "";
+            }
+
+            const headers = Object.keys(rows[0] || {});
+            const head = headers.map(header => `<th>${escapeHtml(header)}</th>`).join("");
+            const body = rows.map(row => {
+                const cells = headers.map(header => `<td>${escapeHtml(formatValue(row[header]))}</td>`).join("");
+                return `<tr>${cells}</tr>`;
+            }).join("");
+
+            tableWrap.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+        }
+
+        function extractRows(resultJson) {
+            if (!resultJson) {
+                return [];
+            }
+
+            try {
+                const parsed = typeof resultJson === "string" ? JSON.parse(resultJson) : resultJson;
+                if (Array.isArray(parsed?.data)) return parsed.data;
+                if (Array.isArray(parsed?.rows)) return parsed.rows;
+                if (Array.isArray(parsed)) return parsed;
+                return [];
+            } catch {
+                return [];
+            }
+        }
+
+        function getContextKey(item) {
+            return [item?.tenantKey, item?.domain, item?.connectionName].join("|");
+        }
+
+        function setStatus(state, title, message) {
+            const pill = document.getElementById("statusPill");
+            pill.className = `pill ${state}`;
+            pill.textContent = state === "ok" ? "OK" : state === "bad" ? "Error" : state === "pending" ? "Pendiente" : "Idle";
+            document.getElementById("statusTitle").textContent = title;
+            document.getElementById("statusMessage").textContent = message;
+        }
+
+        function setQueryStatus(type, title, message) {
+            const banner = document.getElementById("queryStatusBanner");
+            const kicker = document.getElementById("queryStatusKicker");
+            const titleNode = document.getElementById("queryStatusTitle");
+            const messageNode = document.getElementById("queryStatusMessage");
+
+            banner.className = `query-status-banner is-visible ${type || "info"}`;
+            kicker.textContent = type === "error"
+                ? "Error de consulta"
+                : type === "warning"
+                    ? "Consulta requiere revision"
+                    : type === "success"
+                        ? "Consulta completada"
+                        : "Estado de consulta";
+            titleNode.textContent = title || "Estado de consulta";
+            messageNode.textContent = message || "";
+        }
+
+        function clearQueryStatus() {
+            document.getElementById("queryStatusBanner").className = "query-status-banner";
+        }
+
+        function logLine(message, type = "sys") {
+            const logArea = document.getElementById("logArea");
+            const row = document.createElement("div");
+            row.className = "log-line";
+
+            const time = document.createElement("span");
+            time.className = "log-time";
+            time.textContent = new Date().toLocaleTimeString("es-MX");
+
+            const text = document.createElement("span");
+            text.className = `c-${type}`;
+            text.textContent = message;
+
+            row.appendChild(time);
+            row.appendChild(text);
+            logArea.appendChild(row);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function clearActivePolling() {
+            if (activePollHandle) {
+                clearInterval(activePollHandle);
+                activePollHandle = null;
+            }
+        }
+
+        function safeStorageGet(key) {
+            try { return localStorage.getItem(key); } catch { return null; }
+        }
+
+        function safeStorageSet(key, value) {
+            try { localStorage.setItem(key, value); } catch { }
+        }
+
+        function formatValue(value) {
+            if (value === null || value === undefined) return "—";
+            if (typeof value === "number") {
+                return value.toLocaleString("es-MX", { maximumFractionDigits: 2 });
+            }
+            return String(value);
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+    </script>
+</body>
+</html>

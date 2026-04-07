@@ -2,5 +2,6 @@
   <Project Path="VannaLight.Api/VannaLight.Api.csproj" />
   <Project Path="VannaLight.ConsoleApp/VannaLight.ConsoleApp.csproj" />
   <Project Path="VannaLight.Core/VannaLight.Core.csproj" />
+  <Project Path="VannaLight.HoloLens/VannaLight.HoloLens.csproj" />
   <Project Path="VannaLight.Infrastructure/VannaLight.Infrastructure.csproj" />
 </Solution>

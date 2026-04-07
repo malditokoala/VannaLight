@@ -222,6 +222,21 @@ app.Use(async (context, next) =>
 app.UseStaticFiles();
 app.UseAuthorization();
 
+app.MapGet("/health", (HttpContext httpContext) =>
+{
+    var request = httpContext.Request;
+
+    return Results.Ok(new
+    {
+        status = "ok",
+        service = "VannaLight.Api",
+        utc = DateTime.UtcNow,
+        scheme = request.Scheme,
+        host = request.Host.Value,
+        pathBase = request.PathBase.Value ?? string.Empty
+    });
+});
+
 app.MapControllers();
 app.MapHub<AssistantHub>("/hub/assistant");
 
