@@ -948,6 +948,7 @@ public class AdminController(
                 SecretRef = $"appsecret:{secretKey}",
                 IsActive = true,
                 Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+                ManagementMode = Tenant.UserManagedMode,
                 CreatedUtc = existingProfile?.CreatedUtc ?? now,
                 UpdatedUtc = now
             },
@@ -1016,6 +1017,7 @@ public class AdminController(
                 DisplayName = request.DisplayName.Trim(),
                 Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
                 IsActive = true,
+                ManagementMode = Tenant.UserManagedMode,
                 CreatedUtc = existingTenant?.CreatedUtc ?? now,
                 UpdatedUtc = now
             },
@@ -1031,6 +1033,7 @@ public class AdminController(
                 SystemProfileKey = string.IsNullOrWhiteSpace(request.SystemProfileKey) ? null : request.SystemProfileKey.Trim(),
                 IsDefault = true,
                 IsActive = true,
+                ManagementMode = Tenant.UserManagedMode,
                 CreatedUtc = now,
                 UpdatedUtc = now
             },
@@ -1373,6 +1376,7 @@ public class AdminController(
                 DisplayName = request.DisplayName.Trim(),
                 Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
                 IsActive = request.IsActive,
+                ManagementMode = Tenant.UserManagedMode,
                 CreatedUtc = existing?.CreatedUtc ?? now,
                 UpdatedUtc = now
             },
@@ -1438,6 +1442,7 @@ public class AdminController(
                 SystemProfileKey = string.IsNullOrWhiteSpace(request.SystemProfileKey) ? null : request.SystemProfileKey.Trim(),
                 IsDefault = request.IsDefault,
                 IsActive = request.IsActive,
+                ManagementMode = Tenant.UserManagedMode,
                 CreatedUtc = existing?.CreatedUtc ?? now,
                 UpdatedUtc = now
             },
@@ -1601,6 +1606,7 @@ public class AdminController(
                 DisplayName = pack.TenantDisplayName.Trim(),
                 Description = string.IsNullOrWhiteSpace(pack.TenantDescription) ? null : pack.TenantDescription.Trim(),
                 IsActive = true,
+                ManagementMode = Tenant.UserManagedMode,
                 CreatedUtc = existingTenant?.CreatedUtc ?? now,
                 UpdatedUtc = now
             },
@@ -1616,6 +1622,7 @@ public class AdminController(
                 SystemProfileKey = string.IsNullOrWhiteSpace(pack.SystemProfileKey) ? null : pack.SystemProfileKey.Trim(),
                 IsDefault = true,
                 IsActive = true,
+                ManagementMode = Tenant.UserManagedMode,
                 CreatedUtc = now,
                 UpdatedUtc = now
             },

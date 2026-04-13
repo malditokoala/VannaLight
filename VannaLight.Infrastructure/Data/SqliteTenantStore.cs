@@ -48,14 +48,15 @@ public class SqliteTenantStore : ITenantStore
     {
         const string sql = """
             INSERT INTO Tenants
-                (TenantKey, DisplayName, Description, IsActive, CreatedUtc, UpdatedUtc)
+                (TenantKey, DisplayName, Description, IsActive, ManagementMode, CreatedUtc, UpdatedUtc)
             VALUES
-                (@TenantKey, @DisplayName, @Description, @IsActive, @CreatedUtc, @UpdatedUtc)
+                (@TenantKey, @DisplayName, @Description, @IsActive, @ManagementMode, @CreatedUtc, @UpdatedUtc)
             ON CONFLICT(TenantKey)
             DO UPDATE SET
                 DisplayName = excluded.DisplayName,
                 Description = excluded.Description,
                 IsActive = excluded.IsActive,
+                ManagementMode = excluded.ManagementMode,
                 UpdatedUtc = excluded.UpdatedUtc;
 
             SELECT Id

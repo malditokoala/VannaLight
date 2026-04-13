@@ -18,6 +18,7 @@ public class ConnectionProfile
     public string? SecretRef { get; set; }
     public bool IsActive { get; set; }
     public string? Description { get; set; }
+    public string ManagementMode { get; set; } = Tenant.UserManagedMode;
     public string CreatedUtc { get; set; } = string.Empty;
     public string UpdatedUtc { get; set; } = string.Empty;
 }

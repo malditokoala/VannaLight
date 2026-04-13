@@ -66,10 +66,10 @@ public class SqliteConnectionProfileStore : IConnectionProfileStore
         const string sql = @"
                             INSERT INTO ConnectionProfiles
                             (EnvironmentName, ProfileKey, ConnectionName, ProviderKind, ConnectionMode, ServerHost, DatabaseName, UserName,
-                             IntegratedSecurity, Encrypt, TrustServerCertificate, CommandTimeoutSec, SecretRef, IsActive, Description, CreatedUtc, UpdatedUtc)
+                             IntegratedSecurity, Encrypt, TrustServerCertificate, CommandTimeoutSec, SecretRef, IsActive, Description, ManagementMode, CreatedUtc, UpdatedUtc)
                             VALUES
                             (@EnvironmentName, @ProfileKey, @ConnectionName, @ProviderKind, @ConnectionMode, @ServerHost, @DatabaseName, @UserName,
-                             @IntegratedSecurity, @Encrypt, @TrustServerCertificate, @CommandTimeoutSec, @SecretRef, @IsActive, @Description, @CreatedUtc, @UpdatedUtc)
+                             @IntegratedSecurity, @Encrypt, @TrustServerCertificate, @CommandTimeoutSec, @SecretRef, @IsActive, @Description, @ManagementMode, @CreatedUtc, @UpdatedUtc)
                             ON CONFLICT(EnvironmentName, ProfileKey, ConnectionName)
                             DO UPDATE SET
                                 ProviderKind = excluded.ProviderKind,
@@ -84,6 +84,7 @@ public class SqliteConnectionProfileStore : IConnectionProfileStore
                                 SecretRef = excluded.SecretRef,
                                 IsActive = excluded.IsActive,
                                 Description = excluded.Description,
+                                ManagementMode = excluded.ManagementMode,
                                 UpdatedUtc = excluded.UpdatedUtc;
 
                             SELECT Id

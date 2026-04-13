@@ -9,6 +9,7 @@ public class TenantDomain
     public string? SystemProfileKey { get; set; }
     public bool IsDefault { get; set; }
     public bool IsActive { get; set; }
+    public string ManagementMode { get; set; } = Tenant.UserManagedMode;
     public string CreatedUtc { get; set; } = string.Empty;
     public string UpdatedUtc { get; set; } = string.Empty;
 }

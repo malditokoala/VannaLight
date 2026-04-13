@@ -146,7 +146,7 @@ Permite:
 
 ### Base de memoria
 
-- [vanna_memory.db](C:/Users/edggom/source/repos/malditokoala/VannaLight/VannaLight.Api/Data/vanna_memory.db)
+- `%LOCALAPPDATA%\VannaLight\Data\vanna_memory.db`
 
 Guarda:
 
@@ -162,7 +162,7 @@ Guarda:
 
 ### Base de runtime
 
-- [vanna_runtime.db](C:/Users/edggom/source/repos/malditokoala/VannaLight/VannaLight.Api/Data/vanna_runtime.db)
+- `%LOCALAPPDATA%\VannaLight\Data\vanna_runtime.db`
 
 Guarda:
 
@@ -171,6 +171,45 @@ Guarda:
 - SQL generado
 - resultados
 - estados de revisión
+
+### Data Protection keys
+
+- `%LOCALAPPDATA%\VannaLight\Data\dpkeys`
+
+Estas llaves son locales por máquina y no deben versionarse ni sincronizarse entre equipos.
+
+## Configuración local segura
+
+Para desarrollo local, la estrategia recomendada es:
+
+1. `appsettings.json`
+   - solo defaults seguros y compartidos
+2. `dotnet user-secrets`
+   - cadenas de conexión reales por máquina
+3. `%LOCALAPPDATA%\VannaLight\Data`
+   - SQLite local y `dpkeys`
+
+No se recomienda compartir entre computadoras:
+
+- `vanna_memory.db`
+- `vanna_runtime.db`
+- `dpkeys`
+- `appsettings.Local.json` con secretos reales
+
+### User secrets
+
+Inicializa y configura tus conexiones locales así:
+
+```powershell
+dotnet user-secrets set "ConnectionStrings:NorthwindDB" "Server=localhost,1433;Database=Northwind;User Id=sa;Password=TU_PASSWORD;Encrypt=True;TrustServerCertificate=True" --project .\VannaLight.Api\VannaLight.Api.csproj
+dotnet user-secrets set "ConnectionStrings:ErpDb" "Server=TU-SERVIDOR;Database=TU_ERP;User Id=usuario;Password=secreto;Encrypt=True;TrustServerCertificate=True" --project .\VannaLight.Api\VannaLight.Api.csproj
+```
+
+Si necesitas overrides por máquina para workspaces/contextos, puedes usar:
+
+- `VannaLight.Api/appsettings.Local.json`
+
+pero solo como archivo local ignorado por git.
 
 ## Cómo correrlo
 

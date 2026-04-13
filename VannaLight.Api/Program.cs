@@ -44,12 +44,27 @@ if (builder.Environment.IsDevelopment())
 // ---------------------------------------------------------
 // 1. GESTION DE RUTAS Y DIRECTORIOS (ContentRoot)
 // ---------------------------------------------------------
-var sqliteRel = builder.Configuration["Paths:Sqlite"] ?? "Data/vanna_memory.db";
-var sqlitePath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, sqliteRel));
+var localAppDataRoot = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    "VannaLight",
+    builder.Environment.EnvironmentName,
+    "Data");
+var legacyDataRoot = Path.Combine(builder.Environment.ContentRootPath, "Data");
 
-var runtimeRel = builder.Configuration["Paths:RuntimeDb"] ?? "Data/vanna_runtime.db";
-var runtimePath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, runtimeRel));
-var dataProtectionKeysPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "Data", "dpkeys"));
+var sqlitePath = ResolveAppPath(
+    builder.Configuration["Paths:Sqlite"],
+    Path.Combine(localAppDataRoot, "vanna_memory.db"),
+    builder.Environment.ContentRootPath);
+
+var runtimePath = ResolveAppPath(
+    builder.Configuration["Paths:RuntimeDb"],
+    Path.Combine(localAppDataRoot, "vanna_runtime.db"),
+    builder.Environment.ContentRootPath);
+
+var dataProtectionKeysPath = ResolveAppPath(
+    builder.Configuration["Paths:DataProtectionKeys"],
+    Path.Combine(localAppDataRoot, "dpkeys"),
+    builder.Environment.ContentRootPath);
 
 var modelRelOrAbs = builder.Configuration["Paths:Model"] ?? @"C:\Modelos\qwen2.5-coder-7b-instruct-q4_k_m.gguf";
 var modelPath = Path.IsPathRooted(modelRelOrAbs)
@@ -59,6 +74,7 @@ var modelPath = Path.IsPathRooted(modelRelOrAbs)
 Directory.CreateDirectory(Path.GetDirectoryName(sqlitePath)!);
 Directory.CreateDirectory(Path.GetDirectoryName(runtimePath)!);
 Directory.CreateDirectory(dataProtectionKeysPath);
+MigrateLegacyLocalState(legacyDataRoot, sqlitePath, runtimePath, dataProtectionKeysPath);
 
 // ---------------------------------------------------------
 // 2. CONFIGURACION DE ARRANQUE
@@ -242,6 +258,90 @@ app.MapHub<AssistantHub>("/hub/assistant");
 
 app.Run();
 
+static string ResolveAppPath(string? configuredPath, string fallbackAbsolutePath, string contentRootPath)
+{
+    if (string.IsNullOrWhiteSpace(configuredPath))
+        return fallbackAbsolutePath;
+
+    var expanded = Environment.ExpandEnvironmentVariables(configuredPath.Trim());
+    if (Path.IsPathRooted(expanded))
+        return Path.GetFullPath(expanded);
+
+    return Path.GetFullPath(Path.Combine(contentRootPath, expanded));
+}
+
+static void MigrateLegacyLocalState(
+    string legacyDataRoot,
+    string sqlitePath,
+    string runtimePath,
+    string dataProtectionKeysPath)
+{
+    if (!Directory.Exists(legacyDataRoot))
+        return;
+
+    TryCopyIfMissing(
+        Path.Combine(legacyDataRoot, "vanna_memory.db"),
+        sqlitePath,
+        "vanna_memory.db");
+
+    TryCopyIfMissing(
+        Path.Combine(legacyDataRoot, "vanna_runtime.db"),
+        runtimePath,
+        "vanna_runtime.db");
+
+    var legacyKeysDir = Path.Combine(legacyDataRoot, "dpkeys");
+    if (!Directory.Exists(legacyKeysDir))
+        return;
+
+    Directory.CreateDirectory(dataProtectionKeysPath);
+    foreach (var file in Directory.EnumerateFiles(legacyKeysDir))
+    {
+        var targetFile = Path.Combine(dataProtectionKeysPath, Path.GetFileName(file));
+        if (File.Exists(targetFile))
+            continue;
+
+        File.Copy(file, targetFile);
+        Console.WriteLine($"[LocalState] Copiada llave de proteccion local a '{targetFile}'.");
+    }
+}
+
+static void TryCopyIfMissing(string sourceFile, string targetFile, string label)
+{
+    if (!File.Exists(sourceFile) || File.Exists(targetFile))
+        return;
+
+    Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
+    File.Copy(sourceFile, targetFile);
+    Console.WriteLine($"[LocalState] Migrado {label} desde la carpeta legacy del repo a '{targetFile}'.");
+}
+
+static async Task EnsureContextManagementSchemaAsync(SqliteConnection connection)
+{
+    var connectionProfileColumns = (await connection.QueryAsync<(int Cid, string Name, string Type, int NotNull, string? DefaultValue, int Pk)>("PRAGMA table_info(ConnectionProfiles);"))
+        .Select(x => x.Name)
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    if (!connectionProfileColumns.Contains("ManagementMode"))
+    {
+        await connection.ExecuteAsync("ALTER TABLE ConnectionProfiles ADD COLUMN ManagementMode TEXT NOT NULL DEFAULT 'UserManaged';");
+    }
+
+    var tenantColumns = (await connection.QueryAsync<(int Cid, string Name, string Type, int NotNull, string? DefaultValue, int Pk)>("PRAGMA table_info(Tenants);"))
+        .Select(x => x.Name)
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    if (!tenantColumns.Contains("ManagementMode"))
+    {
+        await connection.ExecuteAsync("ALTER TABLE Tenants ADD COLUMN ManagementMode TEXT NOT NULL DEFAULT 'UserManaged';");
+    }
+
+    var tenantDomainColumns = (await connection.QueryAsync<(int Cid, string Name, string Type, int NotNull, string? DefaultValue, int Pk)>("PRAGMA table_info(TenantDomains);"))
+        .Select(x => x.Name)
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    if (!tenantDomainColumns.Contains("ManagementMode"))
+    {
+        await connection.ExecuteAsync("ALTER TABLE TenantDomains ADD COLUMN ManagementMode TEXT NOT NULL DEFAULT 'UserManaged';");
+    }
+}
+
 // =========================================================
 // PREPARACION DE SYSTEM CONFIG (SQLite principal)
 // =========================================================
@@ -303,6 +403,7 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
             SecretRef TEXT NULL,
             IsActive INTEGER NOT NULL DEFAULT 0,
             Description TEXT NULL,
+            ManagementMode TEXT NOT NULL DEFAULT 'UserManaged',
             CreatedUtc TEXT NOT NULL,
             UpdatedUtc TEXT NOT NULL,
             UNIQUE(EnvironmentName, ProfileKey, ConnectionName)
@@ -324,6 +425,7 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
             DisplayName TEXT NOT NULL,
             Description TEXT NULL,
             IsActive INTEGER NOT NULL DEFAULT 1,
+            ManagementMode TEXT NOT NULL DEFAULT 'UserManaged',
             CreatedUtc TEXT NOT NULL,
             UpdatedUtc TEXT NOT NULL,
             UNIQUE(TenantKey)
@@ -337,6 +439,7 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
             SystemProfileKey TEXT NULL,
             IsDefault INTEGER NOT NULL DEFAULT 0,
             IsActive INTEGER NOT NULL DEFAULT 1,
+            ManagementMode TEXT NOT NULL DEFAULT 'UserManaged',
             CreatedUtc TEXT NOT NULL,
             UpdatedUtc TEXT NOT NULL,
             FOREIGN KEY(TenantId) REFERENCES Tenants(Id),
@@ -370,6 +473,7 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
     ";
 
     await connection.ExecuteAsync(sql);
+    await EnsureContextManagementSchemaAsync(connection);
     var createdUtc = DateTime.UtcNow.ToString("o");
 
     const string seedProfileSql = @"
@@ -604,12 +708,13 @@ ORDER BY od.ProductID, CAST(o.OrderDate AS date)",
 
     const string seedTenantSql = @"
         INSERT INTO Tenants
-            (TenantKey, DisplayName, Description, IsActive, CreatedUtc, UpdatedUtc)
+            (TenantKey, DisplayName, Description, IsActive, ManagementMode, CreatedUtc, UpdatedUtc)
         SELECT
             @TenantKey,
             @DisplayName,
             @Description,
             1,
+            @ManagementMode,
             @CreatedUtc,
             @CreatedUtc
         WHERE NOT EXISTS (
@@ -629,12 +734,13 @@ ORDER BY od.ProductID, CAST(o.OrderDate AS date)",
             TenantKey = "default",
             DisplayName = "Default",
             Description = "Tenant por defecto para compatibilidad transicional.",
+            ManagementMode = Tenant.SeedManagedMode,
             CreatedUtc = createdUtc
         });
 
     const string seedTenantDomainSql = @"
         INSERT INTO TenantDomains
-            (TenantId, Domain, ConnectionName, SystemProfileKey, IsDefault, IsActive, CreatedUtc, UpdatedUtc)
+            (TenantId, Domain, ConnectionName, SystemProfileKey, IsDefault, IsActive, ManagementMode, CreatedUtc, UpdatedUtc)
         SELECT
             @TenantId,
             @Domain,
@@ -642,6 +748,7 @@ ORDER BY od.ProductID, CAST(o.OrderDate AS date)",
             @SystemProfileKey,
             1,
             1,
+            @ManagementMode,
             @CreatedUtc,
             @CreatedUtc
         WHERE NOT EXISTS (
@@ -661,6 +768,7 @@ ORDER BY od.ProductID, CAST(o.OrderDate AS date)",
                 Domain = configuration["Settings:Retrieval:Domain"] ?? "erp-kpi-pilot",
                 ConnectionName = seededDefaultConnectionName,
                 SystemProfileKey = defaultSystemProfile,
+                ManagementMode = Tenant.SeedManagedMode,
                 CreatedUtc = createdUtc
             });
     }
@@ -1206,10 +1314,10 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
         const string upsertProfileSql = @"
             INSERT INTO ConnectionProfiles
                 (EnvironmentName, ProfileKey, ConnectionName, ProviderKind, ConnectionMode, ServerHost, DatabaseName, UserName,
-                 IntegratedSecurity, Encrypt, TrustServerCertificate, CommandTimeoutSec, SecretRef, IsActive, Description, CreatedUtc, UpdatedUtc)
+                 IntegratedSecurity, Encrypt, TrustServerCertificate, CommandTimeoutSec, SecretRef, IsActive, Description, ManagementMode, CreatedUtc, UpdatedUtc)
             VALUES
                 (@EnvironmentName, @ProfileKey, @ConnectionName, @ProviderKind, @ConnectionMode, @ServerHost, @DatabaseName, @UserName,
-                 @IntegratedSecurity, @Encrypt, @TrustServerCertificate, @CommandTimeoutSec, @SecretRef, @IsActive, @Description, @CreatedUtc, @UpdatedUtc)
+                 @IntegratedSecurity, @Encrypt, @TrustServerCertificate, @CommandTimeoutSec, @SecretRef, @IsActive, @Description, @ManagementMode, @CreatedUtc, @UpdatedUtc)
             ON CONFLICT(EnvironmentName, ProfileKey, ConnectionName)
             DO UPDATE SET
                 ProviderKind = excluded.ProviderKind,
@@ -1224,6 +1332,7 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
                 SecretRef = excluded.SecretRef,
                 IsActive = excluded.IsActive,
                 Description = excluded.Description,
+                ManagementMode = excluded.ManagementMode,
                 UpdatedUtc = excluded.UpdatedUtc;";
 
         await connection.ExecuteAsync(
@@ -1245,6 +1354,7 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
                 SecretRef = $"config:ConnectionStrings:{connectionName}",
                 IsActive = true,
                 Description = description ?? $"{connectionName} configurada desde ConnectionStrings.",
+                ManagementMode = Tenant.SeedManagedMode,
                 CreatedUtc = now,
                 UpdatedUtc = now
             });
@@ -1263,14 +1373,15 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
 
         const string upsertTenantSql = @"
             INSERT INTO Tenants
-                (TenantKey, DisplayName, Description, IsActive, CreatedUtc, UpdatedUtc)
+                (TenantKey, DisplayName, Description, IsActive, ManagementMode, CreatedUtc, UpdatedUtc)
             VALUES
-                (@TenantKey, @DisplayName, @Description, 1, @CreatedUtc, @UpdatedUtc)
+                (@TenantKey, @DisplayName, @Description, 1, @ManagementMode, @CreatedUtc, @UpdatedUtc)
             ON CONFLICT(TenantKey)
             DO UPDATE SET
                 DisplayName = excluded.DisplayName,
                 Description = excluded.Description,
                 IsActive = 1,
+                ManagementMode = excluded.ManagementMode,
                 UpdatedUtc = excluded.UpdatedUtc;
 
             SELECT Id
@@ -1285,6 +1396,7 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
                 TenantKey = seed.TenantKey,
                 DisplayName = seed.DisplayName,
                 Description = seed.Description,
+                ManagementMode = Tenant.SeedManagedMode,
                 CreatedUtc = existingTenant?.CreatedUtc ?? now,
                 UpdatedUtc = now
             });
@@ -1311,15 +1423,16 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
               AND @IsDefault = 1;
 
             INSERT INTO TenantDomains
-                (TenantId, Domain, ConnectionName, SystemProfileKey, IsDefault, IsActive, CreatedUtc, UpdatedUtc)
+                (TenantId, Domain, ConnectionName, SystemProfileKey, IsDefault, IsActive, ManagementMode, CreatedUtc, UpdatedUtc)
             VALUES
-                (@TenantId, @Domain, @ConnectionName, @SystemProfileKey, @IsDefault, @IsActive, @CreatedUtc, @UpdatedUtc)
+                (@TenantId, @Domain, @ConnectionName, @SystemProfileKey, @IsDefault, @IsActive, @ManagementMode, @CreatedUtc, @UpdatedUtc)
             ON CONFLICT(TenantId, Domain)
             DO UPDATE SET
                 ConnectionName = excluded.ConnectionName,
                 SystemProfileKey = excluded.SystemProfileKey,
                 IsDefault = excluded.IsDefault,
                 IsActive = excluded.IsActive,
+                ManagementMode = excluded.ManagementMode,
                 UpdatedUtc = excluded.UpdatedUtc;";
 
         await connection.ExecuteAsync(
@@ -1331,7 +1444,8 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
                 ConnectionName = seed.ConnectionName,
                 SystemProfileKey = defaultSystemProfile,
                 IsDefault = seed.IsDefault,
-                IsActive = existing?.IsActive ?? true,
+                IsActive = true,
+                ManagementMode = Tenant.SeedManagedMode,
                 CreatedUtc = existing?.CreatedUtc ?? now,
                 UpdatedUtc = now
             });
@@ -1368,15 +1482,18 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
         return;
     }
 
-    var runtimeMappings = await connection.QueryAsync<(long Id, string TenantKey, string Domain)>(
+    var runtimeMappings = await connection.QueryAsync<(long Id, string TenantKey, string Domain, string ManagementMode)>(
         """
-        SELECT td.Id, t.TenantKey, td.Domain
+        SELECT td.Id, t.TenantKey, td.Domain, td.ManagementMode
         FROM TenantDomains td
         INNER JOIN Tenants t ON t.Id = td.TenantId;
         """);
 
     foreach (var mapping in runtimeMappings)
     {
+        if (!string.Equals(mapping.ManagementMode, Tenant.SeedManagedMode, StringComparison.OrdinalIgnoreCase))
+            continue;
+
         var key = $"{mapping.TenantKey}|{mapping.Domain}";
         if (activeMappingKeys.Contains(key))
             continue;
@@ -1392,14 +1509,17 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
             new { Id = mapping.Id, UpdatedUtc = now });
     }
 
-    var tenantRows = await connection.QueryAsync<(long Id, string TenantKey)>(
+    var tenantRows = await connection.QueryAsync<(long Id, string TenantKey, string ManagementMode)>(
         """
-        SELECT Id, TenantKey
+        SELECT Id, TenantKey, ManagementMode
         FROM Tenants;
         """);
 
     foreach (var tenant in tenantRows)
     {
+        if (!string.Equals(tenant.ManagementMode, Tenant.SeedManagedMode, StringComparison.OrdinalIgnoreCase))
+            continue;
+
         var keepActive = activeTenantKeys.Contains(tenant.TenantKey);
         await connection.ExecuteAsync(
             """
@@ -1411,9 +1531,9 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
             new { Id = tenant.Id, IsActive = keepActive, UpdatedUtc = now });
     }
 
-    var profiles = await connection.QueryAsync<(long Id, string ConnectionName)>(
+    var profiles = await connection.QueryAsync<(long Id, string ConnectionName, string ManagementMode)>(
         """
-        SELECT Id, ConnectionName
+        SELECT Id, ConnectionName, ManagementMode
         FROM ConnectionProfiles
         WHERE EnvironmentName = @EnvironmentName
           AND ProfileKey = @ProfileKey;
@@ -1422,6 +1542,9 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
 
     foreach (var profile in profiles)
     {
+        if (!string.Equals(profile.ManagementMode, Tenant.SeedManagedMode, StringComparison.OrdinalIgnoreCase))
+            continue;
+
         var keepActive = activeConnectionNames.Contains(profile.ConnectionName);
         await connection.ExecuteAsync(
             """
@@ -1431,6 +1554,50 @@ static async Task EnsureSeededConnectionProfilesAndContextMappingsAsync(
             WHERE Id = @Id;
             """,
             new { Id = profile.Id, IsActive = keepActive, UpdatedUtc = now });
+    }
+
+    var dormantUserManagedContexts = await connection.QueryAsync<(long TenantId, string TenantKey, long MappingId, string Domain, string ConnectionName, bool IsDefault)>(
+        """
+        SELECT t.Id AS TenantId,
+               t.TenantKey,
+               td.Id AS MappingId,
+               td.Domain,
+               td.ConnectionName,
+               td.IsDefault
+        FROM Tenants t
+        INNER JOIN TenantDomains td ON td.TenantId = t.Id
+        INNER JOIN ConnectionProfiles cp ON cp.ConnectionName = td.ConnectionName
+        WHERE t.ManagementMode = 'UserManaged'
+          AND td.ManagementMode = 'UserManaged'
+          AND cp.EnvironmentName = @EnvironmentName
+          AND cp.ProfileKey = @ProfileKey
+          AND cp.IsActive = 1
+          AND (t.IsActive = 0 OR td.IsActive = 0);
+        """,
+        new { EnvironmentName = environmentName, ProfileKey = defaultSystemProfile });
+
+    foreach (var dormant in dormantUserManagedContexts)
+    {
+        await connection.ExecuteAsync(
+            """
+            UPDATE Tenants
+            SET IsActive = 1,
+                UpdatedUtc = @UpdatedUtc
+            WHERE Id = @TenantId;
+
+            UPDATE TenantDomains
+            SET IsActive = 1,
+                UpdatedUtc = @UpdatedUtc
+            WHERE Id = @MappingId;
+            """,
+            new
+            {
+                dormant.TenantId,
+                dormant.MappingId,
+                UpdatedUtc = now
+            });
+
+        Console.WriteLine($"[PilotContexts] Reactivado contexto local user-managed '{dormant.TenantKey}/{dormant.Domain}/{dormant.ConnectionName}'.");
     }
 
     Console.WriteLine(

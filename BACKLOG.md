@@ -2,6 +2,41 @@
 
 ## Estado del piloto
 
+## Semana de presentacion
+
+### Hecho hoy
+- Limpieza del repo principal para sacar artefactos de pruebas que ya no pertenecian a `VannaLight`.
+- Separacion del laboratorio de conversion documental a un proyecto independiente fuera de `VannaLight`.
+- Preparacion de preguntas sugeridas dentro del chat principal para facilitar demos guiadas por modo:
+  - `SQL`
+  - `PDF`
+  - `ML`
+- Correccion del bootstrap de contextos para demo:
+  - los seeds validos vuelven a activarse al arrancar
+  - los contextos `UserManaged` con conexion activa pueden recuperarse si quedaron dormidos en SQLite local
+- Reparacion de estado local para reactivar:
+  - `northwind-demo / northwind-sales / NorthwindDb`
+  - `zenit-mx / northwind-zenit / NorthwindDB`
+- Se agrego handoff operativo para la PC del trabajo en `HANDOFF_TRABAJO.md`.
+
+### Prioridad de esta semana
+- Ensayar y validar 5-10 preguntas de demo que respondan bien de forma consistente.
+- Confirmar ambiente de demo:
+  - contexto activo correcto
+  - conexiones correctas
+  - datos accesibles
+  - documentos indexados
+- Pulir el recorrido de presentacion:
+  - apertura
+  - consulta estrella
+  - cambio de contexto
+  - admin rapido
+  - exportacion
+- Preparar plan de contingencia si falla:
+  - consulta alternativa
+  - contexto alternativo
+  - captura o evidencia de respaldo
+
 ### Ya logrado
 - Onboarding/admin capaz de configurar y validar mas de una base de datos.
 - Separacion de contextos de consulta en runtime:

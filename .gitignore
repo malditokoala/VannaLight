@@ -245,6 +245,9 @@ vanna_*.db
 VannaLight.Api/Data/*.db
 VannaLight.Api/Data/*.db-*
 VannaLight.Api/Data/dpkeys/
+VannaLight.Api/Data/**
+!VannaLight.Api/Data/
+!VannaLight.Api/Data/.gitkeep
 VannaLight.Api/appsettings.Local.json
 VannaLight.Api/appsettings.*.local.json
 

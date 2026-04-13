@@ -421,3 +421,33 @@ Solicitud API
 | Vistas KPI configurables | ✅ Implementado |
 | Autenticación | ❌ Pendiente |
 | Tests | ❌ No existen |
+
+---
+
+## Actualizacion de almacenamiento local y secretos (abril 2026)
+
+La estrategia vigente del proyecto es:
+
+- `appsettings.json`: solo defaults seguros y compartidos.
+- `dotnet user-secrets`: `ConnectionStrings` reales por maquina en desarrollo.
+- `VannaLight.Api/appsettings.Local.json`: override local opcional, ignorado por git.
+- SQLite local y `dpkeys`: fuera del repo y fuera de OneDrive.
+
+### Ubicaciones recomendadas
+
+- `vanna_memory.db`: `%LOCALAPPDATA%\\VannaLight\\Data\\vanna_memory.db`
+- `vanna_runtime.db`: `%LOCALAPPDATA%\\VannaLight\\Data\\vanna_runtime.db`
+- `dpkeys`: `%LOCALAPPDATA%\\VannaLight\\Data\\dpkeys`
+
+### Regla operativa
+
+No compartir entre computadoras:
+
+- `vanna_memory.db`
+- `vanna_runtime.db`
+- `dpkeys`
+- `appsettings.Local.json` con secretos reales
+
+### Objetivo
+
+Evitar contaminacion entre PC de trabajo y PC de casa cuando el repo vive en git y/o en carpetas sincronizadas como OneDrive.

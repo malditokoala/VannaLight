@@ -920,6 +920,67 @@
             align-items: center
         }
 
+        .demo-strip {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 12px 14px;
+            border: 1px solid color-mix(in srgb, var(--a) 18%, var(--border));
+            border-radius: var(--radius);
+            background: linear-gradient(180deg, color-mix(in srgb, var(--a) 7%, var(--surface)), var(--surface));
+        }
+
+        .demo-strip-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .demo-strip-title {
+            font-family: var(--mono);
+            font-size: .6rem;
+            text-transform: uppercase;
+            letter-spacing: .12em;
+            color: var(--a);
+        }
+
+        .demo-strip-subtitle {
+            color: var(--dim);
+            font-size: .76rem;
+        }
+
+        .demo-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .demo-chip {
+            border: 1px solid color-mix(in srgb, var(--a) 18%, var(--border2));
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--a) 8%, var(--panel));
+            color: var(--text);
+            padding: 8px 12px;
+            font-size: .75rem;
+            cursor: pointer;
+            transition: transform .15s ease, border-color .2s ease, background .2s ease, color .2s ease;
+        }
+
+        .demo-chip:hover {
+            transform: translateY(-1px);
+            border-color: color-mix(in srgb, var(--a) 42%, var(--border2));
+            background: color-mix(in srgb, var(--a) 14%, var(--panel));
+            color: #fff;
+        }
+
+        .demo-chip.is-secondary {
+            color: var(--dim);
+            background: transparent;
+            border-style: dashed;
+        }
+
         .inp-pill {
             padding: 0 14px;
             height: 54px;
@@ -1870,6 +1931,17 @@
                     </div>
                 </div>
             </div>
+
+            <section class="demo-strip" id="demoStrip">
+                <div class="demo-strip-head">
+                    <div>
+                        <div class="demo-strip-title">Preguntas sugeridas para demo</div>
+                        <div class="demo-strip-subtitle" id="demoStripSubtitle">Usa una pregunta lista o cárgala como base antes de presentarla.</div>
+                    </div>
+                    <button class="sql-toggle-btn" type="button" onclick="loadDemoPrompt(false)">CARGAR OTRA</button>
+                </div>
+                <div class="demo-actions" id="demoActions"></div>
+            </section>
 
             <div class="log-wrap">
                 <div class="log-bar"><span class="log-bar-label">Consola del sistema</span></div>

@@ -80,15 +80,16 @@ public class SqliteTenantDomainStore : ITenantDomainStore
               AND @IsDefault = 1;
 
             INSERT INTO TenantDomains
-                (TenantId, Domain, ConnectionName, SystemProfileKey, IsDefault, IsActive, CreatedUtc, UpdatedUtc)
+                (TenantId, Domain, ConnectionName, SystemProfileKey, IsDefault, IsActive, ManagementMode, CreatedUtc, UpdatedUtc)
             VALUES
-                (@TenantId, @Domain, @ConnectionName, @SystemProfileKey, @IsDefault, @IsActive, @CreatedUtc, @UpdatedUtc)
+                (@TenantId, @Domain, @ConnectionName, @SystemProfileKey, @IsDefault, @IsActive, @ManagementMode, @CreatedUtc, @UpdatedUtc)
             ON CONFLICT(TenantId, Domain)
             DO UPDATE SET
                 ConnectionName = excluded.ConnectionName,
                 SystemProfileKey = excluded.SystemProfileKey,
                 IsDefault = excluded.IsDefault,
                 IsActive = excluded.IsActive,
+                ManagementMode = excluded.ManagementMode,
                 UpdatedUtc = excluded.UpdatedUtc;
 
             SELECT Id

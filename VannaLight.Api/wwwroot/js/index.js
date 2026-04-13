@@ -7,6 +7,24 @@
             pred: { key: 'pred', modeVal: 2, label: 'ML', sub: 'predicción', title: 'MODO PREDICCIÓN — ML.NET', desc: 'Pronósticos de scrap a nivel turno', ph: '¿Cuál es el pronóstico de scrap para el cierre de este turno?', badge: 'PREDICCIÓN · ML', icon: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>' }
         };
 
+        const DEMO_PROMPTS = {
+            sql: [
+                '¿Qué prensa lleva más scrap en el turno actual?',
+                '¿Cuáles son los 5 números de parte con más scrap?',
+                'Muéstrame 5 registros de Orders.'
+            ],
+            docs: [
+                '¿Cuál es el empaque del N/P 421084-0006?',
+                '¿Qué indica la instrucción para cambio de molde?',
+                'Resume el procedimiento principal del documento activo.'
+            ],
+            pred: [
+                '¿Cuál es el pronóstico de scrap para el cierre de este turno?',
+                '¿Cómo viene la tendencia de scrap para mañana?',
+                '¿Qué valor proyectado de scrap tenemos para el siguiente turno?'
+            ]
+        };
+
         let currentMode = 'sql';
         let lastRequestMode = 'sql';
         let myConnectionId = '';
@@ -48,9 +66,60 @@
             document.getElementById('txtQuestion').placeholder = c.ph;
             logLine(`Modo → ${c.title}`, 'sys');
             renderQueryHistory();
+            renderDemoPrompts();
             hideResult();
             resetFeedbackPanel();
             updateRuntimeContextState();
+        }
+
+        function getDemoPromptsForCurrentMode() {
+            return DEMO_PROMPTS[currentMode] || [];
+        }
+
+        function renderDemoPrompts() {
+            const actions = document.getElementById('demoActions');
+            const subtitle = document.getElementById('demoStripSubtitle');
+            if (!actions || !subtitle) return;
+
+            const prompts = getDemoPromptsForCurrentMode();
+            subtitle.textContent = `Sugerencias listas para ${MODES[currentMode]?.label || currentMode}. Puedes cargarlas o ejecutarlas directo.`;
+            actions.innerHTML = '';
+
+            prompts.forEach((prompt, index) => {
+                const fillBtn = document.createElement('button');
+                fillBtn.type = 'button';
+                fillBtn.className = 'demo-chip';
+                fillBtn.textContent = prompt;
+                fillBtn.onclick = () => loadDemoPrompt(true, index);
+                actions.appendChild(fillBtn);
+            });
+
+            const runBtn = document.createElement('button');
+            runBtn.type = 'button';
+            runBtn.className = 'demo-chip is-secondary';
+            runBtn.textContent = 'Ejecutar sugerencia aleatoria';
+            runBtn.onclick = () => loadDemoPrompt(false);
+            actions.appendChild(runBtn);
+        }
+
+        function loadDemoPrompt(fillOnly = true, specificIndex = null) {
+            const prompts = getDemoPromptsForCurrentMode();
+            if (!prompts.length) return;
+
+            const questionBox = document.getElementById('txtQuestion');
+            if (!questionBox) return;
+
+            const selectedPrompt = Number.isInteger(specificIndex) && prompts[specificIndex]
+                ? prompts[specificIndex]
+                : prompts[Math.floor(Math.random() * prompts.length)];
+
+            questionBox.value = selectedPrompt;
+            questionBox.focus();
+            logLine(`Pregunta sugerida cargada para ${MODES[currentMode]?.label || currentMode}.`, 'sys');
+
+            if (!fillOnly) {
+                sendQuestion();
+            }
         }
 
         function getContextStorageKey(item) {
