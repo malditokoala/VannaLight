@@ -1,6 +1,8 @@
 ﻿using Dapper;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+using System.Diagnostics;
 using System.Text.Json;
 using VannaLight.Api.Hubs;
 using VannaLight.Core.Abstractions;
@@ -14,11 +16,13 @@ public class InferenceWorker(
     IServiceScopeFactory scopeFactory,
     IHubContext<AssistantHub> hubContext,
     ILogger<InferenceWorker> logger,
+    IConfiguration configuration,
     IOperationalConnectionResolver operationalConnectionResolver,
     SqliteOptions sqliteOptions,
     RuntimeDbOptions runtimeDbOptions) : BackgroundService
 {
     private const int SqlExecutionTimeoutSeconds = 8;
+    private readonly int _sqlGenerationTimeoutSeconds = Math.Max(30, configuration.GetValue<int?>("Timeouts:SqlGenerationSeconds") ?? 75);
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -176,19 +180,58 @@ public class InferenceWorker(
                 var sqlServerConnString = await operationalConnectionResolver.ResolveConnectionStringAsync(connectionName, ct);
 
                 var sqlUseCase = scope.ServiceProvider.GetRequiredService<AskUseCase>();
-                var sqlResult = await sqlUseCase.ExecuteAsync(
-                    question,
-                    memoryDbPath,
-                    runtimeDbPath,
-                    sqlServerConnString,
-                    new VannaLight.Core.Models.AskExecutionContext
+                AskResult sqlResult;
+                using (var sqlGenerationCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                {
+                    var sqlStopwatch = Stopwatch.StartNew();
+                    sqlGenerationCts.CancelAfter(TimeSpan.FromSeconds(_sqlGenerationTimeoutSeconds));
+
+                    try
                     {
-                        TenantKey = workItem.TenantKey,
-                        Domain = domain,
-                        ConnectionName = connectionName,
-                        SystemProfileKey = systemProfileKey
-                    },
-                    ct);
+                        sqlResult = await sqlUseCase.ExecuteAsync(
+                            question,
+                            memoryDbPath,
+                            runtimeDbPath,
+                            sqlServerConnString,
+                            new VannaLight.Core.Models.AskExecutionContext
+                            {
+                                TenantKey = workItem.TenantKey,
+                                Domain = domain,
+                                ConnectionName = connectionName,
+                                SystemProfileKey = systemProfileKey
+                            },
+                            sqlGenerationCts.Token);
+                        sqlStopwatch.Stop();
+                        logger.LogInformation(
+                            "[SqlPerf] Job={JobId} Domain={Domain} Connection={ConnectionName} Success={Success} FailureKind={FailureKind} SqlChars={SqlChars} ErrorChars={ErrorChars} TotalMs={TotalMs}",
+                            jobId,
+                            domain,
+                            connectionName,
+                            sqlResult.Success,
+                            sqlResult.FailureKind,
+                            sqlResult.Sql?.Length ?? 0,
+                            sqlResult.Error?.Length ?? 0,
+                            sqlStopwatch.ElapsedMilliseconds);
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested && sqlGenerationCts.IsCancellationRequested)
+                    {
+                        sqlStopwatch.Stop();
+                        logger.LogWarning(
+                            "[SqlPerf] Job={JobId} Domain={Domain} Connection={ConnectionName} TimedOut=true TimeoutSeconds={TimeoutSeconds} TotalMs={TotalMs}",
+                            jobId,
+                            domain,
+                            connectionName,
+                            _sqlGenerationTimeoutSeconds,
+                            sqlStopwatch.ElapsedMilliseconds);
+                        await HandleErrorAsync(
+                            jobId,
+                            connectionId,
+                            $"La generación SQL tardó más de {_sqlGenerationTimeoutSeconds} segundos y se canceló para no dejar la cola bloqueada.",
+                            jobStore,
+                            ct);
+                        continue;
+                    }
+                }
 
                 if (!sqlResult.Success)
                 {

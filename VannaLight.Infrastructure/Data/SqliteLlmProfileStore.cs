@@ -48,6 +48,7 @@ public class SqliteLlmProfileStore : ILlmProfileStore
     public async Task<bool> UpdateAsync(int id, int? gpuLayers, uint? contextSize, int? batchSize, int? uBatchSize, int? threads, CancellationToken ct = default)
     {
         using var conn = new SqliteConnection(_connString);
+        await conn.OpenAsync(ct);
         var sql = @"
             UPDATE LlmRuntimeProfile
             SET GpuLayerCount = COALESCE(@GpuLayers, GpuLayerCount),
@@ -58,7 +59,18 @@ public class SqliteLlmProfileStore : ILlmProfileStore
                 UpdatedUtc = DATETIME('now')
             WHERE Id = @Id";
 
-        var rows = await conn.ExecuteAsync(sql, new { id, GpuLayers = gpuLayers, ContextSize = contextSize, BatchSize = batchSize, UBatchSize = uBatchSize, Threads = threads });
+        var rows = await conn.ExecuteAsync(new CommandDefinition(
+            sql,
+            new
+            {
+                Id = id,
+                GpuLayers = gpuLayers,
+                ContextSize = contextSize,
+                BatchSize = batchSize,
+                UBatchSize = uBatchSize,
+                Threads = threads
+            },
+            cancellationToken: ct));
         return rows > 0;
     }
 }

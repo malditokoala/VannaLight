@@ -27,7 +27,8 @@ public enum PatternDimension
     Press = 1,
     Mold = 2,
     Failure = 3,
-    Department = 4
+    Department = 4,
+    PartNumber = 5
 }
 
 public sealed record PatternMatchResult

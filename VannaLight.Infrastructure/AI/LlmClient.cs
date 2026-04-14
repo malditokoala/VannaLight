@@ -1,7 +1,9 @@
 ﻿using LLama;
 using LLama.Common;
 using LLama.Sampling;
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,16 +17,37 @@ public class LlmClient : ILlmClient, IDisposable
     private readonly LLamaWeights _weights;
     private readonly LLamaContext _context;
     private readonly AppSettings _settings;
+    private readonly ILogger<LlmClient> _logger;
     private readonly SemaphoreSlim _inferenceLock = new(1, 1);
 
-    public LlmClient(AppSettings settings)
+    public LlmClient(
+        AppSettings settings,
+        ILlmRuntimeProfileProvider runtimeProfileProvider,
+        ILogger<LlmClient> logger)
     {
         _settings = settings;
+        _logger = logger;
+        var runtimeProfile = runtimeProfileProvider.GetActiveProfile();
+        var resolvedContextSize = runtimeProfile.ContextSize.HasValue && runtimeProfile.ContextSize.Value > 0
+            ? runtimeProfile.ContextSize.Value
+            : (uint)_settings.Llm.ContextSize;
+        var resolvedGpuLayers = runtimeProfile.GpuLayerCount.GetValueOrDefault(12);
+
         var parameters = new ModelParams(_settings.Llm.ModelPath)
         {
-            ContextSize = (uint)_settings.Llm.ContextSize,
-            GpuLayerCount = 12 // Ajustado para tu RTX 4060
+            ContextSize = resolvedContextSize,
+            GpuLayerCount = resolvedGpuLayers
         };
+
+        _logger.LogInformation(
+            "[LlmRuntime] Initializing local model '{ModelPath}' with profile '{ProfileName}' (ContextSize={ContextSize}, GpuLayers={GpuLayers}, Threads={Threads}, BatchSize={BatchSize}, UBatchSize={UBatchSize}).",
+            _settings.Llm.ModelPath,
+            string.IsNullOrWhiteSpace(runtimeProfile.Name) ? "Default" : runtimeProfile.Name,
+            parameters.ContextSize,
+            parameters.GpuLayerCount,
+            runtimeProfile.Threads,
+            runtimeProfile.BatchSize,
+            runtimeProfile.UBatchSize);
 
         _weights = LLamaWeights.LoadFromFile(parameters);
         _context = _weights.CreateContext(parameters);
@@ -48,6 +71,7 @@ public class LlmClient : ILlmClient, IDisposable
         await _inferenceLock.WaitAsync(ct);
         try
         {
+            var stopwatch = Stopwatch.StartNew();
             var executor = new StatelessExecutor(_weights, _context.Params);
 
             var inferenceParams = new InferenceParams
@@ -70,6 +94,14 @@ public class LlmClient : ILlmClient, IDisposable
             {
                 sb.Append(text);
             }
+
+            stopwatch.Stop();
+            _logger.LogInformation(
+                "[LlmPerf] PromptChars={PromptChars} MaxTokens={MaxTokens} OutputChars={OutputChars} TotalMs={TotalMs}",
+                prompt?.Length ?? 0,
+                inferenceParams.MaxTokens,
+                sb.Length,
+                stopwatch.ElapsedMilliseconds);
 
             return sb.ToString().Trim();
         }

@@ -26,7 +26,7 @@ public sealed class PatternMatcherService : IPatternMatcherService
     {
         var evaluation = await EvaluateBestPatternAsync(question, domain, ct);
         if (evaluation is null)
-            return new PatternMatchResult();
+            return TryBuiltInMatch(question, domain);
 
         return BuildResult(evaluation);
     }
@@ -34,7 +34,13 @@ public sealed class PatternMatcherService : IPatternMatcherService
     public async Task<string?> InferIntentNameAsync(string question, string? domain, CancellationToken ct = default)
     {
         var evaluation = await EvaluateBestPatternAsync(question, domain, ct);
-        if (evaluation is null || !evaluation.HasIntentEvidence)
+        if (evaluation is null)
+        {
+            var builtIn = TryBuiltInMatch(question, domain);
+            return string.IsNullOrWhiteSpace(builtIn.IntentName) ? null : builtIn.IntentName;
+        }
+
+        if (!evaluation.HasIntentEvidence)
             return null;
 
         return evaluation.Pattern.IntentName;
@@ -284,6 +290,7 @@ public sealed class PatternMatcherService : IPatternMatcherService
             "mold" or "molde" => PatternDimension.Mold,
             "failure" or "falla" => PatternDimension.Failure,
             "department" or "departamento" => PatternDimension.Department,
+            "partnumber" or "numerodeparte" or "numerosdeparte" => PatternDimension.PartNumber,
             _ => PatternDimension.Unknown
         };
     }
@@ -325,6 +332,89 @@ public sealed class PatternMatcherService : IPatternMatcherService
     {
         var normalized = NormalizeText(value);
         return normalized.Replace(" ", string.Empty, StringComparison.Ordinal);
+    }
+
+    private static PatternMatchResult TryBuiltInMatch(string question, string? domain)
+    {
+        var normalizedDomain = NormalizeKey(domain);
+        if (string.IsNullOrWhiteSpace(normalizedDomain))
+            return new PatternMatchResult();
+
+        var normalizedQuestion = NormalizeText(question);
+        if (string.IsNullOrWhiteSpace(normalizedQuestion))
+            return new PatternMatchResult();
+
+        var isScrapQuestion = normalizedQuestion.Contains("scrap", StringComparison.Ordinal);
+        if (!isScrapQuestion)
+            return new PatternMatchResult();
+
+        var topN = ExtractTopN(question);
+        var timeScope = ResolveBuiltInTimeScope(normalizedQuestion);
+
+        if (ContainsAny(normalizedQuestion, "numero de parte", "numeros de parte", "part number", "part numbers"))
+        {
+            return new PatternMatchResult
+            {
+                IsMatch = true,
+                PatternKey = "top_scrap_by_partnumber",
+                IntentName = "top_scrap_by_partnumber",
+                TopN = topN > 0 ? topN : 5,
+                Metric = PatternMetric.ScrapQty,
+                Dimension = PatternDimension.PartNumber,
+                TimeScope = timeScope
+            };
+        }
+
+        if (ContainsAny(normalizedQuestion, "prensa", "prensas", "press"))
+        {
+            return new PatternMatchResult
+            {
+                IsMatch = true,
+                PatternKey = "top_scrap_by_press",
+                IntentName = "top_scrap_by_press",
+                TopN = topN > 0 ? topN : 5,
+                Metric = PatternMetric.ScrapQty,
+                Dimension = PatternDimension.Press,
+                TimeScope = timeScope
+            };
+        }
+
+        return new PatternMatchResult();
+    }
+
+    private static PatternTimeScope ResolveBuiltInTimeScope(string normalizedQuestion)
+    {
+        if (ContainsAny(normalizedQuestion, "turno actual", "del turno", "turno en curso"))
+            return PatternTimeScope.CurrentShift;
+
+        if (ContainsAny(normalizedQuestion, "hoy", "dia de hoy", "today"))
+            return PatternTimeScope.Today;
+
+        if (ContainsAny(normalizedQuestion, "ayer", "yesterday"))
+            return PatternTimeScope.Yesterday;
+
+        if (ContainsAny(normalizedQuestion, "este mes", "mes actual", "del mes", "current month"))
+            return PatternTimeScope.CurrentMonth;
+
+        if (ContainsAny(normalizedQuestion, "esta semana", "semana actual", "de la semana", "current week"))
+            return PatternTimeScope.CurrentWeek;
+
+        return PatternTimeScope.CurrentShift;
+    }
+
+    private static bool ContainsAny(string normalizedQuestion, params string[] phrases)
+    {
+        foreach (var phrase in phrases)
+        {
+            var normalizedPhrase = NormalizeText(phrase);
+            if (!string.IsNullOrWhiteSpace(normalizedPhrase) &&
+                normalizedQuestion.Contains(normalizedPhrase, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private sealed record PatternEvaluation(

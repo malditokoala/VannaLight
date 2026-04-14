@@ -26,6 +26,7 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
         return patternKey switch
         {
             "top_scrap_by_press" => true,
+            "top_scrap_by_partnumber" => true,
             "total_production" => true,
             "top_downtime_by_failure" => true,
             "top_downtime_by_press" => true,
@@ -50,6 +51,7 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
         return match.PatternKey switch
         {
             "top_scrap_by_press" => BuildTopScrapByPress(match),
+            "top_scrap_by_partnumber" => BuildTopScrapByPartNumber(match),
             "total_production" => BuildTotalProduction(match),
             "top_downtime_by_failure" => BuildTopDowntimeByFailure(match),
             "top_downtime_by_press" => BuildTopDowntimeByPress(match),
@@ -101,6 +103,21 @@ FROM {_kpiViews.ScrapViewQualifiedName} s
 WHERE {BuildTimeFilter("s", match.TimeScope, includeIsOpenForDowntime: false)}
 GROUP BY s.PressId, s.PressName
 ORDER BY TotalScrapQty DESC, s.PressName;".Trim();
+    }
+
+    private string BuildTopScrapByPartNumber(PatternMatchResult match)
+    {
+        var top = match.TopN > 0 ? match.TopN : 5;
+
+        return $@"
+SELECT TOP ({top})
+    LTRIM(RTRIM(s.PartNumber)) AS PartNumber,
+    SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty
+FROM {_kpiViews.ScrapViewQualifiedName} s
+WHERE {BuildTimeFilter("s", match.TimeScope, includeIsOpenForDowntime: false)}
+  AND NULLIF(LTRIM(RTRIM(s.PartNumber)), '') IS NOT NULL
+GROUP BY LTRIM(RTRIM(s.PartNumber))
+ORDER BY TotalScrapQty DESC, PartNumber;".Trim();
     }
 
     private string BuildTotalProduction(PatternMatchResult match)

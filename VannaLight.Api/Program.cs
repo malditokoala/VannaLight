@@ -205,7 +205,10 @@ await EnsureSeededConnectionProfilesAndContextMappingsAsync(
     environmentName,
     defaultSystemProfile);
 await EnsureRuntimeDatabaseSetupAsync(app.Services);
+await EnsureCorePilotQueryPatternSeedsAsync(app.Services, builder.Configuration);
 await EnsureQueryPatternTimeScopeSeedsAsync(app.Services);
+await EnsureCorePilotSemanticHintSeedsAsync(app.Services, builder.Configuration, sqlitePath);
+await ReportPilotContextMemoryHealthAsync(sqlitePath, builder.Configuration);
 
 if (app.Environment.IsDevelopment())
 {
@@ -1661,6 +1664,305 @@ static async Task EnsureQueryPatternTimeScopeSeedsAsync(IServiceProvider service
         }
     }
 }
+
+static async Task EnsureCorePilotQueryPatternSeedsAsync(IServiceProvider services, IConfiguration configuration)
+{
+    using var scope = services.CreateScope();
+
+    var queryPatternStore = scope.ServiceProvider.GetRequiredService<IQueryPatternStore>();
+    var queryPatternTermStore = scope.ServiceProvider.GetRequiredService<IQueryPatternTermStore>();
+
+    var configuredSeeds =
+        configuration.GetSection("PilotContexts:OverrideMappings").Get<List<PilotContextSeed>>() ??
+        configuration.GetSection("PilotContexts:Mappings").Get<List<PilotContextSeed>>() ??
+        [];
+
+    if (configuredSeeds.Count == 0)
+    {
+        configuredSeeds =
+        [
+            new PilotContextSeed("default", "Default", "Workspace principal del piloto ERP.", "erp-kpi-pilot", "ErpDb", true),
+            new PilotContextSeed("northwind-demo", "NorthWind Demo", "Workspace demo Northwind para validación local.", "northwind-sales", "NorthwindDb", true)
+        ];
+    }
+
+    var erpDomains = configuredSeeds
+        .Where(x => !string.IsNullOrWhiteSpace(x.Domain) &&
+                    x.Domain.Contains("erp", StringComparison.OrdinalIgnoreCase))
+        .Select(x => x.Domain.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    if (erpDomains.Count == 0)
+        return;
+
+    foreach (var domain in erpDomains)
+    {
+        var topScrapByPressId = await queryPatternStore.UpsertAsync(
+            new QueryPattern
+            {
+                Domain = domain,
+                PatternKey = "top_scrap_by_press",
+                IntentName = "top_scrap_by_press",
+                Description = "Top N de prensas con mayor scrap para preguntas demo del piloto ERP.",
+                SqlTemplate = "{SqlBuilderFallback}",
+                DefaultTopN = 5,
+                MetricKey = "scrapqty",
+                DimensionKey = "press",
+                DefaultTimeScopeKey = "current_shift",
+                Priority = 25,
+                IsActive = true
+            },
+            CancellationToken.None);
+
+        var topScrapByPartNumberId = await queryPatternStore.UpsertAsync(
+            new QueryPattern
+            {
+                Domain = domain,
+                PatternKey = "top_scrap_by_partnumber",
+                IntentName = "top_scrap_by_partnumber",
+                Description = "Top N de números de parte con mayor scrap para preguntas demo del piloto ERP.",
+                SqlTemplate = "{SqlBuilderFallback}",
+                DefaultTopN = 5,
+                MetricKey = "scrapqty",
+                DimensionKey = "partnumber",
+                DefaultTimeScopeKey = "today",
+                Priority = 20,
+                IsActive = true
+            },
+            CancellationToken.None);
+
+        var topScrapByPressTerms = new (string Term, string Group, bool Required)[]
+        {
+            ("scrap", "metric_scrap", true),
+            ("prensa", "dimension_press", true),
+            ("prensas", "dimension_press", true),
+            ("press", "dimension_press", true),
+            ("mas", "ranking_top", false),
+            ("con mas", "ranking_top", false),
+            ("top", "ranking_top", false)
+        };
+
+        foreach (var term in topScrapByPressTerms)
+        {
+            await queryPatternTermStore.UpsertAsync(
+                new QueryPatternTerm
+                {
+                    PatternId = topScrapByPressId,
+                    Term = term.Term,
+                    TermGroup = term.Group,
+                    MatchMode = "contains",
+                    IsRequired = term.Required,
+                    IsActive = true
+                },
+                CancellationToken.None);
+        }
+
+        var topScrapByPartTerms = new (string Term, string Group, bool Required)[]
+        {
+            ("scrap", "metric_scrap", true),
+            ("numero de parte", "dimension_partnumber", true),
+            ("numeros de parte", "dimension_partnumber", true),
+            ("número de parte", "dimension_partnumber", true),
+            ("números de parte", "dimension_partnumber", true),
+            ("part number", "dimension_partnumber", true),
+            ("part numbers", "dimension_partnumber", true),
+            ("mas", "ranking_top", false),
+            ("con mas", "ranking_top", false),
+            ("top", "ranking_top", false)
+        };
+
+        foreach (var term in topScrapByPartTerms)
+        {
+            await queryPatternTermStore.UpsertAsync(
+                new QueryPatternTerm
+                {
+                    PatternId = topScrapByPartNumberId,
+                    Term = term.Term,
+                    TermGroup = term.Group,
+                    MatchMode = "contains",
+                    IsRequired = term.Required,
+                    IsActive = true
+                },
+                CancellationToken.None);
+        }
+    }
+}
+
+static async Task EnsureCorePilotSemanticHintSeedsAsync(IServiceProvider services, IConfiguration configuration, string sqlitePath)
+{
+    using var scope = services.CreateScope();
+
+    var semanticHintStore = scope.ServiceProvider.GetRequiredService<ISemanticHintStore>();
+
+    var configuredSeeds =
+        configuration.GetSection("PilotContexts:OverrideMappings").Get<List<PilotContextSeed>>() ??
+        configuration.GetSection("PilotContexts:Mappings").Get<List<PilotContextSeed>>() ??
+        [];
+
+    if (configuredSeeds.Count == 0)
+    {
+        configuredSeeds =
+        [
+            new PilotContextSeed("default", "Default", "Workspace principal del piloto ERP.", "erp-kpi-pilot", "ErpDb", true),
+            new PilotContextSeed("northwind-demo", "NorthWind Demo", "Workspace demo Northwind para validaciÃ³n local.", "northwind-sales", "NorthwindDb", true)
+        ];
+    }
+
+    var erpDomains = configuredSeeds
+        .Where(x => !string.IsNullOrWhiteSpace(x.Domain) &&
+                    x.Domain.Contains("erp", StringComparison.OrdinalIgnoreCase))
+        .Select(x => x.Domain.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    if (erpDomains.Count == 0)
+        return;
+
+    foreach (var domain in erpDomains)
+    {
+        var seeds = new[]
+        {
+            new SemanticHint
+            {
+                Domain = domain,
+                HintKey = "scrap_view_metric_scrapqty",
+                HintType = "metric",
+                DisplayName = "ScrapQty",
+                ObjectName = "dbo.vw_KpiScrap_v1",
+                ColumnName = "ScrapQty",
+                HintText = "Para preguntas de scrap en dbo.vw_KpiScrap_v1 usa la columna ScrapQty como mÃ©trica principal. No uses Qty ni ScrapQuantity.",
+                Priority = 5,
+                IsActive = true
+            },
+            new SemanticHint
+            {
+                Domain = domain,
+                HintKey = "scrap_view_dimension_partnumber",
+                HintType = "dimension",
+                DisplayName = "PartNumber",
+                ObjectName = "dbo.vw_KpiScrap_v1",
+                ColumnName = "PartNumber",
+                HintText = "Para preguntas de scrap por nÃºmero de parte en dbo.vw_KpiScrap_v1 agrupa por PartNumber.",
+                Priority = 6,
+                IsActive = true
+            },
+            new SemanticHint
+            {
+                Domain = domain,
+                HintKey = "scrap_view_time_operationdate",
+                HintType = "time",
+                DisplayName = "OperationDate",
+                ObjectName = "dbo.vw_KpiScrap_v1",
+                ColumnName = "OperationDate",
+                HintText = "La fecha operativa de dbo.vw_KpiScrap_v1 es OperationDate. Para 'hoy' usa CAST(OperationDate AS date) = CAST(GETDATE() AS date).",
+                Priority = 7,
+                IsActive = true
+            },
+            new SemanticHint
+            {
+                Domain = domain,
+                HintKey = "scrap_view_shift_shiftid",
+                HintType = "time",
+                DisplayName = "ShiftId",
+                ObjectName = "dbo.vw_KpiScrap_v1",
+                ColumnName = "ShiftId",
+                HintText = "Cuando el usuario pregunte por 'turno actual' o 'del turno' en dbo.vw_KpiScrap_v1, filtra por el ShiftId mÃ¡s reciente del dÃ­a.",
+                Priority = 8,
+                IsActive = true
+            }
+        };
+
+        foreach (var seed in seeds)
+        {
+            await semanticHintStore.UpsertAsync(sqlitePath, seed, CancellationToken.None);
+        }
+    }
+}
+
+static async Task ReportPilotContextMemoryHealthAsync(string sqlitePath, IConfiguration configuration)
+{
+    using var connection = new SqliteConnection($"Data Source={sqlitePath};");
+    await connection.OpenAsync();
+
+    var configuredSeeds =
+        configuration.GetSection("PilotContexts:OverrideMappings").Get<List<PilotContextSeed>>() ??
+        configuration.GetSection("PilotContexts:Mappings").Get<List<PilotContextSeed>>() ??
+        [];
+
+    if (configuredSeeds.Count == 0)
+    {
+        configuredSeeds =
+        [
+            new PilotContextSeed("default", "Default", "Workspace principal del piloto ERP.", "erp-kpi-pilot", "ErpDb", true),
+            new PilotContextSeed("northwind-demo", "NorthWind Demo", "Workspace demo Northwind para validación local.", "northwind-sales", "NorthwindDb", true)
+        ];
+    }
+
+    var domains = configuredSeeds
+        .Where(x => !string.IsNullOrWhiteSpace(x.Domain))
+        .Select(x => x.Domain.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    if (domains.Count == 0)
+        return;
+
+    async Task<bool> TableHasColumnAsync(string tableName, string columnName)
+    {
+        var sql = $"SELECT name FROM pragma_table_info('{tableName}') WHERE name = @ColumnName LIMIT 1;";
+        var found = await connection.ExecuteScalarAsync<string?>(sql, new { ColumnName = columnName });
+        return !string.IsNullOrWhiteSpace(found);
+    }
+
+    async Task<long?> CountByDomainAsync(string tableName, string domain, bool requireActive = false)
+    {
+        if (!await TableHasColumnAsync(tableName, "Domain"))
+            return null;
+
+        var hasIsActive = requireActive && await TableHasColumnAsync(tableName, "IsActive");
+        var sql = hasIsActive
+            ? $"SELECT COUNT(1) FROM {tableName} WHERE Domain = @Domain AND IsActive = 1;"
+            : $"SELECT COUNT(1) FROM {tableName} WHERE Domain = @Domain;";
+
+        return await connection.ExecuteScalarAsync<long>(sql, new { Domain = domain });
+    }
+
+    foreach (var domain in domains)
+    {
+        var allowedObjectsCount = await CountByDomainAsync("AllowedObjects", domain, requireActive: true);
+        var schemaDocsCount = await CountByDomainAsync("SchemaDocs", domain);
+        var semanticHintsCount = await CountByDomainAsync("SemanticHints", domain, requireActive: true);
+        var businessRulesCount = await CountByDomainAsync("BusinessRules", domain, requireActive: true);
+        var queryPatternsCount = await CountByDomainAsync("QueryPatterns", domain, requireActive: true);
+        var trainingExamplesCount = await CountByDomainAsync("TrainingExamples", domain);
+
+        Console.WriteLine(
+            $"[PilotMemory] {domain} => Allowed={FormatHealthCount(allowedObjectsCount)}, SchemaDocs={FormatHealthCount(schemaDocsCount)}, Hints={FormatHealthCount(semanticHintsCount)}, Rules={FormatHealthCount(businessRulesCount)}, Patterns={FormatHealthCount(queryPatternsCount)}, Examples={FormatHealthCount(trainingExamplesCount)}");
+
+        if (allowedObjectsCount is null)
+        {
+            Console.WriteLine(
+                $"[PilotMemory][WARN] El dominio '{domain}' usa una tabla legacy sin columna Domain en AllowedObjects. No se pudo validar salud completa de memoria para este ambiente.");
+            continue;
+        }
+
+        if (allowedObjectsCount == 0)
+        {
+            Console.WriteLine(
+                $"[PilotMemory][WARN] El dominio '{domain}' está activo pero no tiene AllowedObjects. El carril SQL fallará hasta re-sembrar onboarding o restaurar la memoria local de esta máquina.");
+        }
+
+        if (allowedObjectsCount > 0 && (schemaDocsCount ?? 0) == 0 && (semanticHintsCount ?? 0) == 0)
+        {
+            Console.WriteLine(
+                $"[PilotMemory][WARN] El dominio '{domain}' tiene AllowedObjects pero no tiene SchemaDocs ni SemanticHints. SQL puede funcionar, pero con peor calidad hasta inicializar el dominio.");
+        }
+    }
+}
+
+static string FormatHealthCount(long? value) => value?.ToString() ?? "legacy-schema";
 
 
 

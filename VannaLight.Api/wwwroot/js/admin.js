@@ -3274,7 +3274,8 @@ function getReviewPriority(job) {
 
 function getCreatedTime(job) {
     const raw = job.createdUtc || job.CreatedUtc;
-    const stamp = raw ? Date.parse(raw) : NaN;
+    const parsed = parseAdminDate(raw);
+    const stamp = parsed ? parsed.getTime() : NaN;
     return Number.isFinite(stamp) ? stamp : 0;
 }
 
@@ -3337,8 +3338,9 @@ function renderHistory() {
         const feedback = normalizeUserFeedback(job.userFeedback || job.UserFeedback);
         const needsAttention = feedback === 'down';
 
-        const time = created
-            ? new Date(created).toLocaleTimeString('es-MX', { hour12: false, hour: '2-digit', minute: '2-digit' })
+        const parsedTime = parseAdminDate(created);
+        const time = parsedTime
+            ? parsedTime.toLocaleTimeString('es-MX', { hour12: false, hour: '2-digit', minute: '2-digit' })
             : '--:--';
 
         return `
@@ -3379,8 +3381,9 @@ function loadEditor(i, options = {}) {
     const vsLow = normalizeVerificationClass(vs);
     const feedback = normalizeUserFeedback(job.userFeedback || job.UserFeedback);
     const feedbackUtcRaw = job.feedbackUtc || job.FeedbackUtc;
-    const feedbackUtc = feedbackUtcRaw
-        ? new Date(feedbackUtcRaw).toLocaleString('es-MX', { hour12: false })
+    const feedbackUtcDate = parseAdminDate(feedbackUtcRaw);
+    const feedbackUtc = feedbackUtcDate
+        ? feedbackUtcDate.toLocaleString('es-MX', { hour12: false })
         : '';
 
     const badge = document.getElementById('ragVerifyBadge');
@@ -3400,8 +3403,9 @@ function loadEditor(i, options = {}) {
     }
 
     const createdRaw = job.createdUtc || job.CreatedUtc;
-    const created = createdRaw
-        ? new Date(createdRaw).toLocaleString('es-MX', { hour12: false })
+    const createdDate = parseAdminDate(createdRaw);
+    const created = createdDate
+        ? createdDate.toLocaleString('es-MX', { hour12: false })
         : '';
 
     const opClass = status === 'Completed' ? 'status-ok' : 'status-err';
@@ -5194,10 +5198,26 @@ function ensureDocumentsDomainPrefill() {
     refreshAdminDomainSelectors();
 }
 
+function parseAdminDate(value) {
+    if (!value) return null;
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+    const raw = String(value).trim();
+    if (!raw) return null;
+
+    const normalized = /z$|[+-]\d{2}:\d{2}$/i.test(raw)
+        ? raw
+        : raw.includes('T')
+            ? `${raw}Z`
+            : `${raw.replace(' ', 'T')}Z`;
+
+    const dt = new Date(normalized);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
 function formatAdminDateTime(value) {
     if (!value) return '';
-    const dt = new Date(value);
-    if (Number.isNaN(dt.getTime())) return String(value);
+    const dt = parseAdminDate(value);
+    if (!dt) return String(value);
     return dt.toLocaleString('es-MX', {
         year: 'numeric',
         month: 'short',

@@ -13,6 +13,7 @@ namespace VannaLight.Infrastructure.Data;
 public class SqliteJobStore : IJobStore
 {
     private readonly string _connString;
+    private const string UtcNowSql = "STRFTIME('%Y-%m-%dT%H:%M:%fZ','now')";
 
     public SqliteJobStore(RuntimeDbOptions options)
     {
@@ -63,7 +64,7 @@ public class SqliteJobStore : IJobStore
             @"INSERT INTO QuestionJobs
               (JobId, UserId, Role, TenantKey, Domain, ConnectionName, Question, Status, Mode, CreatedUtc, UpdatedUtc)
               VALUES
-              (@Id, @UserId, @Role, @TenantKey, @Domain, @ConnectionName, @Question, 'Queued', @Mode, DATETIME('now'), DATETIME('now'))",
+              (@Id, @UserId, @Role, @TenantKey, @Domain, @ConnectionName, @Question, 'Queued', @Mode, " + UtcNowSql + ", " + UtcNowSql + ")",
             new
             {
                 Id = jobId.ToString(),
@@ -86,7 +87,7 @@ public class SqliteJobStore : IJobStore
         using var conn = new SqliteConnection(_connString);
 
         var command = new CommandDefinition(
-            "UPDATE QuestionJobs SET Status = @Status, UpdatedUtc = DATETIME('now') WHERE JobId = @Id",
+            "UPDATE QuestionJobs SET Status = @Status, UpdatedUtc = " + UtcNowSql + " WHERE JobId = @Id",
             new
             {
                 Status = status,
@@ -102,7 +103,7 @@ public class SqliteJobStore : IJobStore
         using var conn = new SqliteConnection(_connString);
 
         var command = new CommandDefinition(
-            "UPDATE QuestionJobs SET Status = 'Completed', ResultJson = @Result, UpdatedUtc = DATETIME('now') WHERE JobId = @Id",
+            "UPDATE QuestionJobs SET Status = 'Completed', ResultJson = @Result, UpdatedUtc = " + UtcNowSql + " WHERE JobId = @Id",
             new
             {
                 Result = resultJson,
@@ -118,7 +119,7 @@ public class SqliteJobStore : IJobStore
         using var conn = new SqliteConnection(_connString);
 
         var command = new CommandDefinition(
-            "UPDATE QuestionJobs SET Status = @Status, ErrorText = @Error, UpdatedUtc = DATETIME('now') WHERE JobId = @Id",
+            "UPDATE QuestionJobs SET Status = @Status, ErrorText = @Error, UpdatedUtc = " + UtcNowSql + " WHERE JobId = @Id",
             new
             {
                 Status = status,
@@ -146,7 +147,7 @@ public class SqliteJobStore : IJobStore
                   SqlText = @Sql,
                   ResultJson = @Json,
                   ErrorText = @Error,
-                  UpdatedUtc = DATETIME('now')
+                  UpdatedUtc = " + UtcNowSql + @"
               WHERE JobId = @Id",
             new
             {
@@ -233,7 +234,7 @@ public class SqliteJobStore : IJobStore
             @"UPDATE QuestionJobs
               SET VerificationStatus = @Status,
                   FeedbackComment = @Comment,
-                  UpdatedUtc = DATETIME('now')
+                  UpdatedUtc = " + UtcNowSql + @"
               WHERE JobId = @Id",
             new
             {
@@ -254,8 +255,8 @@ public class SqliteJobStore : IJobStore
         var command = new CommandDefinition(
             @"UPDATE QuestionJobs
               SET UserFeedback = @UserFeedback,
-                  FeedbackUtc = DATETIME('now'),
-                  UpdatedUtc = DATETIME('now')
+                  FeedbackUtc = " + UtcNowSql + @",
+                  UpdatedUtc = " + UtcNowSql + @"
               WHERE JobId = @Id",
             new
             {
@@ -310,7 +311,7 @@ public class SqliteJobStore : IJobStore
               TrainingExampleSaved = 1,
               VerificationStatus = @VerificationStatus,
               FeedbackComment = @Comment,
-              UpdatedUtc = DATETIME('now')
+              UpdatedUtc = " + UtcNowSql + @"
           WHERE JobId = @Id",
             new
             {

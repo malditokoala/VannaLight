@@ -5,6 +5,84 @@
 ## Semana de presentacion
 
 ### Hecho hoy
+- Recuperacion del ambiente de trabajo segun `HANDOFF_TRABAJO.md`:
+  - `appsettings.Local.json` vuelve a apuntar a `%LOCALAPPDATA%\\VannaLight\\Data`
+  - reconstruccion minima de memoria operativa por onboarding local para:
+    - `erp-kpi-pilot`
+    - `northwind-sales`
+- Chequeo defensivo de memoria al arrancar:
+  - el startup ahora reporta por dominio:
+    - `AllowedObjects`
+    - `SchemaDocs`
+    - `SemanticHints`
+    - `BusinessRules`
+    - `QueryPatterns`
+    - `TrainingExamples`
+  - si un dominio activo no tiene `AllowedObjects`, deja warning claro en logs
+  - el health check ya tolera esquemas SQLite legacy sin columna `Domain` y no rompe el arranque
+- Timeout explicito en el worker SQL para evitar que un job atorado deje la cola en:
+  - `Analyzing`
+  - `Queued`
+  - timeout ahora configurable por `Timeouts:SqlGenerationSeconds`
+  - default subido a `75s` para dar mas margen al LLM local
+- Diagnostico y correccion inicial del runtime LLM para SQL:
+  - se confirmo que el cliente real del LLM estaba ignorando el perfil de hardware activo
+  - `LlmClient` ahora toma `ContextSize` y `GpuLayerCount` del `LlmRuntimeProfile` activo
+  - se agrego logging `LlmPerf` para medir:
+    - `PromptChars`
+    - `MaxTokens`
+    - `OutputChars`
+    - `TotalMs`
+  - se deja como hipotesis fuerte que el carril SQL de `erp-kpi-pilot` esta operando en frio:
+    - sin `TrainingExamples` verificados reutilizables
+    - y con poca o nula ayuda de `QueryPatterns`
+- Correccion del carril SQL demo para preguntas de scrap por numero de parte:
+  - se agrego soporte explicito a `PatternDimension.PartNumber`
+  - `PatternMatcherService` ya reconoce:
+    - `numero de parte`
+    - `numeros de parte`
+    - `part number`
+    - `part numbers`
+  - `TemplateSqlBuilder` ahora construye SQL directo para `top_scrap_by_partnumber`
+  - el startup deja sembrados patterns demo minimos para dominios ERP:
+    - `top_scrap_by_press`
+    - `top_scrap_by_partnumber`
+  - objetivo:
+    - sacar del LLM las preguntas demo mas frecuentes
+    - evitar columnas inventadas como `ScrapQuantity`
+    - bajar el tiempo total del carril SQL en `erp-kpi-pilot`
+- Refuerzo del grounding del prompt SQL para scrap por numero de parte:
+  - se confirmo que el prompt real estaba entrando con:
+    - `PISTAS SEMANTICAS DEL DOMINIO`
+    - `OBJETOS SQL PERMITIDOS`
+  - pero sin suficiente grounding de columnas para `dbo.vw_KpiScrap_v1`
+  - `LocalRetriever` ahora fuerza la inclusion de `SchemaDocs` de `vw_KpiScrap_v1` para preguntas con:
+    - `scrap`
+    - `numero(s) de parte`
+    - `part number(s)`
+    - `turno`
+  - el startup ahora siembra `SemanticHints` de columna para dominios ERP:
+    - `PartNumber`
+    - `ScrapQty`
+    - `OperationDate`
+    - `ShiftId`
+  - objetivo:
+    - evitar invenciones como `Qty` o `ScrapQuantity`
+    - hacer que el LLM vea la metrica y dimensiones reales de la vista KPI
+    - mejorar el self-correction con nombres validos del esquema
+  - aprendizaje registrado:
+    - al cambiar de fuente de memoria local (`%LOCALAPPDATA%`) el prompt puede quedarse con:
+      - hints demasiado genericos
+      - sin `SchemaDocs` relevantes
+      - sin `EJEMPLOS RELEVANTES`
+    - eso no rompe la estructura del prompt, pero si deja al LLM sin grounding suficiente y empieza a inventar columnas plausibles
+    - este incidente confirma que para `erp-kpi-pilot` no basta con sembrar entidades; hay que sembrar tambien columnas criticas del KPI
+- Correccion del guardado de perfiles Hardware LLM:
+  - `SqliteLlmProfileStore.UpdateAsync(...)` ahora abre conexion explicita
+  - envia parametros con nombres exactos (`Id`, `GpuLayers`, `ContextSize`, `BatchSize`, `UBatchSize`, `Threads`)
+  - usa `CommandDefinition` con `CancellationToken`
+  - evita el fallo de SQLite:
+    - `Must add values for the following parameters...`
 - Limpieza del repo principal para sacar artefactos de pruebas que ya no pertenecian a `VannaLight`.
 - Separacion del laboratorio de conversion documental a un proyecto independiente fuera de `VannaLight`.
 - Preparacion de preguntas sugeridas dentro del chat principal para facilitar demos guiadas por modo:
@@ -171,6 +249,7 @@ Necesidad: critica
   - en progreso
   - ya existe override local por maquina con `appsettings.Local.json`
   - ya se identifico que `vanna_memory.db` y `vanna_runtime.db` no deben tratarse como fuente compartida entre PCs
+  - el startup ya deja warnings claros si un dominio activo arranca sin memoria operativa
 - Documentar:
   - persistencia de `vanna_memory.db`
   - persistencia de `vanna_runtime.db`
@@ -178,6 +257,20 @@ Necesidad: critica
   - conexiones requeridas por ambiente
   - pasos de arranque
   - recuperacion basica ante cambio de connection string o contexto
+
+#### 4.1. Blindar la transicion a `%LOCALAPPDATA%` con recovery guiado
+Impacto: alto  
+Necesidad: alta
+
+- Agregar un flujo de recuperacion mas guiado cuando:
+  - hay contextos activos
+  - pero la memoria local del dominio esta vacia
+- Objetivo:
+  - que el sistema no “parezca roto”
+  - y que el operador sepa exactamente si debe:
+    - restaurar backup local
+    - re-sembrar onboarding
+    - o re-inicializar el dominio
 
 ### P1 - Estabilidad y robustez inmediata
 
@@ -220,6 +313,19 @@ Necesidad: alta
   - hints
   - patterns
   - rules
+- Documentar minimos obligatorios por dominio para que el prompt no quede "ciego" despues de una migracion o reconstruccion local:
+  - `SemanticHints` de columna criticos
+  - `SchemaDocs` obligatorios de vistas KPI
+  - `TrainingExamples` demo minimos
+- Priorizar en SQL del piloto:
+  - sembrar 3-5 preguntas demo como `TrainingExamples` verificados en `erp-kpi-pilot`
+  - para que no dependan del LLM frio en cada demostracion
+  - dejar checklist minimo para `erp-kpi-pilot`:
+    - `dbo.vw_KpiScrap_v1`
+    - `PartNumber`
+    - `ScrapQty`
+    - `OperationDate`
+    - `ShiftId`
 
 #### 8. Mantener adapters, pero hacer el provider menos rigido
 Impacto: medio-alto  
@@ -251,6 +357,42 @@ Necesidad: media-alta
   - tiempo de primera consulta Docs
   - tiempo de primera consulta Prediction
 - Optimizar con datos y no por intuicion.
+
+#### 10.1. Medir y ajustar performance del carril SQL
+Impacto: alto  
+Necesidad: media-alta
+
+- Estado actual:
+  - ya existe timeout defensivo en SQL (`75s`)
+  - ya existe logging `LlmPerf` para medir inferencia del modelo local
+  - se confirmo en una prueba real:
+    - `LlmPerf TotalMs` alrededor de `18s`
+    - `SqlPerf TotalMs` alrededor de `75s`
+  - lectura actual:
+    - el LLM responde, pero el pipeline completo se sigue consumiendo el tiempo en:
+      - validacion/dry-run
+      - self-correction
+      - o ruta generativa innecesaria para preguntas demo
+- Siguiente paso:
+  - capturar en una prueba real:
+    - `PromptChars`
+    - `MaxTokens`
+    - `OutputChars`
+    - `TotalMs`
+  - confirmar si el costo principal viene de:
+    - contexto frio por falta de reuse
+    - prompt demasiado largo
+    - o hardware/profile mal afinado
+  - validar despues de reinicio si las preguntas de scrap por numero de parte ya:
+    - reciben `SchemaDocs` forzados de `vw_KpiScrap_v1`
+    - reciben hints de columna (`ScrapQty`, `PartNumber`, `OperationDate`, `ShiftId`)
+    - dejan de inventar `Qty` y `ScrapQuantity`
+  - mantener como check de regresion:
+    - inspeccionar el prompt real cuando una pregunta demo empiece a inventar columnas
+    - confirmar si faltan:
+      - `ESQUEMAS RELEVANTES RECUPERADOS`
+      - `EJEMPLOS RELEVANTES`
+      - hints de columna
 
 #### 11. Medir y ajustar performance del carril documental
 Impacto: medio-alto  

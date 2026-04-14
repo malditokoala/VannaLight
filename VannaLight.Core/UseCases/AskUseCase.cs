@@ -127,6 +127,8 @@ public class AskUseCase(
 
         if (verifiedExactMatch is not null)
         {
+            Console.WriteLine(
+                $"[SqlRoute] Route=VerifiedExample Domain={normalizedDomain} Connection={executionContext.ConnectionName} Question=\"{question}\" ExampleId={verifiedExactMatch.Id}");
             var fastPathResult = await ProcessSqlCandidateAsync(
                                 question,
                                 memoryDbPath,
@@ -146,6 +148,8 @@ public class AskUseCase(
 
         if (patternMatch.IsMatch)
         {
+            Console.WriteLine(
+                $"[SqlRoute] Route=Pattern Domain={normalizedDomain} Connection={executionContext.ConnectionName} Question=\"{question}\" PatternKey={patternMatch.PatternKey} Intent={patternMatch.IntentName} TopN={patternMatch.TopN} TimeScope={patternMatch.TimeScope}");
             var patternSql = templateSqlBuilder.BuildSql(patternMatch);
 
             if (string.IsNullOrWhiteSpace(patternSql))
@@ -174,6 +178,8 @@ public class AskUseCase(
         }
 
         // Solo si no hubo pattern, caer al flujo LLM
+        Console.WriteLine(
+            $"[SqlRoute] Route=Llm Domain={normalizedDomain} Connection={executionContext.ConnectionName} Question=\"{question}\" Intent={inferredIntentName ?? string.Empty}");
         var context = await retriever.RetrieveAsync(
             memoryDbPath,
             question,
@@ -194,6 +200,7 @@ public class AskUseCase(
             ct);
 
         var prompt = await BuildPromptAsync(question, context, rules, semanticHints, allowedObjectNames, profileKey, null, ct);
+        Console.WriteLine($"[SqlPrompt][Initial][Domain={normalizedDomain}][Question={question}]{Environment.NewLine}{prompt}");
 
         var rawSql = await llmClient.GenerateSqlAsync(prompt, ct);
         var cleanSql = CleanLlmOutput(rawSql);
@@ -539,7 +546,7 @@ public class AskUseCase(
         var schemaLines = (context?.SchemaDocs ?? Enumerable.Empty<RetrievedSchemaDoc>())
             .Where(s => s?.Doc != null)
             .Where(s => normalizedAllowedObjects.Contains(NormalizeObjectName(s.Doc!.Table)))
-            .Select(s => s.Doc!.DocText?.Trim())
+            .Select(s => FormatSchemaDocForPrompt(s.Doc!))
             .Where(t => !string.IsNullOrWhiteSpace(t))
             .Distinct()
             .Take(maxSchemas)
@@ -572,6 +579,12 @@ public class AskUseCase(
         sb.AppendLine();
         sb.AppendLine("REGLAS CRITICAS DE SINTAXIS T-SQL:");
         sb.AppendLine(sqlSyntaxRules);
+        sb.AppendLine();
+        sb.AppendLine("VALIDACION ESTRICTA DE NOMBRES Y ESTRUCTURA:");
+        sb.AppendLine("- Usa SOLO columnas y objetos que aparezcan textual y exactamente en ESQUEMAS RELEVANTES, PISTAS SEMANTICAS o EJEMPLOS RELEVANTES.");
+        sb.AppendLine("- Si un nombre de columna no aparece de forma explicita en esos bloques, NO lo inventes.");
+        sb.AppendLine("- Devuelve una sola sentencia SQL valida: un unico SELECT o WITH...SELECT.");
+        sb.AppendLine("- Si la pregunta habla de scrap, prioriza la metrica real expuesta por el esquema recuperado; no inventes variantes como Quantity si el esquema usa Qty.");
         sb.AppendLine();
         sb.AppendLine("REGLAS DE TIEMPO E INTERPRETACION:");
         sb.AppendLine(timeInterpretationRules);
@@ -703,6 +716,84 @@ public class AskUseCase(
         return $"- [{hintType}] {label}: {hint.HintText.Trim()}{target}";
     }
 
+    private static string FormatSchemaDocForPrompt(TableSchemaDoc doc)
+    {
+        if (doc is null)
+            return string.Empty;
+
+        var tableLabel = string.IsNullOrWhiteSpace(doc.Schema)
+            ? doc.Table?.Trim() ?? string.Empty
+            : $"{doc.Schema.Trim()}.{doc.Table.Trim()}";
+
+        if (string.IsNullOrWhiteSpace(doc.Json))
+            return doc.DocText?.Trim() ?? string.Empty;
+
+        try
+        {
+            var schema = JsonSerializer.Deserialize<TableSchema>(doc.Json);
+            if (schema is null)
+                return doc.DocText?.Trim() ?? string.Empty;
+
+            var columnLines = schema.Columns?
+                .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
+                .Take(18)
+                .Select(c =>
+                {
+                    var nullable = c.IsNullable ? "NULL" : "NOT NULL";
+                    var typeSuffix =
+                        c.MaxLength is > 0 ? $"({c.MaxLength})" :
+                        c.Precision.HasValue && c.Scale.HasValue ? $"({c.Precision},{c.Scale})" :
+                        string.Empty;
+                    return $"- {c.Name}: {c.SqlType}{typeSuffix} {nullable}";
+                })
+                .ToList() ?? [];
+
+            var pkLine = schema.PrimaryKeyColumns is { Count: > 0 }
+                ? $"PK: {string.Join(", ", schema.PrimaryKeyColumns)}"
+                : null;
+
+            var fkLines = schema.ForeignKeys is { Count: > 0 }
+                ? schema.ForeignKeys
+                    .Take(4)
+                    .Select(fk => $"- FK {fk.FromColumn} -> {fk.ToSchema}.{fk.ToTable}.{fk.ToColumn}")
+                    .ToList()
+                : [];
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Tabla: {tableLabel}");
+            if (!string.IsNullOrWhiteSpace(schema.Description))
+            {
+                sb.AppendLine($"Descripcion: {schema.Description.Trim()}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(pkLine))
+            {
+                sb.AppendLine(pkLine);
+            }
+
+            if (columnLines.Count > 0)
+            {
+                sb.AppendLine("Columnas:");
+                foreach (var line in columnLines)
+                    sb.AppendLine(line);
+            }
+
+            if (fkLines.Count > 0)
+            {
+                sb.AppendLine("Foreign keys:");
+                foreach (var line in fkLines)
+                    sb.AppendLine(line);
+            }
+
+            var text = sb.ToString().Trim();
+            return string.IsNullOrWhiteSpace(text) ? (doc.DocText?.Trim() ?? string.Empty) : text;
+        }
+        catch
+        {
+            return doc.DocText?.Trim() ?? string.Empty;
+        }
+    }
+
     private static string TrimToMax(string text, int maxChars)
     {
         const string suffix = "\n...[contenido truncado por presupuesto de prompt]";
@@ -772,6 +863,15 @@ public class AskUseCase(
         string? profileKey,
         CancellationToken ct)
     {
+        var invalidIdentifiers = ExtractInvalidIdentifiers(exactError);
+        var invalidIdentifiersBlock = invalidIdentifiers.Count == 0
+            ? string.Empty
+            : $"""
+
+            Identificadores invalidos detectados en el error:
+            {string.Join("\n", invalidIdentifiers.Select(x => $"- {x}"))}
+            """;
+
         var retryInstructions =
             $"""
             La propuesta anterior fallo y debes corregirla en un solo reintento.
@@ -781,11 +881,14 @@ public class AskUseCase(
 
             Error exacto:
             {exactError.Trim()}
+            {invalidIdentifiersBlock}
 
             Reglas obligatorias para corregir:
             - conserva la intencion original de la pregunta
             - usa solo objetos SQL permitidos
             - no inventes tablas, vistas ni columnas
+            - no vuelvas a usar identificadores marcados como invalidos en el error
+            - devuelve una sola sentencia SQL valida
             - corrige el SQL usando el error exacto de validacion o compilacion
             - devuelve SOLO SQL valido para SQL Server
             """;
@@ -799,7 +902,25 @@ public class AskUseCase(
             profileKey,
             retryInstructions,
             ct);
+        Console.WriteLine($"[SqlPrompt][Retry][Question={question}]{Environment.NewLine}{retryPrompt}");
 
         return await llmClient.GenerateSqlAsync(retryPrompt, ct);
+    }
+
+    private static IReadOnlyList<string> ExtractInvalidIdentifiers(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+            return Array.Empty<string>();
+
+        var matches = Regex.Matches(
+            error,
+            @"Invalid\s+(?:column|object)\s+name\s+'(?<name>[^']+)'",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        return matches
+            .Select(match => match.Groups["name"].Value.Trim())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 }

@@ -95,6 +95,12 @@ public class LocalRetriever : IRetriever
             .Take(retrievalTopSchemaDocs)
             .ToList();
 
+        topSchemaDocs = EnsureForcedSchemaDocs(
+            question,
+            rankedSchemaDocs,
+            topSchemaDocs,
+            retrievalTopSchemaDocs);
+
         // Fallback inteligente
         if (topSchemaDocs.Count == 0)
         {
@@ -154,6 +160,44 @@ public class LocalRetriever : IRetriever
         }
 
         return dict;
+    }
+
+    private static List<RetrievedSchemaDoc> EnsureForcedSchemaDocs(
+        string question,
+        IReadOnlyList<RetrievedSchemaDoc> rankedSchemaDocs,
+        List<RetrievedSchemaDoc> currentTopSchemaDocs,
+        int retrievalTopSchemaDocs)
+    {
+        if (string.IsNullOrWhiteSpace(question) || rankedSchemaDocs.Count == 0)
+            return currentTopSchemaDocs;
+
+        var normalizedQuestion = NormalizeFreeText(question);
+        var forceScrapSchema =
+            normalizedQuestion.Contains("scrap", StringComparison.OrdinalIgnoreCase) &&
+            (normalizedQuestion.Contains("numerosdeparte", StringComparison.OrdinalIgnoreCase) ||
+             normalizedQuestion.Contains("numerodeparte", StringComparison.OrdinalIgnoreCase) ||
+             normalizedQuestion.Contains("partnumber", StringComparison.OrdinalIgnoreCase) ||
+             normalizedQuestion.Contains("partnumbers", StringComparison.OrdinalIgnoreCase) ||
+             normalizedQuestion.Contains("turno", StringComparison.OrdinalIgnoreCase));
+
+        if (!forceScrapSchema)
+            return currentTopSchemaDocs;
+
+        var forcedDocs = rankedSchemaDocs
+            .Where(r => r.Doc is not null)
+            .Where(r => string.Equals(NormalizeObjectName(r.Doc.Table), "VW_KPISCRAP_V1", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (forcedDocs.Count == 0)
+            return currentTopSchemaDocs;
+
+        return currentTopSchemaDocs
+            .Concat(forcedDocs)
+            .GroupBy(x => $"{x.Doc.Schema}.{x.Doc.Table}", StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(x => x.Score).First())
+            .OrderByDescending(x => x.Score)
+            .Take(retrievalTopSchemaDocs)
+            .ToList();
     }
 
     private static double CalculateScore(HashSet<string> documentTokens, HashSet<string> queryTokens)
@@ -246,5 +290,29 @@ public class LocalRetriever : IRetriever
             }
         }
         return expanded;
+    }
+
+    private static string NormalizeFreeText(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var normalized = RemoveDiacritics(value.Trim().ToLowerInvariant());
+        return string.Concat(normalized.Where(ch => !char.IsWhiteSpace(ch)));
+    }
+
+    private static string NormalizeObjectName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+
+        var cleaned = name.Trim()
+            .Replace("[", string.Empty)
+            .Replace("]", string.Empty);
+
+        if (cleaned.StartsWith("dbo.", StringComparison.OrdinalIgnoreCase))
+            cleaned = cleaned[4..];
+
+        return cleaned.ToUpperInvariant();
     }
 }
