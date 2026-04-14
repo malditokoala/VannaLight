@@ -2,9 +2,31 @@
 
 ## Estado del piloto
 
+### Regla de mantenimiento del backlog
+- Todo cambio funcional o técnico relevante debe reflejarse en este archivo el mismo día.
+- Cada actualización debe dejar claro si el cambio quedó en:
+  - `Hecho hoy`
+  - `En progreso`
+  - `Pendiente`
+- Si un pendiente cambia de prioridad o de diagnóstico, se debe actualizar aquí antes de cerrar la sesión.
+
 ## Semana de presentacion
 
 ### Hecho hoy
+- Preguntas sugeridas del chat ahora conscientes del contexto activo:
+  - ya no dependen solo de una lista fija por modo
+  - el panel intenta mostrar el Top 3 del historial local para:
+    - modo activo
+    - contexto activo
+  - el ranking usa:
+    - frecuencia
+    - `rowCount` como desempate
+    - recencia
+  - si no hay suficiente historial, cae a preguntas base por modo
+  - objetivo:
+    - evitar sugerencias que no aplican al dominio actual
+    - mejorar demos en `ERP` y `Northwind`
+    - acercar las sugerencias a uso real del operador
 - Recuperacion del ambiente de trabajo segun `HANDOFF_TRABAJO.md`:
   - `appsettings.Local.json` vuelve a apuntar a `%LOCALAPPDATA%\\VannaLight\\Data`
   - reconstruccion minima de memoria operativa por onboarding local para:

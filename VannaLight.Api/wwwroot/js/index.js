@@ -72,8 +72,54 @@
             updateRuntimeContextState();
         }
 
-        function getDemoPromptsForCurrentMode() {
-            return DEMO_PROMPTS[currentMode] || [];
+        function getTopContextPrompts(limit = 3) {
+            const fallback = DEMO_PROMPTS[currentMode] || [];
+            const contextKey = currentRuntimeContext ? getContextStorageKey(currentRuntimeContext) : '';
+            const scoped = queryHistory.filter(entry => {
+                if ((entry.mode || 'sql') !== currentMode) return false;
+                if (!contextKey) return true;
+                return (entry.contextKey || '') === contextKey;
+            });
+
+            if (!scoped.length) {
+                return {
+                    prompts: fallback.slice(0, limit),
+                    source: 'fallback'
+                };
+            }
+
+            const buckets = new Map();
+            scoped.forEach(entry => {
+                const question = String(entry.question || '').trim();
+                if (!question) return;
+
+                const key = question.toLowerCase();
+                const current = buckets.get(key) || {
+                    question,
+                    count: 0,
+                    bestRowCount: 0,
+                    latestTs: 0
+                };
+
+                current.count += 1;
+                current.bestRowCount = Math.max(current.bestRowCount, Number(entry.rowCount || 0));
+                const ts = Date.parse(entry.timestamp || '') || 0;
+                current.latestTs = Math.max(current.latestTs, ts);
+                buckets.set(key, current);
+            });
+
+            const ranked = Array.from(buckets.values())
+                .sort((a, b) =>
+                    b.count - a.count ||
+                    b.bestRowCount - a.bestRowCount ||
+                    b.latestTs - a.latestTs)
+                .slice(0, limit)
+                .map(x => x.question);
+
+            return {
+                prompts: ranked.length ? ranked : fallback.slice(0, limit),
+                source: ranked.length ? 'history' : 'fallback'
+            };
         }
 
         function renderDemoPrompts() {
@@ -81,8 +127,12 @@
             const subtitle = document.getElementById('demoStripSubtitle');
             if (!actions || !subtitle) return;
 
-            const prompts = getDemoPromptsForCurrentMode();
-            subtitle.textContent = `Sugerencias listas para ${MODES[currentMode]?.label || currentMode}. Puedes cargarlas o ejecutarlas directo.`;
+            const { prompts, source } = getTopContextPrompts(3);
+            const label = MODES[currentMode]?.label || currentMode;
+            const contextLabel = currentRuntimeContext ? getContextDisplayLabel(currentRuntimeContext) : 'sin contexto seleccionado';
+            subtitle.textContent = source === 'history'
+                ? `Top 3 del historial para ${label} en ${contextLabel}. Puedes cargarlas o ejecutarlas directo.`
+                : `Sugerencias base para ${label}. Aún no hay suficiente historial en este contexto.`;
             actions.innerHTML = '';
 
             prompts.forEach((prompt, index) => {
@@ -103,7 +153,7 @@
         }
 
         function loadDemoPrompt(fillOnly = true, specificIndex = null) {
-            const prompts = getDemoPromptsForCurrentMode();
+            const prompts = getTopContextPrompts(3).prompts;
             if (!prompts.length) return;
 
             const questionBox = document.getElementById('txtQuestion');
@@ -454,6 +504,7 @@
             if (!raw) {
                 queryHistory = [];
                 renderQueryHistory();
+                renderDemoPrompts();
                 return;
             }
 
@@ -465,6 +516,7 @@
             }
 
             renderQueryHistory();
+            renderDemoPrompts();
         }
 
         function updateQueryHistoryEntry(entryId, patch) {
@@ -479,6 +531,7 @@
 
             persistQueryHistory();
             renderQueryHistory();
+            renderDemoPrompts();
         }
 
         function beginQueryHistoryEntry(question) {
@@ -506,6 +559,7 @@
             previewHistoryEntryId = entry.id;
             persistQueryHistory();
             renderQueryHistory();
+            renderDemoPrompts();
         }
 
         function finalizeActiveHistoryEntry(status, patch = {}) {
@@ -527,6 +581,7 @@
                 safeStorageRemove(QUERY_HISTORY_STORAGE_KEY);
             }
             renderQueryHistory();
+            renderDemoPrompts();
             logLine(`Historial local limpiado para ${getModeLabel(currentMode)}.`, 'sys');
         }
 
