@@ -96,13 +96,13 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
 
         return $@"
 SELECT TOP ({top})
-    s.PressId,
-    s.PressName,
+    COALESCE(NULLIF(LTRIM(RTRIM(s.PressName)), ''), CONCAT('Prensa ', CAST(s.PressId AS varchar(32)))) AS Press,
+    s.PressId AS PressId,
     SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty
 FROM {_kpiViews.ScrapViewQualifiedName} s
 WHERE {BuildTimeFilter("s", match.TimeScope, includeIsOpenForDowntime: false)}
 GROUP BY s.PressId, s.PressName
-ORDER BY TotalScrapQty DESC, s.PressName;".Trim();
+ORDER BY TotalScrapQty DESC, Press;".Trim();
     }
 
     private string BuildTopScrapByPartNumber(PatternMatchResult match)
@@ -150,14 +150,14 @@ ORDER BY TotalDownTimeMinutes DESC, d.FailureName;".Trim();
 
         return $@"
 SELECT TOP ({top})
-    d.PressId,
-    d.PressName,
+    COALESCE(NULLIF(LTRIM(RTRIM(d.PressName)), ''), CONCAT('Prensa ', CAST(d.PressId AS varchar(32)))) AS Press,
+    d.PressId AS PressId,
     SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
     SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
 FROM {_kpiViews.DowntimeViewQualifiedName} d
 WHERE {BuildTimeFilter("d", match.TimeScope, includeIsOpenForDowntime: true)}
 GROUP BY d.PressId, d.PressName
-ORDER BY TotalDownTimeMinutes DESC, d.PressName;".Trim();
+ORDER BY TotalDownTimeMinutes DESC, Press;".Trim();
     }
 
     private string BuildDowntimeByDepartment(PatternMatchResult match)

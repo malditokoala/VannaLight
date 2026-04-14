@@ -1870,6 +1870,18 @@ static async Task EnsureCorePilotSemanticHintSeedsAsync(IServiceProvider service
                 HintText = "Cuando el usuario pregunte por 'turno actual' o 'del turno' en dbo.vw_KpiScrap_v1, filtra por el ShiftId mÃ¡s reciente del dÃ­a.",
                 Priority = 8,
                 IsActive = true
+            },
+            new SemanticHint
+            {
+                Domain = domain,
+                HintKey = "scrap_view_press_display_name",
+                HintType = "dimension",
+                DisplayName = "PressName",
+                ObjectName = "dbo.vw_KpiScrap_v1",
+                ColumnName = "PressName",
+                HintText = "Cuando el usuario pregunte por una prensa en dbo.vw_KpiScrap_v1, devuelve primero el nombre visible de la prensa (PressName). Usa PressId solo como apoyo o fallback si PressName viene vacio o si el usuario pide explicitamente el ID.",
+                Priority = 9,
+                IsActive = true
             }
         };
 

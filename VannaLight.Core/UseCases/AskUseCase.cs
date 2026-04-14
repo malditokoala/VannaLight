@@ -585,6 +585,7 @@ public class AskUseCase(
         sb.AppendLine("- Si un nombre de columna no aparece de forma explicita en esos bloques, NO lo inventes.");
         sb.AppendLine("- Devuelve una sola sentencia SQL valida: un unico SELECT o WITH...SELECT.");
         sb.AppendLine("- Si la pregunta habla de scrap, prioriza la metrica real expuesta por el esquema recuperado; no inventes variantes como Quantity si el esquema usa Qty.");
+        sb.AppendLine("- Si el usuario pregunta por una prensa, maquina o equipo, prefiere devolver el nombre visible (por ejemplo PressName) y usa el ID solo como apoyo o fallback, salvo que el usuario pida explicitamente el ID.");
         sb.AppendLine();
         sb.AppendLine("REGLAS DE TIEMPO E INTERPRETACION:");
         sb.AppendLine(timeInterpretationRules);
