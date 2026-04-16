@@ -926,7 +926,7 @@
                                 </div>
                                 <div class="section-header-text">
                                     <div class="sh-title">Wizard de Onboarding</div>
-                                    <div class="sh-sub">Configura un workspace nuevo de principio a fin — sigue los 4 pasos en orden.</div>
+                                    <div class="sh-sub">Activa un workspace nuevo de principio a fin. Sigue los 4 pasos en orden; la afinación avanzada viene después.</div>
                                 </div>
                             </div>
 
@@ -973,7 +973,34 @@
 
                             <div class="subpanel onboarding-guide">
                                 <div class="subpanel-title">¿Por dónde empiezo?</div>
-                                <div class="onboarding-guide-copy">Sigue estos 4 pasos en orden. Cada uno habilita al siguiente — no puedes saltarte ninguno.</div>
+                                <div class="onboarding-guide-copy">Sigue estos 4 pasos en orden. Cada uno habilita al siguiente. Business Rules, Semantic Hints manuales y Query Patterns son afinación avanzada y no bloquean este flujo base.</div>
+
+                            <div class="subpanel onboarding-flow-summary">
+                                <div class="subpanel-title">Estado actual del wizard</div>
+                                <div class="onboarding-summary-grid">
+                                    <div class="onboarding-summary-card">
+                                        <div class="hero-kicker">Paso actual</div>
+                                        <div class="hero-value" id="txtOnboardingCurrentStep">Paso 1</div>
+                                        <div class="hero-sub" id="txtOnboardingCurrentStepHint">Empieza configurando el workspace y la conexión.</div>
+                                    </div>
+                                    <div class="onboarding-summary-card">
+                                        <div class="hero-kicker">Obligatorio ahora</div>
+                                        <div class="onboarding-summary-text" id="txtOnboardingRequiredAction">Completa tenant, nombre visible, dominio y conexión.</div>
+                                    </div>
+                                    <div class="onboarding-summary-card">
+                                        <div class="hero-kicker">Después sigue</div>
+                                        <div class="onboarding-summary-text" id="txtOnboardingNextAction">Descubrir schema y elegir tablas permitidas.</div>
+                                    </div>
+                                    <div class="onboarding-summary-card">
+                                        <div class="hero-kicker">Progreso</div>
+                                        <div class="hero-value" id="txtOnboardingProgressValue">0 / 4</div>
+                                        <div class="hero-sub" id="txtOnboardingProgressHint">Aún no hay pasos completados.</div>
+                                    </div>
+                                </div>
+                                <div class="action-meta" id="onboardingFlowSummaryMeta">
+                                    <span class="meta-empty">Usa este bloque para saber qué sí bloquea el onboarding y qué puedes dejar para después.</span>
+                                </div>
+                            </div>
                                 <div class="onboarding-guide-list">
                                     <div class="onboarding-guide-item" id="guideItem1">
                                         <span class="guide-item-num">1</span>
@@ -1167,6 +1194,15 @@
                                 </div>
                             </div>
 
+                            <div class="subpanel onboarding-support-toggle">
+                                <div>
+                                    <div class="subpanel-title">Paneles de apoyo</div>
+                                    <div class="field-hint">Úsalos solo como referencia. No son obligatorios para completar el onboarding base.</div>
+                                </div>
+                                <button class="btn btn-ghost" type="button" id="btnToggleOnboardingReferencePanels" onclick="toggleOnboardingReferencePanels()">Mostrar apoyo</button>
+                            </div>
+
+                            <div class="onboarding-reference-panels is-collapsed" id="onboardingReferencePanels">
                             <div class="subpanel onboarding-panel" id="onboardingStepPanel2">
                                 <div class="subpanel-title">Configuración actual del workspace</div>
                                 <div class="field-hint">Haz clic en un mapping para cargarlo otra vez al formulario y seguir trabajando sobre esa base.</div>
@@ -1211,6 +1247,7 @@
                                 </div>
                             </div>
 
+                            </div>
                             <div class="subpanel onboarding-panel" id="onboardingStepPanel2b">
                                 <div class="step-panel-header">
                                     <span class="step-panel-num">2</span>
@@ -1254,7 +1291,7 @@
                                     <span class="step-panel-num">3</span>
                                     <div class="step-panel-text">
                                         <div class="step-panel-title">Prepara el dominio</div>
-                                        <div class="step-panel-sub">Genera el contexto técnico que el motor necesita para responder: schema docs, pistas semánticas y configuración del pipeline.</div>
+                                        <div class="step-panel-sub">Genera el contexto técnico mínimo que el motor necesita para responder: schema docs y pistas semánticas base. Las reglas avanzadas se afinan después.</div>
                                     </div>
                                 </div>
                                 <div class="onboarding-health">
@@ -1346,7 +1383,7 @@
                                 <div class="step-panel-header">
                                     <div class="step-panel-text">
                                         <div class="step-panel-title">¿Está listo el dominio?</div>
-                                        <div class="step-panel-sub">Los tres indicadores deben estar en verde para considerar este dominio listo para usuarios internos.</div>
+                                        <div class="step-panel-sub">Los tres indicadores deben estar en verde para considerar este dominio listo para una primera salida. Business Rules y Query Patterns pueden afinarse después.</div>
                                     </div>
                                 </div>
                                 <div class="onboarding-readiness-grid">

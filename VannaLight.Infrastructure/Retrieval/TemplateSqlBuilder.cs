@@ -18,24 +18,6 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
         _kpiViews = kpiViews;
     }
 
-    public bool Supports(string patternKey)
-    {
-        if (string.IsNullOrWhiteSpace(patternKey))
-            return false;
-
-        return patternKey switch
-        {
-            "top_scrap_by_press" => true,
-            "top_scrap_by_partnumber" => true,
-            "total_production" => true,
-            "top_downtime_by_failure" => true,
-            "top_downtime_by_press" => true,
-            "downtime_by_department" => true,
-            "top_scrap_cost_by_mold" => true,
-            _ => false
-        };
-    }
-
     public string BuildSql(PatternMatchResult match)
     {
         if (!match.IsMatch)
@@ -45,20 +27,11 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
         if (!string.IsNullOrWhiteSpace(templateSql))
             return templateSql;
 
-        if (!Supports(match.PatternKey))
-            return string.Empty;
+        var genericSql = TryBuildGenericFallback(match);
+        if (!string.IsNullOrWhiteSpace(genericSql))
+            return genericSql;
 
-        return match.PatternKey switch
-        {
-            "top_scrap_by_press" => BuildTopScrapByPress(match),
-            "top_scrap_by_partnumber" => BuildTopScrapByPartNumber(match),
-            "total_production" => BuildTotalProduction(match),
-            "top_downtime_by_failure" => BuildTopDowntimeByFailure(match),
-            "top_downtime_by_press" => BuildTopDowntimeByPress(match),
-            "downtime_by_department" => BuildDowntimeByDepartment(match),
-            "top_scrap_cost_by_mold" => BuildTopScrapCostByMold(match),
-            _ => string.Empty
-        };
+        return string.Empty;
     }
 
     private string TryBuildFromTemplate(PatternMatchResult match)
@@ -84,111 +57,100 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
 
         rendered = ReplaceToken(rendered, "viewname", _ => ResolveViewName(match));
         rendered = ReplaceToken(rendered, "sourceview", _ => ResolveViewName(match));
+        rendered = ReplaceToken(rendered, "dimensionprojection", token =>
+        {
+            var explicitAlias = TryReadTokenArgument(token);
+            var projectionAlias = !string.IsNullOrWhiteSpace(explicitAlias) ? explicitAlias! : alias;
+            if (string.IsNullOrWhiteSpace(projectionAlias))
+                return null;
+
+            return BuildDimensionProjection(projectionAlias, match.Dimension);
+        });
+        rendered = ReplaceToken(rendered, "dimensionfilter", token =>
+        {
+            var explicitAlias = TryReadTokenArgument(token);
+            var filterAlias = !string.IsNullOrWhiteSpace(explicitAlias) ? explicitAlias! : alias;
+            if (string.IsNullOrWhiteSpace(filterAlias))
+                return string.Empty;
+
+            return BuildDimensionFilter(filterAlias, match.Dimension);
+        });
+        rendered = ReplaceToken(rendered, "dimensiongroupby", token =>
+        {
+            var explicitAlias = TryReadTokenArgument(token);
+            var groupAlias = !string.IsNullOrWhiteSpace(explicitAlias) ? explicitAlias! : alias;
+            if (string.IsNullOrWhiteSpace(groupAlias))
+                return null;
+
+            return BuildDimensionGroupBy(groupAlias, match.Dimension);
+        });
+        rendered = ReplaceToken(rendered, "dimensionorderby", _ => BuildDimensionOrderBy(match.Dimension));
+        rendered = ReplaceToken(rendered, "metricprojection", token =>
+        {
+            var explicitAlias = TryReadTokenArgument(token);
+            var metricAlias = !string.IsNullOrWhiteSpace(explicitAlias) ? explicitAlias! : alias;
+            if (string.IsNullOrWhiteSpace(metricAlias))
+                return null;
+
+            return BuildMetricProjection(metricAlias, match.Metric);
+        });
+        rendered = ReplaceToken(rendered, "metricorderby", _ => BuildMetricOrderBy(match.Metric));
 
         return HasUnresolvedPlaceholders(rendered)
             ? string.Empty
             : rendered.Trim();
     }
 
-    private string BuildTopScrapByPress(PatternMatchResult match)
+    private string TryBuildGenericGroupedTop(PatternMatchResult match)
     {
+        var viewName = ResolveViewName(match);
+        var dimensionProjection = BuildDimensionProjection("x", match.Dimension);
+        var dimensionGroupBy = BuildDimensionGroupBy("x", match.Dimension);
+        var dimensionOrderBy = BuildDimensionOrderBy(match.Dimension);
+        var metricProjection = BuildMetricProjection("x", match.Metric);
+        var metricOrderBy = BuildMetricOrderBy(match.Metric);
+
+        if (string.IsNullOrWhiteSpace(viewName) ||
+            string.IsNullOrWhiteSpace(dimensionProjection) ||
+            string.IsNullOrWhiteSpace(dimensionGroupBy) ||
+            string.IsNullOrWhiteSpace(dimensionOrderBy) ||
+            string.IsNullOrWhiteSpace(metricProjection) ||
+            string.IsNullOrWhiteSpace(metricOrderBy))
+        {
+            return string.Empty;
+        }
+
         var top = match.TopN > 0 ? match.TopN : 5;
+        var timeFilter = BuildTimeFilter("x", match.TimeScope, ShouldIncludeIsOpenForDowntime(match));
+        var dimensionFilter = BuildDimensionFilter("x", match.Dimension);
 
         return $@"
 SELECT TOP ({top})
-    COALESCE(NULLIF(LTRIM(RTRIM(s.PressName)), ''), CONCAT('Prensa ', CAST(s.PressId AS varchar(32)))) AS Press,
-    s.PressId AS PressId,
-    SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty
-FROM {_kpiViews.ScrapViewQualifiedName} s
-WHERE {BuildTimeFilter("s", match.TimeScope, includeIsOpenForDowntime: false)}
-GROUP BY s.PressId, s.PressName
-ORDER BY TotalScrapQty DESC, Press;".Trim();
+    {dimensionProjection},
+    {metricProjection}
+FROM {viewName} x
+WHERE {timeFilter}{dimensionFilter}
+GROUP BY {dimensionGroupBy}
+ORDER BY {metricOrderBy}, {dimensionOrderBy};".Trim();
     }
 
-    private string BuildTopScrapByPartNumber(PatternMatchResult match)
+    private string TryBuildGenericTotal(PatternMatchResult match)
     {
-        var top = match.TopN > 0 ? match.TopN : 5;
+        if (match.Dimension != PatternDimension.Unknown)
+            return string.Empty;
 
-        return $@"
-SELECT TOP ({top})
-    LTRIM(RTRIM(s.PartNumber)) AS PartNumber,
-    SUM(ISNULL(s.ScrapQty, 0)) AS TotalScrapQty
-FROM {_kpiViews.ScrapViewQualifiedName} s
-WHERE {BuildTimeFilter("s", match.TimeScope, includeIsOpenForDowntime: false)}
-  AND NULLIF(LTRIM(RTRIM(s.PartNumber)), '') IS NOT NULL
-GROUP BY LTRIM(RTRIM(s.PartNumber))
-ORDER BY TotalScrapQty DESC, PartNumber;".Trim();
-    }
+        var viewName = ResolveViewName(match);
+        var metricProjection = BuildMetricProjection("x", match.Metric);
+        if (string.IsNullOrWhiteSpace(viewName) || string.IsNullOrWhiteSpace(metricProjection))
+            return string.Empty;
 
-    private string BuildTotalProduction(PatternMatchResult match)
-    {
         return $@"
 SELECT
-    SUM(ISNULL(p.ProducedQty, 0)) AS TotalProducedQty
-FROM {_kpiViews.ProductionViewQualifiedName} p
-WHERE {BuildTimeFilter("p", match.TimeScope, includeIsOpenForDowntime: false)};".Trim();
+    {metricProjection}
+FROM {viewName} x
+WHERE {BuildTimeFilter("x", match.TimeScope, ShouldIncludeIsOpenForDowntime(match))};".Trim();
     }
 
-    private string BuildTopDowntimeByFailure(PatternMatchResult match)
-    {
-        var top = match.TopN > 0 ? match.TopN : 5;
-
-        return $@"
-SELECT TOP ({top})
-    d.FailureName,
-    SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
-    SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
-FROM {_kpiViews.DowntimeViewQualifiedName} d
-WHERE {BuildTimeFilter("d", match.TimeScope, includeIsOpenForDowntime: true)}
-GROUP BY d.FailureName
-ORDER BY TotalDownTimeMinutes DESC, d.FailureName;".Trim();
-    }
-
-    private string BuildTopDowntimeByPress(PatternMatchResult match)
-    {
-        var top = match.TopN > 0 ? match.TopN : 5;
-
-        return $@"
-SELECT TOP ({top})
-    COALESCE(NULLIF(LTRIM(RTRIM(d.PressName)), ''), CONCAT('Prensa ', CAST(d.PressId AS varchar(32)))) AS Press,
-    d.PressId AS PressId,
-    SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
-    SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
-FROM {_kpiViews.DowntimeViewQualifiedName} d
-WHERE {BuildTimeFilter("d", match.TimeScope, includeIsOpenForDowntime: true)}
-GROUP BY d.PressId, d.PressName
-ORDER BY TotalDownTimeMinutes DESC, Press;".Trim();
-    }
-
-    private string BuildDowntimeByDepartment(PatternMatchResult match)
-    {
-        var selectTop = match.TopN > 0 ? $"TOP ({match.TopN})" : string.Empty;
-
-        return $@"
-SELECT {selectTop}
-    d.DepartmentName,
-    SUM(ISNULL(d.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
-    SUM(ISNULL(d.DownTimeCost, 0)) AS TotalDownTimeCost
-FROM {_kpiViews.DowntimeViewQualifiedName} d
-WHERE {BuildTimeFilter("d", match.TimeScope, includeIsOpenForDowntime: true)}
-GROUP BY d.DepartmentName
-ORDER BY TotalDownTimeMinutes DESC, d.DepartmentName;".Trim();
-    }
-
-    private string BuildTopScrapCostByMold(PatternMatchResult match)
-    {
-        var top = match.TopN > 0 ? match.TopN : 5;
-
-        return $@"
-SELECT TOP ({top})
-    s.MoldId,
-    s.MoldName,
-    SUM(ISNULL(s.ScrapCost, 0)) AS TotalScrapCost
-FROM {_kpiViews.ScrapViewQualifiedName} s
-WHERE {BuildTimeFilter("s", match.TimeScope, includeIsOpenForDowntime: false)}
-GROUP BY s.MoldId, s.MoldName
-ORDER BY TotalScrapCost DESC, s.MoldName;".Trim();
-    }
 
     private string BuildTimeFilter(string alias, PatternTimeScope scope, bool includeIsOpenForDowntime)
     {
@@ -293,6 +255,107 @@ ORDER BY TotalScrapCost DESC, s.MoldName;".Trim();
     private static bool ShouldIncludeIsOpenForDowntime(PatternMatchResult match)
     {
         return match.Metric is PatternMetric.DownTimeMinutes or PatternMetric.DownTimeCost or PatternMetric.TotalLoss;
+    }
+
+    private static string? BuildDimensionProjection(string alias, PatternDimension dimension)
+    {
+        return dimension switch
+        {
+            PatternDimension.Press =>
+                $@"COALESCE(NULLIF(LTRIM(RTRIM({alias}.PressName)), ''), CONCAT('Prensa ', CAST({alias}.PressId AS varchar(32)))) AS Press,
+    {alias}.PressId AS PressId",
+            PatternDimension.PartNumber =>
+                $"LTRIM(RTRIM({alias}.PartNumber)) AS PartNumber",
+            PatternDimension.Mold =>
+                $@"COALESCE(NULLIF(LTRIM(RTRIM({alias}.MoldName)), ''), CONCAT('Molde ', CAST({alias}.MoldId AS varchar(32)))) AS Mold,
+    {alias}.MoldId AS MoldId",
+            PatternDimension.Failure =>
+                $@"COALESCE(NULLIF(LTRIM(RTRIM({alias}.FailureName)), ''), CONCAT('Falla ', CAST({alias}.FailureId AS varchar(32)))) AS Failure,
+    {alias}.FailureId AS FailureId",
+            PatternDimension.Department =>
+                $@"{alias}.DepartmentId AS DepartmentId,
+    {alias}.DepartmentName AS Department",
+            _ => null
+        };
+    }
+
+    private static string BuildDimensionFilter(string alias, PatternDimension dimension)
+    {
+        return dimension switch
+        {
+            PatternDimension.PartNumber => $"\n  AND NULLIF(LTRIM(RTRIM({alias}.PartNumber)), '') IS NOT NULL",
+            PatternDimension.Mold => $"\n  AND ({alias}.MoldId IS NOT NULL OR NULLIF(LTRIM(RTRIM({alias}.MoldName)), '') IS NOT NULL)",
+            PatternDimension.Failure => $"\n  AND ({alias}.FailureId IS NOT NULL OR NULLIF(LTRIM(RTRIM({alias}.FailureName)), '') IS NOT NULL)",
+            PatternDimension.Department => $"\n  AND ({alias}.DepartmentId IS NOT NULL OR NULLIF(LTRIM(RTRIM({alias}.DepartmentName)), '') IS NOT NULL)",
+            _ => string.Empty
+        };
+    }
+
+    private string TryBuildGenericFallback(PatternMatchResult match)
+    {
+        if (match.Dimension != PatternDimension.Unknown)
+            return TryBuildGenericGroupedTop(match);
+
+        if (match.Metric != PatternMetric.Unknown)
+            return TryBuildGenericTotal(match);
+
+        return string.Empty;
+    }
+
+    private static string? BuildDimensionGroupBy(string alias, PatternDimension dimension)
+    {
+        return dimension switch
+        {
+            PatternDimension.Press => $"{alias}.PressId, {alias}.PressName",
+            PatternDimension.PartNumber => $"LTRIM(RTRIM({alias}.PartNumber))",
+            PatternDimension.Mold => $"{alias}.MoldId, {alias}.MoldName",
+            PatternDimension.Failure => $"{alias}.FailureId, {alias}.FailureName",
+            PatternDimension.Department => $"{alias}.DepartmentId, {alias}.DepartmentName",
+            _ => null
+        };
+    }
+
+    private static string? BuildDimensionOrderBy(PatternDimension dimension)
+    {
+        return dimension switch
+        {
+            PatternDimension.Press => "Press",
+            PatternDimension.PartNumber => "PartNumber",
+            PatternDimension.Mold => "Mold",
+            PatternDimension.Failure => "Failure",
+            PatternDimension.Department => "Department",
+            _ => null
+        };
+    }
+
+    private static string? BuildMetricProjection(string alias, PatternMetric metric)
+    {
+        return metric switch
+        {
+            PatternMetric.ScrapQty => $"SUM(ISNULL({alias}.ScrapQty, 0)) AS TotalScrapQty",
+            PatternMetric.ScrapCost => $"SUM(ISNULL({alias}.ScrapCost, 0)) AS TotalScrapCost",
+            PatternMetric.ProducedQty => $"SUM(ISNULL({alias}.ProducedQty, 0)) AS TotalProducedQty",
+            PatternMetric.DownTimeMinutes => $@"SUM(ISNULL({alias}.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
+    SUM(ISNULL({alias}.DownTimeCost, 0)) AS TotalDownTimeCost",
+            PatternMetric.DownTimeCost => $@"SUM(ISNULL({alias}.DownTimeCost, 0)) AS TotalDownTimeCost,
+    SUM(ISNULL({alias}.DownTimeMinutes, 0)) AS TotalDownTimeMinutes",
+            PatternMetric.TotalLoss => $"SUM(ISNULL({alias}.TotalLoss, 0)) AS TotalLoss",
+            _ => null
+        };
+    }
+
+    private static string? BuildMetricOrderBy(PatternMetric metric)
+    {
+        return metric switch
+        {
+            PatternMetric.ScrapQty => "TotalScrapQty DESC",
+            PatternMetric.ScrapCost => "TotalScrapCost DESC",
+            PatternMetric.ProducedQty => "TotalProducedQty DESC",
+            PatternMetric.DownTimeMinutes => "TotalDownTimeMinutes DESC",
+            PatternMetric.DownTimeCost => "TotalDownTimeCost DESC",
+            PatternMetric.TotalLoss => "TotalLoss DESC",
+            _ => null
+        };
     }
 
     private string? ResolveViewName(PatternMatchResult match)

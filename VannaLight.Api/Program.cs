@@ -1696,6 +1696,23 @@ static async Task EnsureCorePilotQueryPatternSeedsAsync(IServiceProvider service
     if (erpDomains.Count == 0)
         return;
 
+    const string groupedTopTemplate = """
+SELECT TOP ({TopN})
+    {DimensionProjection:s},
+    {MetricProjection:s}
+FROM {SourceView} s
+WHERE {TimeFilter:s}{DimensionFilter:s}
+GROUP BY {DimensionGroupBy:s}
+ORDER BY {MetricOrderBy}, {DimensionOrderBy:s};
+""";
+
+    const string totalMetricTemplate = """
+SELECT
+    {MetricProjection:x}
+FROM {SourceView} x
+WHERE {TimeFilter:x};
+""";
+
     foreach (var domain in erpDomains)
     {
         var topScrapByPressId = await queryPatternStore.UpsertAsync(
@@ -1705,7 +1722,7 @@ static async Task EnsureCorePilotQueryPatternSeedsAsync(IServiceProvider service
                 PatternKey = "top_scrap_by_press",
                 IntentName = "top_scrap_by_press",
                 Description = "Top N de prensas con mayor scrap para preguntas demo del piloto ERP.",
-                SqlTemplate = "{SqlBuilderFallback}",
+                SqlTemplate = groupedTopTemplate,
                 DefaultTopN = 5,
                 MetricKey = "scrapqty",
                 DimensionKey = "press",
@@ -1722,12 +1739,97 @@ static async Task EnsureCorePilotQueryPatternSeedsAsync(IServiceProvider service
                 PatternKey = "top_scrap_by_partnumber",
                 IntentName = "top_scrap_by_partnumber",
                 Description = "Top N de números de parte con mayor scrap para preguntas demo del piloto ERP.",
-                SqlTemplate = "{SqlBuilderFallback}",
+                SqlTemplate = groupedTopTemplate,
                 DefaultTopN = 5,
                 MetricKey = "scrapqty",
                 DimensionKey = "partnumber",
                 DefaultTimeScopeKey = "today",
                 Priority = 20,
+                IsActive = true
+            },
+            CancellationToken.None);
+
+        var totalProductionId = await queryPatternStore.UpsertAsync(
+            new QueryPattern
+            {
+                Domain = domain,
+                PatternKey = "total_production",
+                IntentName = "total_production",
+                Description = "Total de produccion para preguntas demo del piloto ERP.",
+                SqlTemplate = totalMetricTemplate,
+                DefaultTopN = null,
+                MetricKey = "producedqty",
+                DimensionKey = null,
+                DefaultTimeScopeKey = "current_week",
+                Priority = 15,
+                IsActive = true
+            },
+            CancellationToken.None);
+
+        var topDowntimeByPressId = await queryPatternStore.UpsertAsync(
+            new QueryPattern
+            {
+                Domain = domain,
+                PatternKey = "top_downtime_by_press",
+                IntentName = "top_downtime_by_press",
+                Description = "Top N de prensas con mayor downtime para preguntas demo del piloto ERP.",
+                SqlTemplate = groupedTopTemplate,
+                DefaultTopN = 5,
+                MetricKey = "downtimeminutes",
+                DimensionKey = "press",
+                DefaultTimeScopeKey = "current_week",
+                Priority = 18,
+                IsActive = true
+            },
+            CancellationToken.None);
+
+        var topDowntimeByFailureId = await queryPatternStore.UpsertAsync(
+            new QueryPattern
+            {
+                Domain = domain,
+                PatternKey = "top_downtime_by_failure",
+                IntentName = "top_downtime_by_failure",
+                Description = "Top N de fallas con mayor downtime para preguntas demo del piloto ERP.",
+                SqlTemplate = groupedTopTemplate,
+                DefaultTopN = 5,
+                MetricKey = "downtimeminutes",
+                DimensionKey = "failure",
+                DefaultTimeScopeKey = "current_week",
+                Priority = 17,
+                IsActive = true
+            },
+            CancellationToken.None);
+
+        var downtimeByDepartmentId = await queryPatternStore.UpsertAsync(
+            new QueryPattern
+            {
+                Domain = domain,
+                PatternKey = "downtime_by_department",
+                IntentName = "downtime_by_department",
+                Description = "Downtime agrupado por departamento para preguntas demo del piloto ERP.",
+                SqlTemplate = groupedTopTemplate,
+                DefaultTopN = 5,
+                MetricKey = "downtimeminutes",
+                DimensionKey = "department",
+                DefaultTimeScopeKey = "current_week",
+                Priority = 16,
+                IsActive = true
+            },
+            CancellationToken.None);
+
+        var topScrapCostByMoldId = await queryPatternStore.UpsertAsync(
+            new QueryPattern
+            {
+                Domain = domain,
+                PatternKey = "top_scrap_cost_by_mold",
+                IntentName = "top_scrap_cost_by_mold",
+                Description = "Top N de moldes con mayor costo de scrap para preguntas demo del piloto ERP.",
+                SqlTemplate = groupedTopTemplate,
+                DefaultTopN = 5,
+                MetricKey = "scrapcost",
+                DimensionKey = "mold",
+                DefaultTimeScopeKey = "current_month",
+                Priority = 14,
                 IsActive = true
             },
             CancellationToken.None);
@@ -1778,6 +1880,137 @@ static async Task EnsureCorePilotQueryPatternSeedsAsync(IServiceProvider service
                 new QueryPatternTerm
                 {
                     PatternId = topScrapByPartNumberId,
+                    Term = term.Term,
+                    TermGroup = term.Group,
+                    MatchMode = "contains",
+                    IsRequired = term.Required,
+                    IsActive = true
+                },
+                CancellationToken.None);
+        }
+
+        var totalProductionTerms = new (string Term, string Group, bool Required)[]
+        {
+            ("produccion", "metric_production", true),
+            ("production", "metric_production", true),
+            ("producido", "metric_production", false),
+            ("total", "aggregation_total", false)
+        };
+
+        foreach (var term in totalProductionTerms)
+        {
+            await queryPatternTermStore.UpsertAsync(
+                new QueryPatternTerm
+                {
+                    PatternId = totalProductionId,
+                    Term = term.Term,
+                    TermGroup = term.Group,
+                    MatchMode = "contains",
+                    IsRequired = term.Required,
+                    IsActive = true
+                },
+                CancellationToken.None);
+        }
+
+        var downtimeByPressTerms = new (string Term, string Group, bool Required)[]
+        {
+            ("downtime", "metric_downtime", true),
+            ("paro", "metric_downtime", true),
+            ("prensa", "dimension_press", true),
+            ("prensas", "dimension_press", true),
+            ("press", "dimension_press", true),
+            ("mas", "ranking_top", false),
+            ("con mas", "ranking_top", false),
+            ("top", "ranking_top", false)
+        };
+
+        foreach (var term in downtimeByPressTerms)
+        {
+            await queryPatternTermStore.UpsertAsync(
+                new QueryPatternTerm
+                {
+                    PatternId = topDowntimeByPressId,
+                    Term = term.Term,
+                    TermGroup = term.Group,
+                    MatchMode = "contains",
+                    IsRequired = term.Required,
+                    IsActive = true
+                },
+                CancellationToken.None);
+        }
+
+        var downtimeByFailureTerms = new (string Term, string Group, bool Required)[]
+        {
+            ("downtime", "metric_downtime", true),
+            ("paro", "metric_downtime", true),
+            ("falla", "dimension_failure", true),
+            ("fallas", "dimension_failure", true),
+            ("failure", "dimension_failure", true),
+            ("mas", "ranking_top", false),
+            ("con mas", "ranking_top", false),
+            ("top", "ranking_top", false)
+        };
+
+        foreach (var term in downtimeByFailureTerms)
+        {
+            await queryPatternTermStore.UpsertAsync(
+                new QueryPatternTerm
+                {
+                    PatternId = topDowntimeByFailureId,
+                    Term = term.Term,
+                    TermGroup = term.Group,
+                    MatchMode = "contains",
+                    IsRequired = term.Required,
+                    IsActive = true
+                },
+                CancellationToken.None);
+        }
+
+        var downtimeByDepartmentTerms = new (string Term, string Group, bool Required)[]
+        {
+            ("downtime", "metric_downtime", true),
+            ("paro", "metric_downtime", true),
+            ("departamento", "dimension_department", true),
+            ("department", "dimension_department", true),
+            ("area", "dimension_department", false),
+            ("mas", "ranking_top", false),
+            ("con mas", "ranking_top", false),
+            ("top", "ranking_top", false)
+        };
+
+        foreach (var term in downtimeByDepartmentTerms)
+        {
+            await queryPatternTermStore.UpsertAsync(
+                new QueryPatternTerm
+                {
+                    PatternId = downtimeByDepartmentId,
+                    Term = term.Term,
+                    TermGroup = term.Group,
+                    MatchMode = "contains",
+                    IsRequired = term.Required,
+                    IsActive = true
+                },
+                CancellationToken.None);
+        }
+
+        var scrapCostByMoldTerms = new (string Term, string Group, bool Required)[]
+        {
+            ("scrap", "metric_scrap", true),
+            ("costo", "metric_scrap_cost", true),
+            ("cost", "metric_scrap_cost", true),
+            ("molde", "dimension_mold", true),
+            ("mold", "dimension_mold", true),
+            ("mas", "ranking_top", false),
+            ("con mas", "ranking_top", false),
+            ("top", "ranking_top", false)
+        };
+
+        foreach (var term in scrapCostByMoldTerms)
+        {
+            await queryPatternTermStore.UpsertAsync(
+                new QueryPatternTerm
+                {
+                    PatternId = topScrapCostByMoldId,
                     Term = term.Term,
                     TermGroup = term.Group,
                     MatchMode = "contains",
@@ -1881,6 +2114,78 @@ static async Task EnsureCorePilotSemanticHintSeedsAsync(IServiceProvider service
                 ColumnName = "PressName",
                 HintText = "Cuando el usuario pregunte por una prensa en dbo.vw_KpiScrap_v1, devuelve primero el nombre visible de la prensa (PressName). Usa PressId solo como apoyo o fallback si PressName viene vacio o si el usuario pide explicitamente el ID.",
                 Priority = 9,
+                IsActive = true
+            },
+            new SemanticHint
+            {
+                Domain = domain,
+                HintKey = "production_view_metric_producedqty",
+                HintType = "metric",
+                DisplayName = "ProducedQty",
+                ObjectName = "dbo.vw_KpiProduction_v1",
+                ColumnName = "ProducedQty",
+                HintText = "Para preguntas de produccion en dbo.vw_KpiProduction_v1 usa ProducedQty como metrica principal. No inventes ProductionQty.",
+                Priority = 10,
+                IsActive = true
+            },
+            new SemanticHint
+            {
+                Domain = domain,
+                HintKey = "production_view_time_operationdate",
+                HintType = "time",
+                DisplayName = "OperationDate",
+                ObjectName = "dbo.vw_KpiProduction_v1",
+                ColumnName = "OperationDate",
+                HintText = "La fecha operativa de dbo.vw_KpiProduction_v1 es OperationDate. Para semana actual prefiere YearNumber y WeekOfYear cuando existan; para dia usa CAST(OperationDate AS date).",
+                Priority = 11,
+                IsActive = true
+            },
+            new SemanticHint
+            {
+                Domain = domain,
+                HintKey = "downtime_view_metric_minutes",
+                HintType = "metric",
+                DisplayName = "DownTimeMinutes",
+                ObjectName = "dbo.vw_KpiDownTime_v1",
+                ColumnName = "DownTimeMinutes",
+                HintText = "Para preguntas de downtime en dbo.vw_KpiDownTime_v1 usa DownTimeMinutes como metrica principal. No inventes DownTime ni DownTimeQty.",
+                Priority = 12,
+                IsActive = true
+            },
+            new SemanticHint
+            {
+                Domain = domain,
+                HintKey = "downtime_view_dimension_failurecode",
+                HintType = "dimension",
+                DisplayName = "FailureName",
+                ObjectName = "dbo.vw_KpiDownTime_v1",
+                ColumnName = "FailureName",
+                HintText = "Para preguntas por falla en dbo.vw_KpiDownTime_v1 usa FailureName como nombre visible y FailureId como apoyo de agrupacion. No inventes FaultId, FaultName, FailureCode ni FailureDescription si el esquema no los muestra.",
+                Priority = 13,
+                IsActive = true
+            },
+            new SemanticHint
+            {
+                Domain = domain,
+                HintKey = "downtime_view_dimension_department",
+                HintType = "dimension",
+                DisplayName = "DepartmentName",
+                ObjectName = "dbo.vw_KpiDownTime_v1",
+                ColumnName = "DepartmentName",
+                HintText = "Para preguntas por departamento en dbo.vw_KpiDownTime_v1 usa DepartmentName como nombre visible y DepartmentId como apoyo de agrupacion.",
+                Priority = 14,
+                IsActive = true
+            },
+            new SemanticHint
+            {
+                Domain = domain,
+                HintKey = "downtime_view_time_operationdate",
+                HintType = "time",
+                DisplayName = "OperationDate",
+                ObjectName = "dbo.vw_KpiDownTime_v1",
+                ColumnName = "OperationDate",
+                HintText = "La fecha operativa de dbo.vw_KpiDownTime_v1 es OperationDate. Para semana actual prefiere YearNumber y WeekOfYear cuando existan; para dia usa CAST(OperationDate AS date).",
+                Priority = 15,
                 IsActive = true
             }
         };

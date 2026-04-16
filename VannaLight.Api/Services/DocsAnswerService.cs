@@ -6,6 +6,7 @@ using VannaLight.Api.Contracts;
 using VannaLight.Api.Services.Docs;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.Models;
+using VannaLight.Core.Settings;
 
 namespace VannaLight.Api.Services;
 
@@ -15,7 +16,6 @@ public sealed class DocsAnswerService : IDocsAnswerService
     private readonly DocTypeSchema _schema;
     private readonly ILogger<DocsAnswerService> _log;
     private readonly IServiceProvider _services;
-    private readonly IHostEnvironment _env;
     private readonly IDocChunkRepository _repository;
     private readonly IDocChunkScorer _scorer;
     private readonly IDocAnswerComposer _answerComposer;
@@ -29,7 +29,7 @@ public sealed class DocsAnswerService : IDocsAnswerService
     public DocsAnswerService(
         IConfiguration config,
         IServiceProvider services,
-        IHostEnvironment env,
+        SqliteOptions sqliteOptions,
         ILogger<DocsAnswerService> log,
         IDocChunkRepository repository,
         IDocChunkScorer scorer,
@@ -37,14 +37,12 @@ public sealed class DocsAnswerService : IDocsAnswerService
     {
         _config = config;
         _services = services;
-        _env = env;
         _log = log;
         _repository = repository;
         _scorer = scorer;
         _answerComposer = answerComposer;
 
-        var sqliteRel = _config["Paths:Sqlite"] ?? "Data/vanna_memory.db";
-        _sqlitePath = Path.GetFullPath(Path.Combine(_env.ContentRootPath, sqliteRel));
+        _sqlitePath = sqliteOptions.DbPath;
         Directory.CreateDirectory(Path.GetDirectoryName(_sqlitePath)!);
 
         _docsDomain = _config["Docs:DefaultDomain"] ?? "work-instructions";
@@ -53,10 +51,10 @@ public sealed class DocsAnswerService : IDocsAnswerService
         _intentTimeoutSeconds = int.TryParse(_config["Docs:IntentTimeoutSeconds"], out var timeoutSeconds)
             ? Math.Clamp(timeoutSeconds, 5, 120)
             : 25;
-        _debugLogs = _env.IsDevelopment() || _config.GetValue<bool>("Docs:DebugLogs");
+        _debugLogs = config.GetValue<bool>("Docs:DebugLogs");
 
         var schemaRel = _config["Paths:SchemasPath"] ?? "Schemas";
-        var schemaDir = Path.GetFullPath(Path.Combine(_env.ContentRootPath, schemaRel));
+        var schemaDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, schemaRel));
         var schemaFile = _config["Docs:SchemaFile"] ?? "work-instructions.json";
         var file = Path.Combine(schemaDir, schemaFile);
 

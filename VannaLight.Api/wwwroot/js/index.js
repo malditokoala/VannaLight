@@ -4,7 +4,7 @@
         const MODES = {
             sql: { key: 'sql', modeVal: 0, label: 'SQL', sub: 'datos', title: 'MODO DATOS — SQL', desc: 'Consultas sobre bases de datos estructuradas KPI', ph: '¿Cuáles son los 5 números de parte con más scrap?', badge: 'DATOS · SQL', icon: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>' },
             docs: { key: 'docs', modeVal: 1, label: 'PDF', sub: 'documentos', title: 'MODO DOCUMENTOS — PDF', desc: 'Work Instructions y procedimientos de planta', ph: '¿Cuál es el empaque del N/P 421084-0006?', badge: 'DOCUMENTOS · PDF', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' },
-            pred: { key: 'pred', modeVal: 2, label: 'ML', sub: 'predicción', title: 'MODO PREDICCIÓN — ML.NET', desc: 'Pronósticos de scrap a nivel turno', ph: '¿Cuál es el pronóstico de scrap para el cierre de este turno?', badge: 'PREDICCIÓN · ML', icon: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>' }
+            pred: { key: 'pred', modeVal: 2, label: 'ML', sub: 'predicción', title: 'MODO PREDICCIÓN — ML.NET', desc: 'Pronósticos de scrap a nivel turno', ph: 'Ej.: pronóstico de scrap del N/P "ABC123" para el cierre de este turno', badge: 'PREDICCIÓN · ML', icon: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>' }
         };
 
         const DEMO_PROMPTS = {
@@ -19,11 +19,15 @@
                 'Resume el procedimiento principal del documento activo.'
             ],
             pred: [
-                '¿Cuál es el pronóstico de scrap para el cierre de este turno?',
-                '¿Cómo viene la tendencia de scrap para mañana?',
-                '¿Qué valor proyectado de scrap tenemos para el siguiente turno?'
+                '¿Cuál es el pronóstico de scrap del N/P "ABC123" para el cierre de este turno?',
+                '¿Cómo viene la tendencia de scrap de la prensa "P01" para mañana?',
+                '¿Qué valor proyectado de producción tiene el producto "SKU-001" para el siguiente turno?'
             ]
         };
+
+        function predictionFallbackNeedsEntity(source) {
+            return currentMode === 'pred' && source === 'fallback';
+        }
 
         let currentMode = 'sql';
         let lastRequestMode = 'sql';
@@ -130,9 +134,13 @@
             const { prompts, source } = getTopContextPrompts(3);
             const label = MODES[currentMode]?.label || currentMode;
             const contextLabel = currentRuntimeContext ? getContextDisplayLabel(currentRuntimeContext) : 'sin contexto seleccionado';
-            subtitle.textContent = source === 'history'
-                ? `Top 3 del historial para ${label} en ${contextLabel}. Puedes cargarlas o ejecutarlas directo.`
-                : `Sugerencias base para ${label}. Aún no hay suficiente historial en este contexto.`;
+            if (source === 'history') {
+                subtitle.textContent = `Top 3 del historial para ${label} en ${contextLabel}. Puedes cargarlas o ejecutarlas directo.`;
+            } else if (predictionFallbackNeedsEntity(source)) {
+                subtitle.textContent = 'ML necesita una entidad concreta para pronosticar. Carga una sugerencia, reemplaza el ejemplo entre comillas por tu N/P, producto, prensa o cliente, y luego ejecútala.';
+            } else {
+                subtitle.textContent = `Sugerencias base para ${label}. Aún no hay suficiente historial en este contexto.`;
+            }
             actions.innerHTML = '';
 
             prompts.forEach((prompt, index) => {
@@ -147,8 +155,14 @@
             const runBtn = document.createElement('button');
             runBtn.type = 'button';
             runBtn.className = 'demo-chip is-secondary';
-            runBtn.textContent = 'Ejecutar sugerencia aleatoria';
-            runBtn.onclick = () => loadDemoPrompt(false);
+            if (predictionFallbackNeedsEntity(source)) {
+                runBtn.textContent = 'Reemplaza la entidad antes de ejecutar';
+                runBtn.disabled = true;
+                runBtn.title = 'Modo ML requiere una entidad concreta como N/P, producto, prensa o cliente.';
+            } else {
+                runBtn.textContent = 'Ejecutar sugerencia aleatoria';
+                runBtn.onclick = () => loadDemoPrompt(false);
+            }
             actions.appendChild(runBtn);
         }
 

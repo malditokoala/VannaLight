@@ -25,20 +25,26 @@ public sealed class PatternMatcherService : IPatternMatcherService
     public async Task<PatternMatchResult> MatchAsync(string question, string? domain, CancellationToken ct = default)
     {
         var evaluation = await EvaluateBestPatternAsync(question, domain, ct);
+        var builtIn = TryBuiltInMatch(question, domain);
         if (evaluation is null)
-            return TryBuiltInMatch(question, domain);
+            return builtIn;
 
-        return BuildResult(evaluation);
+        var evaluated = BuildResult(evaluation);
+        if (builtIn.IsMatch && !evaluated.IsMatch)
+            return builtIn;
+
+        return evaluated;
     }
 
     public async Task<string?> InferIntentNameAsync(string question, string? domain, CancellationToken ct = default)
     {
         var evaluation = await EvaluateBestPatternAsync(question, domain, ct);
+        var builtIn = TryBuiltInMatch(question, domain);
         if (evaluation is null)
-        {
-            var builtIn = TryBuiltInMatch(question, domain);
             return string.IsNullOrWhiteSpace(builtIn.IntentName) ? null : builtIn.IntentName;
-        }
+
+        if (!evaluation.HasIntentEvidence && !string.IsNullOrWhiteSpace(builtIn.IntentName))
+            return builtIn.IntentName;
 
         if (!evaluation.HasIntentEvidence)
             return null;
@@ -344,14 +350,13 @@ public sealed class PatternMatcherService : IPatternMatcherService
         if (string.IsNullOrWhiteSpace(normalizedQuestion))
             return new PatternMatchResult();
 
-        var isScrapQuestion = normalizedQuestion.Contains("scrap", StringComparison.Ordinal);
-        if (!isScrapQuestion)
-            return new PatternMatchResult();
-
         var topN = ExtractTopN(question);
         var timeScope = ResolveBuiltInTimeScope(normalizedQuestion);
 
-        if (ContainsAny(normalizedQuestion, "numero de parte", "numeros de parte", "part number", "part numbers"))
+        var isScrapQuestion = normalizedQuestion.Contains("scrap", StringComparison.Ordinal);
+
+        if (isScrapQuestion &&
+            ContainsAny(normalizedQuestion, "numero de parte", "numeros de parte", "part number", "part numbers"))
         {
             return new PatternMatchResult
             {
@@ -365,7 +370,8 @@ public sealed class PatternMatcherService : IPatternMatcherService
             };
         }
 
-        if (ContainsAny(normalizedQuestion, "prensa", "prensas", "press"))
+        if (isScrapQuestion &&
+            ContainsAny(normalizedQuestion, "prensa", "prensas", "press"))
         {
             return new PatternMatchResult
             {
@@ -375,6 +381,66 @@ public sealed class PatternMatcherService : IPatternMatcherService
                 TopN = topN > 0 ? topN : 5,
                 Metric = PatternMetric.ScrapQty,
                 Dimension = PatternDimension.Press,
+                TimeScope = timeScope
+            };
+        }
+
+        if (ContainsAny(normalizedQuestion, "produccion", "production", "producido") &&
+            ContainsAny(normalizedQuestion, "total", "cuanto", "cuanta"))
+        {
+            return new PatternMatchResult
+            {
+                IsMatch = true,
+                PatternKey = "total_production",
+                IntentName = "total_production",
+                Metric = PatternMetric.ProducedQty,
+                Dimension = PatternDimension.Unknown,
+                TimeScope = timeScope
+            };
+        }
+
+        if (ContainsAny(normalizedQuestion, "downtime", "paro") &&
+            ContainsAny(normalizedQuestion, "falla", "fallas", "failure"))
+        {
+            return new PatternMatchResult
+            {
+                IsMatch = true,
+                PatternKey = "top_downtime_by_failure",
+                IntentName = "top_downtime_by_failure",
+                TopN = topN > 0 ? topN : 5,
+                Metric = PatternMetric.DownTimeMinutes,
+                Dimension = PatternDimension.Failure,
+                TimeScope = timeScope
+            };
+        }
+
+        if (ContainsAny(normalizedQuestion, "downtime", "paro") &&
+            ContainsAny(normalizedQuestion, "departamento", "department", "area"))
+        {
+            return new PatternMatchResult
+            {
+                IsMatch = true,
+                PatternKey = "downtime_by_department",
+                IntentName = "downtime_by_department",
+                TopN = topN > 0 ? topN : 5,
+                Metric = PatternMetric.DownTimeMinutes,
+                Dimension = PatternDimension.Department,
+                TimeScope = timeScope
+            };
+        }
+
+        if (isScrapQuestion &&
+            ContainsAny(normalizedQuestion, "costo", "cost") &&
+            ContainsAny(normalizedQuestion, "molde", "mold"))
+        {
+            return new PatternMatchResult
+            {
+                IsMatch = true,
+                PatternKey = "top_scrap_cost_by_mold",
+                IntentName = "top_scrap_cost_by_mold",
+                TopN = topN > 0 ? topN : 5,
+                Metric = PatternMetric.ScrapCost,
+                Dimension = PatternDimension.Mold,
                 TimeScope = timeScope
             };
         }

@@ -13,7 +13,6 @@ namespace VannaLight.Core.Abstractions
 
     public interface ITemplateSqlBuilder
     {
-        bool Supports(string patternKey);
         string BuildSql(PatternMatchResult match);
     }
 }

@@ -25,6 +25,10 @@ public class DocsIntentRouterLlm : IDocsIntentRouter
 
     public async Task<DocsIntent> ParseAsync(string question, DocTypeSchema schema, CancellationToken ct)
     {
+        var heuristic = TryParseHeuristic(question, schema);
+        if (heuristic is not null)
+            return heuristic;
+
         // 1. Contexto: Convertimos el JSON Schema en una lista legible para el LLM
         var fieldsContext = string.Join("\n", schema.Fields.Select(f =>
             $"- Key: '{f.Key}', Label: '{f.DisplayLabel}', Tags: [{string.Join(", ", f.Tags ?? new())}]"));
@@ -97,5 +101,85 @@ Respuesta JSON:";
         }
 
         return "{}"; // Fallback si las llaves están desbalanceadas
+    }
+
+    private static DocsIntent? TryParseHeuristic(string question, DocTypeSchema schema)
+    {
+        if (string.IsNullOrWhiteSpace(question) || schema.Fields is null || schema.Fields.Count == 0)
+            return null;
+
+        var q = Normalize(question);
+        var validKeys = schema.Fields.Select(f => f.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (q.Contains("ficha") || q.Contains("todo") || q.Contains("completo"))
+        {
+            return new DocsIntent
+            {
+                ShowAll = true,
+                RequestedFields = schema.Fields.Select(f => f.Key).ToList()
+            };
+        }
+
+        string? periodo = null;
+        if (q.Contains("turno"))
+            periodo = "Turno";
+        else if (q.Contains("2 horas") || q.Contains("dos horas"))
+            periodo = "2 Horas";
+
+        var requested = new List<string>();
+
+        if (q.Contains("molde"))
+            AddIfPresent(requested, validKeys, "Molde");
+
+        if (q.Contains("resina"))
+        {
+            if (periodo == "Turno")
+                AddIfPresent(requested, validKeys, "ResinaTurno");
+            else if (periodo == "2 Horas")
+                AddIfPresent(requested, validKeys, "Resina2Horas");
+            else
+                AddIfPresent(requested, validKeys, "ResinaNP", "ResinaTurno", "Resina2Horas");
+        }
+
+        if (q.Contains("empaque"))
+        {
+            if (periodo == "Turno")
+                AddIfPresent(requested, validKeys, "EmpaqueTurno");
+            else if (periodo == "2 Horas")
+                AddIfPresent(requested, validKeys, "Empaque2Horas");
+            else if (LooksLikePartNumberQuestion(q))
+                AddIfPresent(requested, validKeys, "EmpaqueNP", "Empaque");
+            else
+                AddIfPresent(requested, validKeys, "Empaque", "EmpaqueTurno", "Empaque2Horas", "EmpaqueNP");
+        }
+
+        if (requested.Count == 0)
+            return null;
+
+        return new DocsIntent
+        {
+            Periodo = periodo,
+            RequestedFields = requested.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            WantsResina = requested.Any(f => f.Contains("Resina", StringComparison.OrdinalIgnoreCase)),
+            WantsEmpaque = requested.Any(f => f.Contains("Empaque", StringComparison.OrdinalIgnoreCase))
+        };
+    }
+
+    private static bool LooksLikePartNumberQuestion(string normalizedQuestion)
+        => Regex.IsMatch(normalizedQuestion, @"\b\d{4,}-\d{3,}\b", RegexOptions.IgnoreCase);
+
+    private static string Normalize(string input)
+    {
+        var lower = input.ToLowerInvariant();
+        return Regex.Replace(lower, @"\s+", " ").Trim();
+    }
+
+    private static void AddIfPresent(List<string> requested, HashSet<string> validKeys, params string[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (validKeys.Contains(candidate))
+                requested.Add(candidate);
+        }
     }
 }

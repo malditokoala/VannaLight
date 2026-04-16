@@ -1,18 +1,104 @@
-# Backlog VannaLight
+﻿# Backlog VannaLight
 
 ## Estado del piloto
 
 ### Regla de mantenimiento del backlog
-- Todo cambio funcional o técnico relevante debe reflejarse en este archivo el mismo día.
-- Cada actualización debe dejar claro si el cambio quedó en:
+- Todo cambio funcional o tÃƒÂ©cnico relevante debe reflejarse en este archivo el mismo dÃƒÂ­a.
+- Cada actualizaciÃƒÂ³n debe dejar claro si el cambio quedÃƒÂ³ en:
   - `Hecho hoy`
   - `En progreso`
   - `Pendiente`
-- Si un pendiente cambia de prioridad o de diagnóstico, se debe actualizar aquí antes de cerrar la sesión.
+- Si un pendiente cambia de prioridad o de diagnÃƒÂ³stico, se debe actualizar aquÃƒÂ­ antes de cerrar la sesiÃƒÂ³n.
 
 ## Semana de presentacion
 
+### Prioridad 0 - Proxima sesion
+- Antes de continuar con cualquier otro cambio pendiente, enfocar la siguiente sesion en:
+  - simplificar y redisenar el onboarding como flujo guiado
+  - separar claramente lo urgente de lo importante dentro de la activacion del sistema
+  - definir un camino visible de inicio a fin para que el usuario sepa:
+    - por donde empezar
+    - que pasos son obligatorios
+    - que pasos son recomendados
+    - que impacto tiene configurar cada cosa
+    - que sigue despues de cada paso
+  - hacer que el sistema indique claramente cuando un dominio/contexto ya esta operativo y que falta para quedar listo
+  - mover gradualmente la configuracion especifica de la base de datos al onboarding, evitando seguir dispersandola en menus tecnicos
+
 ### Hecho hoy
+- Primera iteracion del rediseÃ±o guiado del onboarding:
+  - se agrego un bloque visible de `Estado actual del wizard`
+  - ahora muestra:
+    - paso actual
+    - accion obligatoria ahora
+    - siguiente accion
+    - progreso `0 / 4`
+  - objetivo:
+    - que el usuario sepa claramente donde va
+    - que si bloquea el onboarding base
+    - que puede dejar para despues
+- Desacople visual del camino principal vs paneles de apoyo en onboarding:
+  - `Configuracion actual del workspace`
+  - `Conexiones configuradas`
+  - `Contextos disponibles en runtime`
+  - ahora quedan dentro de un bloque de apoyo colapsable
+  - se persiste localmente si el usuario prefiere verlo abierto o cerrado
+- Ajuste de copy del wizard para reducir ambiguedad:
+  - se explicita que `Business Rules`, `Semantic Hints` manuales y `Query Patterns` son afinacion avanzada
+  - ya no se presentan como prerequisito del onboarding base
+- Validacion tecnica rapida de esta iteracion:
+  - `admin.js` quedo con sintaxis valida (`node --check`)
+- Segunda iteracion del rediseño UX del onboarding guiado:
+  - se agrego un `checklist rapido` sticky con estado de:
+    - workspace
+    - tablas permitidas
+    - contexto generado
+    - prueba real
+  - el footer del wizard ahora se comporta como barra guiada:
+    - un solo CTA primario visible por estado
+    - acciones secundarias degradadas visualmente
+    - copy explicito del siguiente paso
+  - el paso 1 ahora explica mejor:
+    - que se esta configurando
+    - cuando se considera completo
+    - que sigue despues
+  - el paso 2 gana una capa mas clara de asistencia para seleccionar tablas con menor riesgo
+  - los CTAs del flujo base quedaron alineados con el camino principal:
+    - `Guardar y continuar`
+    - `Guardar tablas y continuar`
+    - `Preparar dominio`
+    - `Ejecutar prueba`
+  - se mantienen las capacidades avanzadas, pero se empujan fuera del foco principal del wizard
+  - se mejora contraste y legibilidad en helper text, labels secundarios, resumenes compactos y tarjetas de soporte del onboarding
+- Correccion del modo `ML / Prediccion` para no sugerir preguntas invalidas por default:
+  - la UI ya no invita a ejecutar una sugerencia generica de forecast sin entidad concreta
+  - las sugerencias base de `ML` ahora muestran ejemplos con entidad explicita entre comillas
+  - si el modo `ML` no tiene historial suficiente, el boton de ejecutar sugerencia aleatoria queda deshabilitado hasta que el usuario reemplace la entidad del ejemplo
+  - se mejora el copy para indicar claramente que el pronostico necesita una serie concreta como:
+    - `N/P`
+    - `producto`
+    - `prensa`
+    - `cliente`
+  - el error backend tambien se volvio generalista y accionable:
+    - ya no habla solo de `numero de parte`
+    - ahora indica que falta una entidad concreta para el pronostico
+- Correccion del carril PDF para usar la misma SQLite que Admin e indexacion:
+  - `DocsAnswerService` ya no reconstruye por su cuenta `Paths:Sqlite`
+  - ahora usa `SqliteOptions.DbPath`, igual que el resto del sistema
+  - esto corrige fallos como:
+    - `SQLite Error 1: no such table: DocChunks`
+- Se agrego ruta heuristica previa al LLM en el router documental:
+  - preguntas simples de `Molde`, `Empaque` y `Resina` ya no dependen obligatoriamente del modelo local
+  - objetivo:
+    - evitar crashes nativos del runtime en consultas documentales simples
+    - bajar latencia
+    - mejorar estabilidad del modo PDF
+- Limpieza del repo para remover proyectos externos que no pertenecen al producto actual:
+  - `gotenberg_poc`
+  - `UltraMsgWebhookSpike`
+  - `VannaLight.HoloLens`
+  - se ajusta `.gitignore` para evitar que vuelvan a entrar por accidente
+  - se limpia documentacion que todavia los listaba como parte del arbol del repo
 - Preguntas sugeridas del chat ahora conscientes del contexto activo:
   - ya no dependen solo de una lista fija por modo
   - el panel intenta mostrar el Top 3 del historial local para:
@@ -58,6 +144,59 @@
   - se deja como hipotesis fuerte que el carril SQL de `erp-kpi-pilot` esta operando en frio:
     - sin `TrainingExamples` verificados reutilizables
     - y con poca o nula ayuda de `QueryPatterns`
+
+### Pendiente prioritario
+- Redisenar el onboarding para que sea guiado, simple y autoexplicativo:
+  - avance ya aplicado en esta sesion:
+    - resumen visible del wizard con estado y progreso
+    - paneles de apoyo fuera del camino principal
+    - copy mas claro sobre que es base vs afinacion avanzada
+  - pendiente para la siguiente iteracion:
+    - simplificar aun mas el orden visual de las secciones
+    - reforzar microcopy de impacto y prerequisitos por paso
+    - decidir que paneles tecnicos deben salir definitivamente del flujo base
+  - hoy hay demasiadas pestanas, menus y puntos de configuracion
+  - el usuario no sabe por donde empezar ni que sigue despues de cada paso
+  - faltan explicaciones claras de:
+    - que hace cada pantalla
+    - que es obligatorio
+    - que es opcional
+    - que impacto tiene configurar o no configurar algo
+  - hoy se puede completar onboarding, business rules o semantic hints sin que el sistema indique claramente si eso es suficiente o que falta para quedar operativo
+  - objetivo:
+    - convertir el onboarding en un flujo secuencial y visible
+    - mostrar progreso, prerequisitos y siguiente paso recomendado
+    - reducir dependencia de conocimiento tacito del equipo
+    - mover la configuracion especifica de la DB al onboarding en vez de dejarla dispersa por admin
+- Evolucionar el contrato del modo `ML / Prediccion` de forma generalista:
+  - hoy el modo `ML` esta mejor preparado para pronosticos sobre una serie concreta, no para consultas generales agregadas
+  - la entidad puede ser:
+    - `N/P`
+    - `producto`
+    - `prensa`
+    - `cliente`
+    - otra clave de serie configurada
+  - hoy no esta bien resuelto para preguntas generales como:
+    - `pronostico total de scrap para el cierre del turno`
+    - `pronostico general de produccion de manana`
+  - trabajo propuesto:
+    - definir formalmente dos rutas:
+      - `SeriesForecast`
+      - `AggregateForecast`
+    - hacer que el router pueda decidir entre:
+      - forecast por serie
+      - forecast agregado
+      - rechazo guiado si no existe perfil compatible
+    - mover esta configuracion al onboarding para que no quede amarrada a una DB o dominio especifico
+    - mantener la UX honesta mientras tanto:
+      - no sugerir prompts de `ML` que el contrato actual no pueda resolver
+      - explicar claramente cuando falta una entidad concreta
+  - impacto:
+    - alto en claridad del producto
+    - alto en experiencia de usuario
+    - medio/alto en arquitectura del carril `ML`
+  - prioridad:
+    - `P1`, despues del rediseÃƒÆ’Ã‚Â±o de onboarding y antes de ampliar mas capacidades predictivas
 - Correccion del carril SQL demo para preguntas de scrap por numero de parte:
   - se agrego soporte explicito a `PatternDimension.PartNumber`
   - `PatternMatcherService` ya reconoce:
@@ -73,6 +212,36 @@
     - sacar del LLM las preguntas demo mas frecuentes
     - evitar columnas inventadas como `ScrapQuantity`
     - bajar el tiempo total del carril SQL en `erp-kpi-pilot`
+- Reduccion de hardcodeo en `TemplateSqlBuilder` para rutas demo SQL:
+  - los patterns demo de scrap por prensa y por numero de parte ya no dependen de SQL embebido por `PatternKey`
+  - el startup ahora siembra un `SqlTemplate` declarativo comun basado en:
+    - `MetricKey`
+    - `DimensionKey`
+    - `DefaultTimeScopeKey`
+  - `TemplateSqlBuilder` ahora resuelve tokens genericos como:
+    - `DimensionProjection`
+    - `DimensionFilter`
+    - `DimensionGroupBy`
+    - `DimensionOrderBy`
+    - `MetricProjection`
+    - `MetricOrderBy`
+  - objetivo:
+    - reducir acoplamiento a una base/vista especifica
+    - dejar que nuevos patterns reutilicen el mismo builder
+    - mover comportamiento desde `switch` imperativo hacia configuracion declarativa
+  - avance adicional:
+    - `TemplateSqlBuilder` ya tiene fallback generico por:
+      - `Metric`
+      - `Dimension`
+      - `TimeScope`
+    - esto permite construir consultas agrupadas/top y totales simples aun cuando un pattern nuevo no traiga un metodo dedicado por `PatternKey`
+  - cobertura declarativa ampliada en seeds del piloto:
+    - `total_production`
+    - `top_downtime_by_press`
+    - `top_downtime_by_failure`
+    - `downtime_by_department`
+    - `top_scrap_cost_by_mold`
+  - se mantiene el codigo legacy como respaldo mientras validamos que los templates declarativos cubren bien los casos reales del piloto
 - Refuerzo del grounding del prompt SQL para scrap por numero de parte:
   - se confirmo que el prompt real estaba entrando con:
     - `PISTAS SEMANTICAS DEL DOMINIO`
@@ -288,7 +457,7 @@ Necesidad: alta
   - hay contextos activos
   - pero la memoria local del dominio esta vacia
 - Objetivo:
-  - que el sistema no “parezca roto”
+  - que el sistema no Ã¢â‚¬Å“parezca rotoÃ¢â‚¬Â
   - y que el operador sepa exactamente si debe:
     - restaurar backup local
     - re-sembrar onboarding
@@ -448,6 +617,70 @@ Necesidad: media
   - calendarios
   - defaults del dominio
 - Dejar en codigo solo la logica realmente especial.
+- Extender la misma linea al carril SQL:
+  - seguir migrando `TemplateSqlBuilder` de SQL hardcodeado por `PatternKey`
+  - hacia templates reutilizables basados en:
+    - metrica
+    - dimension
+    - tiempo
+    - columnas display/fallback
+
+### Aprendizaje reciente: prompts frios vs rutas declarativas
+- Ya confirmamos un patron de falla importante:
+  - si una pregunta del piloto cae al LLM sin `SchemaDocs` fuertes y sin `SemanticHints` de columna, el modelo inventa nombres plausibles (`Qty`, `ScrapQuantity`, `FaultName`, etc.).
+- Causa observada:
+  - memoria local fria o incompleta
+  - hints demasiado genericos de entidad
+  - falta de schema relevante para la vista exacta
+- Mitigacion aplicada:
+  - forzar rutas declarativas/pattern-first para preguntas demo de alto valor
+  - sembrar hints de columna y no solo de entidad
+  - alinear `TemplateSqlBuilder` con columnas reales del dominio industrial
+- Minimos obligatorios para `erp-kpi-pilot`:
+  - `dbo.vw_KpiScrap_v1`: `ScrapQty`, `PartNumber`, `PressName`, `OperationDate`, `ShiftId`
+  - `dbo.vw_KpiProduction_v1`: `ProducedQty`, `OperationDate`, `YearNumber`, `WeekOfYear`
+  - `dbo.vw_KpiDownTime_v1`: `DownTimeMinutes`, `DownTimeCost`, `FailureCode`, `Department`, `OperationDate`
+- Check de regresion para proximas sesiones:
+  - si una pregunta demo vuelve a inventar columnas, revisar primero:
+    - si entro por `Pattern`
+    - si el dominio tiene `SemanticHints` activos de columna
+    - si el `SchemaDoc` relevante realmente entra al prompt
+- Incidente corregido:
+  - el matcher built-in tenia un corte prematuro por `scrap` y evitaba evaluar rutas declarativas de `production` y `downtime`
+  - sintoma: preguntas como `total de produccion` o `downtime por falla` caian al LLM aunque ya existia pattern seed
+  - accion aplicada: permitir que el matcher built-in siga evaluando `production` y `downtime` aunque la pregunta no contenga `scrap`
+- Incidente corregido:
+  - si el store devolvia un pattern debil, el matcher dejaba de considerar la ruta built-in fuerte
+  - sintoma: preguntas demo del piloto con built-in valido podian seguir cayendo al LLM
+  - accion aplicada: hacer que `PatternMatcherService` prefiera built-ins validos cuando el match persistido no alcanza fuerza de ruta
+- Hallazgo importante del dominio industrial:
+  - `IndustrialDomainPackAdapter` y el esquema real de `dbo.vw_KpiDownTime_v1` no estaban alineados en dimensiones de falla/departamento
+  - en la base probada, las columnas validas para downtime son:
+    - `FailureId`
+    - `FailureName`
+    - `DepartmentId`
+    - `DepartmentName`
+  - y no:
+    - `FailureCode`
+    - `Department`
+  - accion aplicada:
+    - realinear `TemplateSqlBuilder`
+    - realinear `SemanticHints` sembrados
+  - seguimiento:
+    - revisar si `IndustrialDomainPackAdapter` tambien debe alinearse o si representa otro contrato separado
+- Mitigacion adicional de hardcodeo:
+  - `TemplateSqlBuilder` ya no depende en runtime del `switch` por `PatternKey`
+  - flujo actual:
+    - primero `SqlTemplate`
+    - luego fallback generico por `Metric` + `Dimension` + `TimeScope`
+  - las rutas legacy especificas quedan como residuo tecnico, pero ya no son el camino principal de ejecucion
+- Limpieza aplicada:
+  - se eliminaron del runtime los metodos legacy muertos de `TemplateSqlBuilder`
+  - tambien se retiro `Supports(...)` de la interfaz, porque ya no formaba parte del flujo real
+  - resultado:
+    - menos codigo engaÃƒÂ±oso
+    - menos mantenimiento duplicado
+    - el builder refleja mejor la arquitectura actual declarativa
 
 ## Features WOW aprobadas
 
@@ -517,3 +750,77 @@ Fuera de alcance por ahora:
 - El historial y editor RAG respetan el contexto activo.
 - El arranque del sistema es aceptable y entendido con medicion basica.
 - Existe checklist operativo para levantar el piloto sin depender de memoria oral.
+
+## Notas de backlog externo - HoloTasks / LayerAudits
+
+### Proxima sesion - Ejecucion de auditoria en piso
+- Revisar en `LayerAudits.sln` si cada pregunta ya distingue entre:
+  - `documentos de referencia`
+  - `ayuda visual`
+- Si no existe esa distincion, definir el modelo de datos para separarlos:
+  - documentos formales:
+    - `WI`
+    - `CP`
+    - `PFD`
+    - `PFMEA`
+    - formatos
+  - ayudas visuales:
+    - imagenes
+    - ejemplos
+    - laminas explicativas
+- Ajustar HoloTasks para mostrar ambos grupos por separado:
+  - `Documentos de referencia`
+  - `Ayuda visual`
+- Disenar y agregar la captura completa del renglon operativo del `F-0009` cuando la respuesta sea `NC`:
+  - observacion / accion correctiva
+  - responsable
+  - plan de reaccion `A/B/C`
+  - estatus `Abierto / Cerrado`
+  - fotos
+- Mostrar claramente el plan de reaccion en HoloTasks:
+  - no como seleccion libre
+  - sino como valor heredado/predefinido por pregunta
+  - capturado junto al hallazgo
+- Soportar cierre inmediato cuando aplique:
+  - especialmente para plan `A`
+  - permitir `Cerrado` si se corrigio en el momento
+  - `Abierto` si no
+- Agregar validaciones minimas antes de finalizar la auditoria:
+  - preguntas respondidas
+  - `NC` con observacion
+  - `NC` con fotos
+  - `NC` con estatus
+  - responsable y plan de reaccion presentes
+- Revisar y disenar soporte para preguntas especiales de Nivel 3:
+  - mostrar/habilitar preguntas exclusivas
+  - restringirlas por nivel
+  - soportar revision de acciones correctivas y validacion con cliente cuando aplique
+- Revisar como quedara la estructura formal del hallazgo en HoloTasks:
+  - no solo respuesta y evidencia
+  - tambien reglas de cierre
+  - completitud
+  - trazabilidad minima en ejecucion
+- Validar nuevamente la experiencia de evidencia en HoloLens:
+  - foto completa en miniatura
+  - boton de borrar con icono
+  - `Ver / anotar`
+  - comportamiento de camara nativa
+- Dejar para mejora posterior, no como requisito duro inmediato:
+  - modo offline
+  - cantidad maxima de fotos configurable
+  - campo separado de `documento revisado`
+  - filtrado automatico de `donde aplique`
+- Construir una matriz final de backlog/gap analysis con:
+  - `Funcionalidad`
+  - `Estado actual`
+  - `Falta`
+  - `Prioridad`
+  - `Impacto en reemplazo del F-0009`
+- Revisar manana la cobertura funcional por proyecto para evitar traslapes o huecos:
+  - `LayerAudits`
+  - `QrPrensas` (API de HoloTasks)
+  - `HoloTasks`
+  - objetivo:
+    - identificar que puntos del proceso cubre cada proyecto
+    - detectar dependencias cruzadas
+    - confirmar que funcionalidades deben vivir en cada sistema

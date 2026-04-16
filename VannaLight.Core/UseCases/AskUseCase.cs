@@ -385,7 +385,7 @@ public class AskUseCase(
             return new AskResult(
                 false,
                 string.Empty,
-                "No se identifico el numero de parte para el pronostico.",
+                "No se identificó una entidad concreta para el pronóstico. Especifica un N/P, producto, prensa, cliente u otra clave de serie en la pregunta.",
                 false,
                 AskFailureKind.GenerationError);
         }

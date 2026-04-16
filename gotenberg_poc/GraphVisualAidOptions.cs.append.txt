@@ -1,5 +1,0 @@
-    public bool PreferGotenbergConversion { get; set; }
-    public string GotenbergBaseUrl { get; set; } = "http://localhost:3000";
-    public int GotenbergTimeoutSeconds { get; set; } = 120;
-    public bool GotenbergSinglePageSheets { get; set; } = true;
-    public string GotenbergTraceHeader { get; set; } = "qrprensas-preview";

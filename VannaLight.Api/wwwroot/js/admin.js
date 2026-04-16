@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------
+// -----------------------------------------------------------
 // STATE
 // -----------------------------------------------------------
 let globalJobs = [];
@@ -53,6 +53,7 @@ let globalAdminActiveContext = null;
 let onboardingBootstrap = null;
 let activeOnboardingTourStep = -1;
 const onboardingWorkspaceStateKey = 'vannalight.onboarding.workspace';
+const onboardingReferencePanelsStateKey = 'vannalight.onboarding.reference-panels';
 const adminScopedTabs = new Set(['allowed', 'business-rules', 'semantics', 'patterns']);
 
 const promptConfigFields = [
@@ -589,6 +590,7 @@ async function loadOnboardingBootstrap() {
         populateOnboardingConnectionOptions();
         renderOnboardingRuntimeContexts();
         renderOnboardingTenantList();
+        toggleOnboardingReferencePanels(readOnboardingReferencePanelsState());
 
         const persistedWorkspace = readOnboardingWorkspaceState();
         const defaults = getOnboardingDefaults();
@@ -620,6 +622,7 @@ function populateOnboardingSummary() {
     setText('txtOnboardingEnvironment', onboardingBootstrap?.environmentName || onboardingBootstrap?.EnvironmentName || 'Development');
     setText('txtOnboardingSystemProfile', profile.profileKey || profile.ProfileKey || defaults.systemProfileKey || defaults.SystemProfileKey || 'default');
     setText('txtOnboardingConnectionCount', String(globalConnectionProfiles.length || 0));
+    renderOnboardingFlowSummary();
 }
 
 function populateOnboardingConnectionOptions() {
@@ -861,6 +864,7 @@ async function selectOnboardingTenant(tenantKey) {
     if (!tenantKey) return;
     selectedOnboardingTenantKey = tenantKey;
     renderOnboardingTenantList();
+        toggleOnboardingReferencePanels(readOnboardingReferencePanelsState());
 
     const tenant = globalTenants.find(x => String(x.tenantKey || x.TenantKey || '') === String(tenantKey));
     if (!tenant) {
@@ -1062,6 +1066,7 @@ function resetOnboardingForm(options = {}) {
     closeOnboardingTour();
     selectedOnboardingTenantKey = null;
     renderOnboardingTenantList();
+        toggleOnboardingReferencePanels(readOnboardingReferencePanelsState());
     globalTenantDomains = [];
     renderTenantDomains();
     globalOnboardingSchemaCandidates = [];
@@ -1293,7 +1298,150 @@ function validateOnboardingValidationQuestion(showErrors = true) {
     return true;
 }
 
+function readOnboardingReferencePanelsState() {
+    try {
+        const raw = localStorage.getItem(onboardingReferencePanelsStateKey);
+        if (raw === null) return false;
+        return raw === '1';
+    } catch {
+        return false;
+    }
+}
+
+function persistOnboardingReferencePanelsState(isOpen) {
+    try {
+        localStorage.setItem(onboardingReferencePanelsStateKey, isOpen ? '1' : '0');
+    } catch {
+        // no-op
+    }
+}
+
+function getOnboardingFlowState() {
+    const health = globalOnboardingStatus?.health ?? globalOnboardingStatus?.Health ?? null;
+    const hasWorkspace = !!getValue('txtOnboardingTenantKey').trim() && !!getValue('txtOnboardingDomain').trim() && !!getValue('txtOnboardingConnectionName').trim();
+    const hasAllowedObjects = !!(health?.hasAllowedObjects ?? health?.HasAllowedObjects);
+    const hasAllowedSelection = globalOnboardingSchemaCandidates.some(x => !!x.isSelected);
+    const hasAllowed = hasAllowedSelection || hasAllowedObjects;
+    const hasSchemaDocs = !!(health?.hasSchemaDocs ?? health?.HasSchemaDocs);
+    const hasSemanticHints = !!(health?.hasSemanticHints ?? health?.HasSemanticHints);
+    const isInitialized = hasSchemaDocs && hasSemanticHints;
+    const hasValidation = isOnboardingValidationSuccessful(globalOnboardingValidation);
+
+    let currentStep = 1;
+    let currentStepLabel = 'Paso 1 · Workspace';
+    let currentStepHint = 'Empieza configurando el workspace, el dominio y la conexión a la base.';
+    let requiredAction = needsInitialOnboardingSetup()
+        ? 'Crear o seleccionar una conexión válida y guardar el workspace.'
+        : 'Completar tenant, dominio y conexión, luego guardar el workspace.';
+    let nextAction = 'Descubrir el schema para elegir tablas permitidas.';
+    let progress = 0;
+    let progressHint = 'Aún no hay pasos obligatorios completados.';
+
+    if (hasWorkspace) {
+        currentStep = 2;
+        currentStepLabel = 'Paso 2 · Tablas permitidas';
+        currentStepHint = 'Ya existe contexto mínimo; ahora toca definir el perímetro seguro del dominio.';
+        requiredAction = hasAllowedSelection
+            ? 'Guardar la selección actual de tablas permitidas.'
+            : 'Descubrir schema y seleccionar al menos una tabla o vista permitida.';
+        nextAction = 'Preparar el dominio para generar schema docs e hints.';
+        progress = 1;
+        progressHint = 'El workspace base ya quedó configurado.';
+    }
+
+    if (hasAllowed) {
+        currentStep = 3;
+        currentStepLabel = 'Paso 3 · Preparar dominio';
+        currentStepHint = 'El perímetro seguro ya existe; ahora falta generar el contexto técnico mínimo.';
+        requiredAction = 'Ejecutar la preparación del dominio para generar schema docs y semantic hints base.';
+        nextAction = 'Hacer una pregunta real para validar el dominio.';
+        progress = 2;
+        progressHint = 'El dominio ya sabe qué objetos puede consultar.';
+    }
+
+    if (isInitialized) {
+        currentStep = 4;
+        currentStepLabel = 'Paso 4 · Prueba real';
+        currentStepHint = 'El motor ya tiene contexto técnico suficiente para intentar una consulta de negocio.';
+        requiredAction = 'Ejecutar una pregunta real y revisar que el SQL y el resultado sean correctos.';
+        nextAction = 'Si responde bien, el dominio ya puede considerarse listo para salida inicial.';
+        progress = 3;
+        progressHint = 'El dominio ya fue preparado e indexado.';
+    }
+
+    if (hasValidation) {
+        currentStep = 4;
+        currentStepLabel = 'Listo · Onboarding base completo';
+        currentStepHint = 'El flujo base ya quedó operativo para una primera salida.';
+        requiredAction = 'No hay bloqueos base pendientes; lo siguiente es afinación opcional.';
+        nextAction = 'Business Rules, Semantic Hints manuales y Query Patterns pueden refinarse después.';
+        progress = 4;
+        progressHint = 'Los 4 pasos obligatorios del onboarding base están completos.';
+    }
+
+    return {
+        hasWorkspace,
+        hasAllowedObjects,
+        hasAllowedSelection,
+        hasAllowed,
+        hasSchemaDocs,
+        hasSemanticHints,
+        isInitialized,
+        hasValidation,
+        currentStep,
+        currentStepLabel,
+        currentStepHint,
+        requiredAction,
+        nextAction,
+        progress,
+        progressHint
+    };
+}
+
+function renderOnboardingFlowSummary() {
+    const state = getOnboardingFlowState();
+    setText('txtOnboardingCurrentStep', state.currentStepLabel);
+    setText('txtOnboardingCurrentStepHint', state.currentStepHint);
+    setText('txtOnboardingRequiredAction', state.requiredAction);
+    setText('txtOnboardingNextAction', state.nextAction);
+    setText('txtOnboardingProgressValue', `${state.progress} / 4`);
+    setText('txtOnboardingProgressHint', state.progressHint);
+
+    const meta = document.getElementById('onboardingFlowSummaryMeta');
+    if (!meta) return;
+
+    const selectedDomain = getValue('txtOnboardingDomain').trim() || 'sin-domain';
+    const selectedConnection = getValue('txtOnboardingConnectionName').trim() || 'sin-conexion';
+    const chips = [
+        `<span class="meta-chip training-no">${escHtml(selectedDomain)}</span>`,
+        `<span class="meta-chip training-no">${escHtml(selectedConnection)}</span>`
+    ];
+
+    if (state.hasValidation) {
+        chips.unshift('<span class="meta-chip verify-ok">Operativo</span>');
+    } else if (state.isInitialized) {
+        chips.unshift('<span class="meta-chip verify-pending">Falta validar</span>');
+    } else {
+        chips.unshift('<span class="meta-chip training-no">En configuracion</span>');
+    }
+
+    chips.push('<span class="meta-empty">Las pestañas de curacion avanzada son opcionales para cerrar el onboarding base.</span>');
+    meta.innerHTML = chips.join('');
+}
+
+function toggleOnboardingReferencePanels(forceOpen = null) {
+    const panel = document.getElementById('onboardingReferencePanels');
+    const button = document.getElementById('btnToggleOnboardingReferencePanels');
+    if (!panel || !button) return;
+
+    const shouldOpen = forceOpen === null ? panel.classList.contains('is-collapsed') : !!forceOpen;
+    panel.classList.toggle('is-collapsed', !shouldOpen);
+    button.textContent = shouldOpen ? 'Ocultar apoyo' : 'Mostrar apoyo';
+    persistOnboardingReferencePanelsState(shouldOpen);
+}
+
 function renderOnboardingActionGuidance() {
+    renderOnboardingFlowSummary();
     const meta = document.getElementById('onboardingMeta');
     if (!meta) return;
 
@@ -1435,6 +1583,7 @@ async function applyPersistedOnboardingWorkspaceState(workspace) {
 
     selectedOnboardingTenantKey = workspace.tenantKey || null;
     renderOnboardingTenantList();
+        toggleOnboardingReferencePanels(readOnboardingReferencePanelsState());
     populateOnboardingConnectionOptions();
 
     if (workspace.tenantKey) {
@@ -6395,3 +6544,690 @@ document.addEventListener('keydown', (event) => {
     }
 });
 
+
+// -----------------------------------------------------------
+// ONBOARDING UX REFACTOR ENHANCEMENTS
+// -----------------------------------------------------------
+let onboardingAdvancedAreaOpen = false;
+
+function ensureOnboardingStepGoal(panelId, copy) {
+    const panel = document.getElementById(panelId);
+    if (!panel || !copy) return;
+    if (panel.querySelector('.step-panel-goal')) return;
+    const header = panel.querySelector('.step-panel-header');
+    if (!header || !header.parentElement) return;
+    const goal = document.createElement('div');
+    goal.className = 'step-panel-goal';
+    goal.textContent = copy;
+    header.insertAdjacentElement('afterend', goal);
+}
+
+function ensureOnboardingSchemaAssistUI() {
+    const panel = document.getElementById('onboardingStepPanel2b');
+    if (!panel) return;
+
+    ensureOnboardingStepGoal('onboardingStepPanel2b', 'Exito de este paso: dejas un perimetro de consulta claro y evitas exponer objetos innecesarios.');
+
+    const legacyActions = panel.querySelector('.inline-actions');
+    if (legacyActions) {
+        legacyActions.classList.add('onboarding-legacy-actions');
+        const discoverBtn = legacyActions.querySelector('button');
+        if (discoverBtn && !discoverBtn.id) {
+            discoverBtn.id = 'btnOnboardingDiscoverSchema';
+        }
+    }
+
+    if (!panel.querySelector('.onboarding-step-intro')) {
+        const intro = document.createElement('div');
+        intro.className = 'onboarding-step-intro';
+        intro.textContent = 'Solo estas tablas o vistas podran ser consultadas por el motor. Empieza por las recomendadas, revisa con cuidado las mas pesadas y evita seleccionar todo por defecto.';
+        legacyActions?.insertAdjacentElement('beforebegin', intro);
+    }
+
+    if (!panel.querySelector('.onboarding-schema-toolbar')) {
+        const toolbar = document.createElement('div');
+        toolbar.className = 'onboarding-schema-toolbar';
+        toolbar.innerHTML = `
+            <input type="text" id="txtOnboardingSchemaSearch" class="field-input onboarding-schema-search" placeholder="Buscar por schema, tabla, vista o descripcion" oninput="handleOnboardingSchemaFilterChange()" />
+            <select id="selOnboardingSchemaType" class="field-input onboarding-filter-select" onchange="handleOnboardingSchemaFilterChange()">
+                <option value="all">Todos los tipos</option>
+                <option value="table">Solo tablas</option>
+                <option value="view">Solo vistas</option>
+            </select>
+            <select id="selOnboardingSchemaAssist" class="field-input onboarding-filter-select" onchange="handleOnboardingSchemaFilterChange()">
+                <option value="all">Todas</option>
+                <option value="recommended">Recomendadas para empezar</option>
+                <option value="selected">Ya seleccionadas</option>
+                <option value="risky">Revisar con cuidado</option>
+            </select>`;
+        if (legacyActions?.firstElementChild) {
+            toolbar.appendChild(legacyActions.firstElementChild);
+        }
+        const meta = document.getElementById('onboardingSchemaMeta');
+        meta?.insertAdjacentElement('beforebegin', toolbar);
+    }
+
+    if (!panel.querySelector('.onboarding-schema-helper-grid')) {
+        const helper = document.createElement('div');
+        helper.className = 'onboarding-schema-helper-grid';
+        helper.innerHTML = `
+            <div class="onboarding-inline-hint-card">
+                <div class="subpanel-title">Empieza por lo util</div>
+                <div class="subpanel-desc">Prioriza vistas KPI y tablas de negocio que realmente respondan preguntas del piloto.</div>
+            </div>
+            <div class="onboarding-inline-hint-card caution-tone">
+                <div class="subpanel-title">Revisar con cuidado</div>
+                <div class="subpanel-desc">Objetos con muchas columnas y pocas llaves suelen ser mas dificiles de usar bien.</div>
+            </div>`;
+        const meta = document.getElementById('onboardingSchemaMeta');
+        meta?.insertAdjacentElement('beforebegin', helper);
+    }
+}
+
+function ensureOnboardingPreparationUI() {
+    const panel = document.getElementById('onboardingStepPanel3');
+    if (!panel) return;
+    ensureOnboardingStepGoal('onboardingStepPanel3', 'Exito de este paso: el sistema deja indexado el schema, genera contexto tecnico y crea hints base para arrancar con seguridad.');
+
+    const health = panel.querySelector('.onboarding-health');
+    if (health && !panel.querySelector('.onboarding-process-grid')) {
+        const grid = document.createElement('div');
+        grid.className = 'onboarding-process-grid';
+        grid.innerHTML = `
+            <div class="process-card"><div class="hero-kicker">1. Indexar schema</div><div class="process-card-copy">Lee las tablas permitidas y construye el inventario tecnico del dominio.</div></div>
+            <div class="process-card"><div class="hero-kicker">2. Generar contexto</div><div class="process-card-copy">Crea schema docs y contexto minimo para que el motor conozca nombres y estructura.</div></div>
+            <div class="process-card"><div class="hero-kicker">3. Crear hints base</div><div class="process-card-copy">Agrega ayudas iniciales para que el motor entienda mejor preguntas de negocio.</div></div>`;
+        health.insertAdjacentElement('beforebegin', grid);
+    }
+
+    if (!document.getElementById('txtOnboardingPreparationNarrative')) {
+        const statusGrid = panel.querySelector('.onboarding-status-grid');
+        if (statusGrid) {
+            const note = document.createElement('div');
+            note.className = 'onboarding-preparation-summary';
+            note.id = 'txtOnboardingPreparationNarrative';
+            note.textContent = 'Todavia no se ha preparado el dominio. Cuando ejecutes este paso te mostraremos aqui que quedo listo.';
+            statusGrid.insertAdjacentElement('afterend', note);
+        }
+    }
+}
+
+function ensureOnboardingValidationUI() {
+    const panel = document.getElementById('onboardingStepPanel4');
+    if (!panel) return;
+    ensureOnboardingStepGoal('onboardingStepPanel4', 'Exito de este paso: ya puedes confiar en que el dominio responde una pregunta real con el pipeline SQL del producto.');
+
+    const firstFieldGroup = panel.querySelector('.field-group');
+    if (firstFieldGroup && !panel.querySelector('.onboarding-validation-intro')) {
+        const intro = document.createElement('div');
+        intro.className = 'onboarding-validation-intro';
+        intro.innerHTML = `
+            <div class="onboarding-inline-hint-card">
+                <div class="subpanel-title">Que significa exito</div>
+                <div class="subpanel-desc">La prueba es buena si el SQL es valido, usa objetos permitidos y el resultado tiene sentido para el caso de negocio.</div>
+            </div>
+            <div class="onboarding-inline-hint-card success-tone">
+                <div class="subpanel-title">Despues de pasar</div>
+                <div class="subpanel-desc">El sistema marcara el dominio como listo para una primera salida.</div>
+            </div>`;
+        firstFieldGroup.insertAdjacentElement('beforebegin', intro);
+    }
+
+    const validationGrid = panel.querySelector('.onboarding-validation-grid');
+    if (validationGrid && !panel.querySelector('.onboarding-validation-overview')) {
+        const overview = document.createElement('div');
+        overview.className = 'onboarding-validation-overview';
+        overview.innerHTML = `
+            <div class="validation-overview-card"><div class="hero-kicker">Estado de ejecucion</div><div class="validation-overview-value" id="txtOnboardingValidationExecutionState">Sin ejecutar</div><div class="validation-overview-sub">Veremos aqui si la prueba esta en cola, corriendo, completa o fallida.</div></div>
+            <div class="validation-overview-card"><div class="hero-kicker">Objetos usados</div><div class="validation-overview-value" id="txtOnboardingValidationTablesUsed">Aun no disponible</div><div class="validation-overview-sub">Tablas o vistas detectadas en el SQL generado.</div></div>
+            <div class="validation-overview-card"><div class="hero-kicker">Feedback de validacion</div><div class="validation-overview-value" id="txtOnboardingValidationFeedback">Esperando prueba</div><div class="validation-overview-sub">Te diremos si ya puedes confiar en esta primera respuesta.</div></div>`;
+        validationGrid.insertAdjacentElement('beforebegin', overview);
+    }
+
+    const questionInput = document.getElementById('txtOnboardingValidationQuestion');
+    questionInput?.classList.add('onboarding-validation-input');
+}
+function ensureOnboardingReadinessAdvancedUI() {
+    const panel = document.getElementById('onboardingStepPanel5');
+    if (!panel) return;
+
+    if (!document.getElementById('txtOnboardingFinalRecommendation')) {
+        const meta = document.getElementById('onboardingReadinessMeta');
+        if (meta) {
+            const card = document.createElement('div');
+            card.className = 'onboarding-inline-hint-card success-tone onboarding-final-recommendation';
+            card.innerHTML = '<div class="subpanel-title">Siguiente accion recomendada</div><div class="subpanel-desc" id="txtOnboardingFinalRecommendation">Completa primero el onboarding base. La afinacion avanzada viene despues.</div>';
+            meta.insertAdjacentElement('afterend', card);
+        }
+    }
+
+    if (!document.getElementById('onboardingExpertTools')) {
+        const advancedHost = document.createElement('div');
+        advancedHost.className = 'subpanel onboarding-advanced-hub';
+        advancedHost.innerHTML = `
+            <div class="onboarding-advanced-hub-head">
+                <div>
+                    <div class="subpanel-title">Ajustes avanzados</div>
+                    <div class="subpanel-desc">Disponibles, pero fuera del foco principal del wizard base.</div>
+                </div>
+                <button class="btn btn-ghost" type="button" id="btnToggleOnboardingAdvancedArea" onclick="toggleOnboardingAdvancedArea()">Mostrar ajustes avanzados</button>
+            </div>
+            <div id="onboardingExpertTools" style="display:none"></div>`;
+        const packField = document.getElementById('txtOnboardingDomainPackJson')?.closest('.field-group');
+        const packMeta = document.getElementById('onboardingPackMeta');
+        const packBanner = document.getElementById('onboardingPackBanner');
+        panel.appendChild(advancedHost);
+        const target = document.getElementById('onboardingExpertTools');
+        packField && target?.appendChild(packField);
+        packMeta && target?.appendChild(packMeta);
+        packBanner && target?.appendChild(packBanner);
+    }
+
+    const target = document.getElementById('onboardingExpertTools');
+    const footer = document.querySelector('#pane-onboarding .editor-actions');
+    const newWorkspace = footer?.querySelector('button[onclick="startNewOnboardingWorkspace()"]');
+    const exportPack = document.getElementById('btnOnboardingExportPack');
+    const importPack = document.getElementById('btnOnboardingImportPack');
+    if (target && !target.querySelector('.onboarding-advanced-actions')) {
+        const actions = document.createElement('div');
+        actions.className = 'onboarding-advanced-actions';
+        newWorkspace && actions.appendChild(newWorkspace);
+        exportPack && actions.appendChild(exportPack);
+        importPack && actions.appendChild(importPack);
+        target.appendChild(actions);
+    }
+}
+
+function toggleOnboardingAdvancedArea(forceOpen = null) {
+    const panel = document.getElementById('onboardingExpertTools');
+    const buttons = [
+        document.getElementById('btnToggleOnboardingAdvancedArea'),
+        document.getElementById('btnToggleOnboardingAdvancedAreaFooter'),
+        document.getElementById('btnToggleOnboardingAdvancedAreaBottom')
+    ].filter(Boolean);
+    if (!panel) return;
+    onboardingAdvancedAreaOpen = forceOpen === null ? panel.style.display === 'none' : !!forceOpen;
+    panel.style.display = onboardingAdvancedAreaOpen ? 'block' : 'none';
+    buttons.forEach(button => button.textContent = onboardingAdvancedAreaOpen ? 'Ocultar ajustes avanzados' : 'Ajustes avanzados');
+}
+
+function handleOnboardingSchemaFilterChange() {
+    renderOnboardingSchemaCandidates();
+}
+
+function normalizeOnboardingObjectType(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized.includes('view')) return 'view';
+    if (normalized.includes('table')) return 'table';
+    return normalized || 'other';
+}
+
+function isRiskyOnboardingCandidate(item) {
+    const columnCount = item.columnCount ?? item.ColumnCount ?? 0;
+    const pkCount = item.primaryKeyCount ?? item.PrimaryKeyCount ?? 0;
+    const fkCount = item.foreignKeyCount ?? item.ForeignKeyCount ?? 0;
+    return columnCount >= 20 && pkCount === 0 && fkCount === 0;
+}
+
+function extractOnboardingSqlTablesUsed(sqlText) {
+    const sql = String(sqlText || '');
+    if (!sql.trim()) return [];
+    const matches = [...sql.matchAll(/\b(?:from|join)\s+([\[\]\w\.]+)/gi)];
+    return [...new Set(matches.map(match => String(match[1] || '').replace(/[\[\]]/g, '').trim()).filter(Boolean))];
+}
+
+function renderOnboardingCompactReadiness() {
+    const state = getOnboardingFlowState();
+    const selectedCount = globalOnboardingSchemaCandidates.filter(x => !!x.isSelected).length;
+    setText('txtOnboardingCompactWorkspace', state.hasWorkspace ? 'Listo' : 'Pendiente');
+    setText('txtOnboardingCompactTables', state.hasAllowed ? `${selectedCount || 'OK'} activos` : 'Sin seleccionar');
+    setText('txtOnboardingCompactContext', state.isInitialized ? 'Preparado' : 'Sin preparar');
+    setText('txtOnboardingCompactValidation', state.hasValidation ? 'Validada' : 'Pendiente');
+    updateReadinessCard('compactWorkspaceCard', state.hasWorkspace);
+    updateReadinessCard('compactTablesCard', state.hasAllowed);
+    updateReadinessCard('compactContextCard', state.isInitialized);
+    updateReadinessCard('compactValidationCard', state.hasValidation);
+}
+
+function syncOnboardingFooterActions() {
+    const state = getOnboardingFlowState();
+    const footerHint = document.getElementById('onboardingFooterHint');
+    const actions = [
+        document.getElementById('btnOnboardingSaveStep1'),
+        document.getElementById('btnOnboardingSaveAllowedObjects'),
+        document.getElementById('btnOnboardingInitialize'),
+        document.getElementById('btnOnboardingRunValidation')
+    ].filter(Boolean);
+    actions.forEach(button => button.style.display = 'none');
+
+    let activeButton = document.getElementById('btnOnboardingSaveStep1');
+    let footerCopy = 'Completa tenant, dominio y conexion para guardar el workspace.';
+
+    if (state.hasWorkspace && !state.hasAllowed) {
+        activeButton = document.getElementById('btnOnboardingSaveAllowedObjects');
+        footerCopy = 'Cuando guardes las tablas, el sistema ya podra preparar el dominio.';
+    } else if (state.hasAllowed && !state.isInitialized) {
+        activeButton = document.getElementById('btnOnboardingInitialize');
+        footerCopy = 'Este paso automatiza el contexto tecnico minimo para intentar una prueba real.';
+    } else if (state.isInitialized) {
+        activeButton = document.getElementById('btnOnboardingRunValidation');
+        footerCopy = state.hasValidation
+            ? 'La prueba ya paso. Puedes cerrar el flujo base o abrir la afinacion avanzada.'
+            : 'Ejecuta una pregunta real para confirmar que el dominio ya responde bien.';
+    }
+
+    if (activeButton) {
+        activeButton.style.display = 'inline-flex';
+    }
+    if (footerHint) {
+        footerHint.textContent = footerCopy;
+    }
+}
+
+function enhanceOnboardingWizardLayout() {
+    ensureOnboardingStepGoal('onboardingStepPanel1', 'Exito de este paso: el sistema ya conoce el workspace, el dominio semantico y la conexion con la que descubrira el schema.');
+    ensureOnboardingSchemaAssistUI();
+    ensureOnboardingPreparationUI();
+    ensureOnboardingValidationUI();
+    ensureOnboardingReadinessAdvancedUI();
+    renderOnboardingCompactReadiness();
+    syncOnboardingFooterActions();
+}
+
+const originalLoadOnboardingBootstrap = loadOnboardingBootstrap;
+loadOnboardingBootstrap = async function () {
+    await originalLoadOnboardingBootstrap();
+    enhanceOnboardingWizardLayout();
+};
+
+const originalResetOnboardingForm = resetOnboardingForm;
+resetOnboardingForm = function (options = {}) {
+    originalResetOnboardingForm(options);
+    enhanceOnboardingWizardLayout();
+};
+
+function renderOnboardingSchemaCandidates() {
+    const list = document.getElementById('onboardingSchemaCandidateList');
+    const meta = document.getElementById('onboardingSchemaMeta');
+    const saveBtn = document.getElementById('btnOnboardingSaveAllowedObjects');
+    if (!list) return;
+
+    const selectedCount = globalOnboardingSchemaCandidates.filter(x => !!x.isSelected).length;
+    const search = String(getValue('txtOnboardingSchemaSearch') || '').trim().toLowerCase();
+    const typeFilter = String(getValue('selOnboardingSchemaType') || 'all').trim().toLowerCase();
+    const assistFilter = String(getValue('selOnboardingSchemaAssist') || 'all').trim().toLowerCase();
+
+    const visibleItems = globalOnboardingSchemaCandidates.filter(item => {
+        const haystack = [item.schemaName, item.SchemaName, item.objectName, item.ObjectName, item.description, item.Description].join(' ').toLowerCase();
+        const objectType = normalizeOnboardingObjectType(item.objectType || item.ObjectType || '');
+        const isRecommended = !!(item.isSuggested ?? item.IsSuggested ?? item.isCurrentlyAllowed ?? item.IsCurrentlyAllowed);
+        const isSelected = !!item.isSelected;
+        const isRisky = isRiskyOnboardingCandidate(item);
+        if (search && !haystack.includes(search)) return false;
+        if (typeFilter !== 'all' && objectType !== typeFilter) return false;
+        if (assistFilter === 'recommended' && !isRecommended) return false;
+        if (assistFilter === 'selected' && !isSelected) return false;
+        if (assistFilter === 'risky' && !isRisky) return false;
+        return true;
+    });
+
+    if (!globalOnboardingSchemaCandidates.length) {
+        list.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M8 8h8"></path><path d="M8 12h8"></path><path d="M8 16h5"></path></svg><span class="empty-state-title">Schema no cargado</span><span class="empty-state-sub">Descubre el schema para empezar a seleccionar objetos permitidos.</span></div>';
+        if (meta) meta.innerHTML = '<span class="meta-empty">Aun no se ha cargado el schema de la conexion.</span>';
+        if (saveBtn) saveBtn.disabled = true;
+        renderOnboardingActionGuidance();
+        return;
+    }
+
+    const riskyCount = globalOnboardingSchemaCandidates.filter(isRiskyOnboardingCandidate).length;
+    if (meta) {
+        meta.innerHTML = `<span class="meta-chip status-ok">${selectedCount} seleccionados</span><span class="meta-chip training-no">${visibleItems.length} visibles</span><span class="meta-chip training-no">${globalOnboardingSchemaCandidates.length} detectados</span>${riskyCount ? `<span class="meta-chip verify-pending">${riskyCount} revisar con cuidado</span>` : ''}`;
+    }
+
+    if (!visibleItems.length) {
+        list.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><path d="M8 12h8"></path><path d="M12 8v8"></path></svg><span class="empty-state-title">Sin coincidencias</span><span class="empty-state-sub">Ajusta los filtros o limpia la busqueda para ver mas objetos.</span></div>';
+        if (saveBtn) saveBtn.disabled = selectedCount === 0;
+        return;
+    }
+
+    list.innerHTML = visibleItems.map((item, idx) => {
+        const schemaName = item.schemaName || item.SchemaName || '';
+        const objectName = item.objectName || item.ObjectName || '';
+        const objectType = item.objectType || item.ObjectType || '';
+        const desc = item.description || item.Description || '';
+        const isRecommended = !!(item.isSuggested ?? item.IsSuggested ?? item.isCurrentlyAllowed ?? item.IsCurrentlyAllowed);
+        const isSelected = !!item.isSelected;
+        const columnCount = item.columnCount ?? item.ColumnCount ?? 0;
+        const pkCount = item.primaryKeyCount ?? item.PrimaryKeyCount ?? 0;
+        const fkCount = item.foreignKeyCount ?? item.ForeignKeyCount ?? 0;
+        const risky = isRiskyOnboardingCandidate(item);
+        const sourceIndex = globalOnboardingSchemaCandidates.indexOf(item);
+        return `<label class="schema-candidate ${isSelected ? 'is-selected' : ''} ${isRecommended ? 'is-recommended' : ''} ${risky ? 'is-risky' : ''}"><input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleOnboardingSchemaCandidate(${sourceIndex}, this.checked)" /><div class="schema-candidate-body"><div class="schema-candidate-head"><div><div class="hi-question">${escHtml(schemaName)}.${escHtml(objectName)}</div><div class="schema-candidate-submeta">${escHtml(objectType)} · ${columnCount} cols · ${pkCount} pk · ${fkCount} fk</div></div><div class="schema-candidate-tags">${isRecommended ? '<span class="meta-chip status-ok">Recomendada</span>' : ''}${risky ? '<span class="meta-chip verify-pending">Revisar</span>' : ''}</div></div>${desc ? `<div class="schema-candidate-desc">${escHtml(desc)}</div>` : ''}</div></label>`;
+    }).join('');
+
+    if (saveBtn) saveBtn.disabled = selectedCount === 0;
+    renderOnboardingCompactReadiness();
+    syncOnboardingFooterActions();
+    renderOnboardingActionGuidance();
+}
+function renderOnboardingStatus() {
+    const status = globalOnboardingStatus;
+    const allowedObjectsCount = status?.allowedObjectsCount ?? status?.AllowedObjectsCount ?? 0;
+    const schemaDocsCount = status?.schemaDocsCount ?? status?.SchemaDocsCount ?? 0;
+    const semanticHintsCount = status?.semanticHintsCount ?? status?.SemanticHintsCount ?? 0;
+    const health = status?.health ?? status?.Health ?? null;
+    const hasAllowedObjects = !!(health?.hasAllowedObjects ?? health?.HasAllowedObjects);
+    const hasSchemaDocs = !!(health?.hasSchemaDocs ?? health?.HasSchemaDocs);
+    const hasSemanticHints = !!(health?.hasSemanticHints ?? health?.HasSemanticHints);
+    const domain = status?.domain ?? status?.Domain ?? getValue('txtOnboardingDomain').trim();
+    const connectionName = status?.connectionName ?? status?.ConnectionName ?? getValue('txtOnboardingConnectionName').trim();
+
+    setText('txtOnboardingAllowedCount', String(allowedObjectsCount));
+    setText('txtOnboardingSchemaDocCount', String(schemaDocsCount));
+    setText('txtOnboardingHintCount', String(semanticHintsCount));
+    updateStatusTile('tileAllowedObjects', hasAllowedObjects);
+    updateStatusTile('tileSchemaDocs', hasSchemaDocs);
+    updateStatusTile('tileSemanticHints', hasSemanticHints);
+
+    const narrative = document.getElementById('txtOnboardingPreparationNarrative');
+    if (narrative) {
+        narrative.textContent = !status
+            ? 'Todavia no se ha preparado el dominio. Cuando ejecutes este paso te mostraremos aqui que quedo listo.'
+            : `Dominio ${domain || 'sin-domain'} en ${connectionName || 'sin-conexion'}: ${allowedObjectsCount} tablas activas, ${schemaDocsCount} schema docs y ${semanticHintsCount} hints base.`;
+    }
+
+    const meta = document.getElementById('onboardingStatusMeta');
+    if (meta) {
+        meta.innerHTML = !status
+            ? '<span class="meta-empty">Ejecuta este paso cuando ya estes conforme con las tablas permitidas.</span>'
+            : `<span class="meta-chip status-ok">${escHtml(domain || '')}</span><span class="meta-chip training-no">${escHtml(connectionName || 'sin-conexion')}</span><span class="meta-chip training-no">${allowedObjectsCount} tablas</span><span class="meta-chip training-no">${schemaDocsCount} schema docs</span><span class="meta-chip training-no">${semanticHintsCount} hints</span>`;
+    }
+
+    const isInitialized = hasSchemaDocs && hasSemanticHints;
+    if (!isInitialized && globalOnboardingValidation?.jobId) {
+        resetOnboardingValidation(true);
+    } else {
+        renderOnboardingValidation();
+    }
+
+    renderOnboardingReadiness();
+    renderOnboardingCompactReadiness();
+    syncOnboardingFooterActions();
+    updateOnboardingStepper();
+    renderOnboardingActionGuidance();
+}
+
+function renderOnboardingValidation() {
+    const suggestionList = document.getElementById('onboardingSuggestionList');
+    const meta = document.getElementById('onboardingValidationMeta');
+    const runBtn = document.getElementById('btnOnboardingRunValidation');
+    const health = globalOnboardingStatus?.health ?? globalOnboardingStatus?.Health ?? null;
+    const isInitialized = !!(health?.hasSchemaDocs ?? health?.HasSchemaDocs) && !!(health?.hasSemanticHints ?? health?.HasSemanticHints);
+    const suggestions = buildOnboardingSuggestedQuestions();
+    const currentQuestion = getValue('txtOnboardingValidationQuestion').trim();
+
+    if (!currentQuestion && suggestions.length) {
+        setValue('txtOnboardingValidationQuestion', suggestions[0]);
+    }
+
+    if (suggestionList) {
+        if (!isInitialized) {
+            suggestionList.innerHTML = '<span class="meta-empty">Prepara el dominio para generar preguntas sugeridas.</span>';
+        } else if (!suggestions.length) {
+            suggestionList.innerHTML = '<span class="meta-empty">No hay objetos suficientes para sugerir preguntas; escribe una manualmente.</span>';
+        } else {
+            suggestionList.innerHTML = suggestions.slice(0, 3).map(question => `<button class="suggestion-chip suggestion-chip-card" type="button" onclick="applyOnboardingSuggestedQuestion('${jsString(question)}')"><span class="suggestion-chip-title">Usar esta</span><span>${escHtml(question)}</span></button>`).join('');
+        }
+    }
+
+    if (runBtn) runBtn.disabled = !isInitialized;
+    setText('txtOnboardingValidationSql', formatOnboardingValidationSql(globalOnboardingValidation));
+    setText('txtOnboardingValidationResult', formatOnboardingValidationResult(globalOnboardingValidation));
+    setText('txtOnboardingValidationExecutionState', globalOnboardingValidation?.status || 'Sin ejecutar');
+    setText('txtOnboardingValidationTablesUsed', extractOnboardingSqlTablesUsed(globalOnboardingValidation?.sqlText).join(', ') || 'Aun no disponible');
+    setText('txtOnboardingValidationFeedback', isOnboardingValidationSuccessful(globalOnboardingValidation) ? 'Respuesta util y coherente' : (globalOnboardingValidation?.errorText ? 'Requiere ajuste' : 'Esperando prueba'));
+
+    if (meta) {
+        if (!isInitialized) {
+            meta.innerHTML = '<span class="meta-empty">Completa la preparacion del dominio antes de ejecutar una prueba.</span>';
+        } else if (!globalOnboardingValidation) {
+            meta.innerHTML = `<span class="meta-chip training-no">${escHtml(getValue('txtOnboardingDomain').trim() || 'sin-domain')}</span><span class="meta-chip training-no">${escHtml(getValue('txtOnboardingConnectionName').trim() || 'sin-conexion')}</span><span class="meta-empty">Ejecuta una pregunta real para cerrar este onboarding.</span>`;
+        } else {
+            const statusKey = String(globalOnboardingValidation.status || '').toLowerCase();
+            const statusClass = statusKey === 'completed' ? 'status-ok' : (statusKey === 'queued' || statusKey === 'processing' ? 'verify-pending' : 'status-err');
+            const resultCount = globalOnboardingValidation.resultCount;
+            const statusLabel = globalOnboardingValidation.status || 'Queued';
+            meta.innerHTML = `<span class="meta-chip ${statusClass}">${escHtml(statusLabel)}</span>${resultCount !== null && resultCount !== undefined ? `<span class="meta-chip training-no">${resultCount} filas</span>` : ''}${isOnboardingValidationSuccessful(globalOnboardingValidation) ? '<span class="meta-chip verify-ok">Dominio listo para preguntas reales</span>' : '<span class="meta-chip verify-pending">Ajusta y vuelve a probar si la respuesta no es confiable</span>'}`;
+        }
+    }
+
+    renderOnboardingReadiness();
+    renderOnboardingCompactReadiness();
+    syncOnboardingFooterActions();
+    updateOnboardingStepper();
+}
+
+function renderOnboardingReadiness() {
+    const health = globalOnboardingStatus?.health ?? globalOnboardingStatus?.Health ?? null;
+    const hasWorkspace = !!getValue('txtOnboardingTenantKey').trim() && !!getValue('txtOnboardingDomain').trim() && !!getValue('txtOnboardingConnectionName').trim();
+    const hasContext = !!(health?.hasAllowedObjects ?? health?.HasAllowedObjects) && !!(health?.hasSchemaDocs ?? health?.HasSchemaDocs) && !!(health?.hasSemanticHints ?? health?.HasSemanticHints);
+    const hasValidation = isOnboardingValidationSuccessful(globalOnboardingValidation);
+    const meta = document.getElementById('onboardingReadinessMeta');
+    const recommendation = document.getElementById('txtOnboardingFinalRecommendation');
+
+    updateReadinessCard('readinessConnectionCard', hasWorkspace);
+    updateReadinessCard('readinessSchemaCard', hasContext);
+    updateReadinessCard('readinessValidationCard', hasValidation);
+
+    if (meta) {
+        if (hasWorkspace && hasContext && hasValidation) {
+            meta.innerHTML = `<span class="meta-chip verify-ok">Dominio listo</span><span class="meta-chip training-no">${escHtml(getValue('txtOnboardingDomain').trim() || 'sin-domain')}</span><span class="meta-chip training-no">${escHtml(getValue('txtOnboardingConnectionName').trim() || 'sin-conexion')}</span><span class="meta-chip status-ok">Onboarding base completado</span>`;
+        } else {
+            const missing = [];
+            if (!hasWorkspace) missing.push('workspace');
+            if (!hasContext) missing.push('contexto');
+            if (!hasValidation) missing.push('prueba');
+            meta.innerHTML = `<span class="meta-chip verify-pending">Pendiente</span><span class="meta-empty">Falta cerrar: ${escHtml(missing.join(', '))}</span>`;
+        }
+    }
+
+    if (recommendation) {
+        recommendation.textContent = hasWorkspace && hasContext && hasValidation
+            ? 'El onboarding base ya quedo listo. Si quieres, ahora puedes exportar un pack o seguir con afinacion avanzada.'
+            : (!hasWorkspace ? 'Primero asegura tenant, dominio y conexion.' : (!hasContext ? 'El siguiente foco es preparar bien el dominio.' : 'Haz una prueba real para confirmar que el dominio ya responde bien.'));
+    }
+
+    renderOnboardingCompactReadiness();
+    syncOnboardingFooterActions();
+    renderOnboardingActionGuidance();
+}
+// -----------------------------------------------------------
+// ONBOARDING UX REFACTOR ENHANCEMENTS - ROUND 2
+// -----------------------------------------------------------
+function setOnboardingPrimaryButtonLabel(buttonId, label) {
+    const button = document.getElementById(buttonId);
+    if (!button) return;
+    const spinner = button.querySelector('.btn-spinner');
+    button.textContent = '';
+    if (spinner) {
+        button.appendChild(spinner);
+    }
+    button.append(document.createTextNode(label));
+}
+
+function ensureOnboardingWorkspaceGuidedUI() {
+    const panel = document.getElementById('onboardingStepPanel1');
+    if (!panel) return;
+
+    ensureOnboardingStepGoal('onboardingStepPanel1', 'Exito de este paso: el sistema ya conoce el workspace, el dominio semantico y la conexion con la que descubrira el schema.');
+
+    const advancedToggleRow = panel.querySelector('.advanced-toggle-row');
+    if (advancedToggleRow && !panel.querySelector('.onboarding-workspace-intro')) {
+        const intro = document.createElement('div');
+        intro.className = 'onboarding-step-intro onboarding-workspace-intro';
+        intro.innerHTML = `
+            <div class="subpanel-title">Que estas configurando</div>
+            <div class="subpanel-desc">Aqui dejas listo el contexto base del dominio: nombre visible, workspace, conexion y una descripcion breve para que el equipo lo reconozca despues.</div>
+        `;
+        advancedToggleRow.insertAdjacentElement('beforebegin', intro);
+    }
+
+    if (!panel.querySelector('.onboarding-workspace-checklist')) {
+        const checklist = document.createElement('div');
+        checklist.className = 'onboarding-schema-helper-grid onboarding-workspace-checklist';
+        checklist.innerHTML = `
+            <div class="onboarding-inline-hint-card success-tone">
+                <div class="subpanel-title">Paso completo cuando</div>
+                <div class="subpanel-desc">Tenant, dominio y conexion quedan guardados correctamente.</div>
+            </div>
+            <div class="onboarding-inline-hint-card">
+                <div class="subpanel-title">Lo que sigue despues</div>
+                <div class="subpanel-desc">Descubrir el schema y elegir solo las tablas o vistas necesarias para el piloto.</div>
+            </div>`;
+        const supportToggle = document.getElementById('onboardingReferencePanels')?.previousElementSibling;
+        if (supportToggle) {
+            supportToggle.insertAdjacentElement('beforebegin', checklist);
+        }
+    }
+
+    const connectionActions = document.getElementById('onboardingConnectionMeta')?.parentElement;
+    connectionActions?.classList.add('onboarding-connection-actions');
+}
+
+function ensureOnboardingCompactReadinessUI() {
+    const stepper = document.querySelector('#pane-onboarding .onboarding-stepper');
+    if (!stepper) return;
+
+    let summary = document.getElementById('onboardingCompactReadiness');
+    if (!summary) {
+        summary = document.createElement('div');
+        summary.id = 'onboardingCompactReadiness';
+        summary.className = 'subpanel onboarding-compact-readiness-shell';
+        summary.innerHTML = `
+            <div class="onboarding-compact-readiness-head">
+                <div>
+                    <div class="subpanel-title">Checklist rapido del onboarding</div>
+                    <div class="subpanel-desc">Siempre visible para saber que ya quedo listo y que sigue bloqueando el flujo base.</div>
+                </div>
+            </div>
+            <div class="onboarding-compact-readiness">
+                <div class="compact-readiness-card" id="compactWorkspaceCard">
+                    <div class="hero-kicker">Workspace</div>
+                    <div class="compact-readiness-value" id="txtOnboardingCompactWorkspace">Pendiente</div>
+                    <div class="subpanel-desc">Nombre, dominio y conexion.</div>
+                </div>
+                <div class="compact-readiness-card" id="compactTablesCard">
+                    <div class="hero-kicker">Tablas permitidas</div>
+                    <div class="compact-readiness-value" id="txtOnboardingCompactTables">Pendiente</div>
+                    <div class="subpanel-desc">Perimetro seguro del dominio.</div>
+                </div>
+                <div class="compact-readiness-card" id="compactContextCard">
+                    <div class="hero-kicker">Contexto generado</div>
+                    <div class="compact-readiness-value" id="txtOnboardingCompactContext">Pendiente</div>
+                    <div class="subpanel-desc">Schema docs e hints base.</div>
+                </div>
+                <div class="compact-readiness-card" id="compactValidationCard">
+                    <div class="hero-kicker">Prueba real</div>
+                    <div class="compact-readiness-value" id="txtOnboardingCompactValidation">Pendiente</div>
+                    <div class="subpanel-desc">SQL valido y resultado coherente.</div>
+                </div>
+            </div>`;
+        stepper.insertAdjacentElement('afterend', summary);
+    }
+}
+
+function ensureOnboardingFooterBarUI() {
+    const footer = document.querySelector('#pane-onboarding .editor-actions');
+    if (!footer) return;
+
+    footer.classList.add('onboarding-footer-shell');
+    const meta = document.getElementById('onboardingMeta');
+    const actions = footer.querySelector('.inline-actions');
+    if (!actions) return;
+
+    let bar = footer.querySelector('.onboarding-footer-bar');
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.className = 'onboarding-footer-bar';
+        footer.appendChild(bar);
+    }
+
+    let info = document.getElementById('onboardingFooterInfo');
+    if (!info) {
+        info = document.createElement('div');
+        info.id = 'onboardingFooterInfo';
+        info.className = 'onboarding-footer-info';
+        info.innerHTML = `
+            <div class="subpanel-title">Siguiente paso</div>
+            <div class="subpanel-desc" id="onboardingFooterHint">Completa tenant, dominio y conexion para guardar el workspace.</div>`;
+        bar.appendChild(info);
+    }
+
+    let primary = document.getElementById('onboardingPrimaryActionHost');
+    if (!primary) {
+        primary = document.createElement('div');
+        primary.id = 'onboardingPrimaryActionHost';
+        primary.className = 'onboarding-primary-action-host';
+        bar.appendChild(primary);
+    }
+
+    let secondary = document.getElementById('onboardingSecondaryActions');
+    if (!secondary) {
+        secondary = document.createElement('div');
+        secondary.id = 'onboardingSecondaryActions';
+        secondary.className = 'onboarding-secondary-actions';
+        footer.appendChild(secondary);
+    }
+
+    if (meta && meta.parentElement !== secondary) {
+        secondary.appendChild(meta);
+    }
+    if (actions.parentElement !== secondary) {
+        secondary.appendChild(actions);
+    }
+
+    const primaryIds = new Set([
+        'btnOnboardingSaveStep1',
+        'btnOnboardingSaveAllowedObjects',
+        'btnOnboardingInitialize',
+        'btnOnboardingRunValidation'
+    ]);
+
+    [...actions.children].forEach(button => {
+        if (!(button instanceof HTMLElement) || button.tagName !== 'BUTTON') return;
+        if (primaryIds.has(button.id)) {
+            if (button.parentElement !== primary) {
+                primary.appendChild(button);
+            }
+            button.classList.add('onboarding-primary-cta');
+        } else {
+            button.classList.remove('onboarding-primary-cta');
+            button.classList.add('onboarding-secondary-cta');
+        }
+    });
+
+    if (!document.getElementById('btnToggleOnboardingAdvancedAreaFooter')) {
+        const advancedBtn = document.createElement('button');
+        advancedBtn.type = 'button';
+        advancedBtn.id = 'btnToggleOnboardingAdvancedAreaFooter';
+        advancedBtn.className = 'btn btn-ghost onboarding-secondary-cta';
+        advancedBtn.textContent = 'Ajustes avanzados';
+        advancedBtn.onclick = () => toggleOnboardingAdvancedArea();
+        actions.appendChild(advancedBtn);
+    }
+
+    setOnboardingPrimaryButtonLabel('btnOnboardingSaveStep1', 'Guardar y continuar');
+    setOnboardingPrimaryButtonLabel('btnOnboardingSaveAllowedObjects', 'Guardar tablas y continuar');
+    setOnboardingPrimaryButtonLabel('btnOnboardingInitialize', 'Preparar dominio');
+    setOnboardingPrimaryButtonLabel('btnOnboardingRunValidation', 'Ejecutar prueba');
+}
+
+const previousEnhanceOnboardingWizardLayout = enhanceOnboardingWizardLayout;
+enhanceOnboardingWizardLayout = function () {
+    previousEnhanceOnboardingWizardLayout();
+    ensureOnboardingWorkspaceGuidedUI();
+    ensureOnboardingCompactReadinessUI();
+    ensureOnboardingFooterBarUI();
+    renderOnboardingCompactReadiness();
+    syncOnboardingFooterActions();
+};

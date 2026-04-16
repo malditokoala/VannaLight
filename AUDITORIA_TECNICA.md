@@ -1,257 +1,361 @@
-# Auditoría Técnica Completa - VannaLight (v3)
+# Auditoria Tecnica - VannaLight (v4)
 
-**Fecha:** 3 de abril de 2026  
-**Auditor:** opencode  
-**Proyecto:** VannaLight - Asistente Industrial de IA
+**Fecha:** 14 de abril de 2026  
+**Auditoria:** actualizada contra el estado real del repo y el backlog operativo  
+**Proyecto:** VannaLight - asistente industrial local-first para SQL, documentos PDF y ML
 
 ---
 
 ## 1. Resumen Ejecutivo
 
-| Área | Estado | Puntuación | Cambio vs v2 |
-|------|--------|------------|--------------|
-| Arquitectura | 🟡 Necesita mejora | 7/10 | - |
-| Seguridad | 🟢 Bien | 8/10 | - |
-| Dependencias | 🟢 Mayormente al día | 8/10 | - |
-| Código | 🟡 Deuda técnica | 5/10 | - |
-| Logging/Monitoring | 🔴 Deficiente | 3/10 | - |
-| Testing | 🔴 No existe | 0/10 | - |
-| Documentación | 🟡 Mejorada | 6/10 | - |
-| **Multi-tenancy** | 🟡 En desarrollo | 5/10 | **🆕** |
-| **WhatsApp Integration** | 🟡 Spike | 5/10 | **🆕** |
+VannaLight ya no esta en fase de prototipo basico. El proyecto entro en una etapa de piloto funcional con:
 
-**Puntuación Global:** 5.8/10 🟡
+- consultas SQL multi-contexto
+- admin operativo para onboarding, reglas, hints, patterns y entrenamiento
+- carril documental PDF funcional
+- primeros flujos de ML / forecasting
 
----
+La direccion tecnica general es buena, pero el sistema todavia depende demasiado de:
 
-## 2. Cambios Detectados desde v2
+- estado local mutable por maquina
+- memoria operativa sembrada correctamente
+- rutas demo especiales para lograr respuestas consistentes
 
-### 2.1 Nuevos Componentes ✅
+La conclusion de esta auditoria es:
 
-| Componente | Descripción | Estado |
-|------------|-------------|--------|
-| `Tenant` / `TenantDomain` | Modelos para multi-tenancy | ✅ Implementado |
-| `ITenantStore` / `SqliteTenantStore` | Persistencia de tenants | ✅ Implementado |
-| `IExecutionContextResolver` | Resuelve contexto de ejecución | ✅ Implementado |
-| `AskExecutionContext` | Contexto con TenantKey, Domain, Connection | ✅ Implementado |
+**el piloto esta bien encaminado y es demostrable, pero su estabilidad sigue dependiendo de disciplina operativa y de reducir acoplamientos residuales.**
 
-### 2.2 Nuevo Proyecto Detectado ⚠️
+### Puntuacion actual
 
-| Proyecto | Descripción | Integración |
-|----------|-------------|-------------|
-| `UltraMsgWebhookSpike` | Integración WhatsApp (UltraMsg API) | ❌ No integrado |
+| Area | Estado | Puntuacion | Comentario |
+|------|--------|------------|------------|
+| Arquitectura | Bien encaminada | 7.5/10 | Mejor separacion por contexto, pero todavia hay piezas tacticas duras |
+| Operacion local | Fragil | 5.5/10 | `%LOCALAPPDATA%`, seeds y DBs locales requieren mas blindaje |
+| SQL / Text-to-SQL | Funcional con deuda | 7/10 | Ya hay patterns, reuse y self-correction, pero el contexto frio sigue pesando |
+| Prompt grounding | Mejorado | 6.5/10 | Mejor que antes, pero depende de schema docs / hints bien sembrados |
+| RAG documental | Funcional | 6.5/10 | Ya responde y tiene timeouts, pero falta terminar performance/UX |
+| Admin / UX operativa | Buena | 8/10 | Mucho mas usable y context-aware |
+| Observabilidad | Aceptable | 6.5/10 | Ya hay `LlmPerf`, `SqlPerf`, `DocsPerf`, pero faltan health checks mas visibles |
+| Testing | Bajo | 2/10 | Hay validacion manual fuerte, pero casi nada automatizado |
+| Mantenibilidad | Media | 6/10 | Va mejorando, pero quedan zonas con hardcodeo tactico |
 
-### 2.3 Progreso General
-
-| Ítem | Estado |
-|------|--------|
-| Archivos sin uso | ✅ 0 |
-| Empty catch blocks | ✅ 0 |
-| Vistas SQL hardcodeadas | ⚠️ 18+ (sin cambios) |
-| Excepciones genéricas | ⚠️ 2 (sin cambios) |
-| Magic numbers | ⚠️ 5 (sin cambios) |
-| Autenticación | ❌ Pendiente |
-| Tests | ❌ No existe |
+**Puntuacion global estimada:** **6.6/10**
 
 ---
 
-## 3. Arquitectura Actualizada
+## 2. Estado Actual del Proyecto
 
-### 3.1 Estructura de Proyectos
+### 2.1 Lo que ya esta bien resuelto
 
-```
-VannaLight.slnx
-├── VannaLight.Api           (Web API + Frontend)
-├── VannaLight.Core         (Dominio - Sin dependencias)
-├── VannaLight.Infrastructure (Implementaciones)
-├── VannaLight.ConsoleApp   (CLI)
-├── UltraMsgWebhookSpike    (⚠️ No integrado en solución)
-└── .codex-build/RuntimeJobAuditor (⚠️ No integrado)
-```
+- multi-contexto real por:
+  - `TenantKey`
+  - `Domain`
+  - `ConnectionName`
+- admin context-aware
+- separacion ERP / Northwind
+- soporte de memoria local por contexto
+- `TrainingExamples` verificados por contexto
+- self-correction SQL con maximo 1 reintento
+- historial local Top 10 en `index`
+- carril PDF funcional con timeout defensivo
+- perfiles de hardware LLM editables desde Admin
+- logging de performance:
+  - `LlmPerf`
+  - `SqlPerf`
+  - `DocsPerf`
 
-### 3.2 Arquitectura Multi-Tenant (Nueva)
+### 2.2 Lo que sigue siendo sensible
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  AskExecutionContext                 │
-├─────────────────────────────────────────────────────┤
-│  TenantKey      → "empresa_xyz"                    │
-│  Domain         → "erp-kpi-pilot"                  │
-│  ConnectionName → "OperationalDb"                   │
-│  SystemProfile  → "default"                         │
-└─────────────────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│           ExecutionContextResolver                   │
-├─────────────────────────────────────────────────────┤
-│  1. Resolve tenant (from DB or default)            │
-│  2. Resolve domain (from DB or config)              │
-│  3. Resolve connection (from DB or config)           │
-│  4. Resolve system profile (from DB or config)      │
-└─────────────────────────────────────────────────────┘
-```
-
-### 3.3 Flujo Multi-Tenant
-
-```
-Solicitud API
-     │
-     ├── /api/assistant/ask?tenant=xyz&domain=kpi
-     │         │
-     │         ▼
-     │   ExecutionContextResolver.ResolveAsync()
-     │         │
-     │         ├──► Busca Tenant en SQLite
-     │         ├──► Busca TenantDomain mapping
-     │         ├──► Resuelve ConnectionString correcto
-     │         └──► Retorna AskExecutionContext
-     │                   │
-     │                   ▼
-     │         Usa connection del tenant específico
-     │
-     └── /api/assistant/ask (sin params)
-              │
-              ▼
-        Usa defaults del sistema
-```
+- arranque frio de SQL cuando la memoria local no trae enough:
+  - `TrainingExamples`
+  - `SchemaDocs`
+  - `SemanticHints`
+  - `QueryPatterns`
+- variaciones entre PC de trabajo y PC de casa
+- dependencia de semillas operativas locales
+- compilacion / despliegue local trabado por binarios abiertos en Visual Studio
 
 ---
 
-## 4. Nuevas Funcionalidades
+## 3. Hallazgos Principales
 
-### 4.1 Multi-Tenancy
+### 3.1 [Alta] El piloto sigue dependiendo de memoria local mutable
 
-| Feature | Implementado | Funcional |
-|---------|-------------|-----------|
-| Tenant model | ✅ | ✅ |
-| TenantDomain mapping | ✅ | ✅ |
-| ExecutionContextResolver | ✅ | ✅ |
-| Tenant-specific connections | ✅ | ✅ |
-| Tenant-specific configs | ✅ | ✅ |
+El cambio a `%LOCALAPPDATA%\VannaLight\Data` fue correcto como direccion arquitectonica, pero dejo claro que el sistema puede verse "roto" si la memoria local de una maquina queda vacia o incompleta.
 
-**Beneficio:** Un deployment puede servir a múltiples clientes/empresas.
+Impacto observado:
 
-### 4.2 WhatsApp Integration (UltraMsgWebhookSpike)
+- dominios activos sin `AllowedObjects`
+- prompt con hints genericos, pero sin grounding suficiente
+- historial RAG inconsistente entre maquinas
+- consultas demo cayendo al LLM en frio
 
-| Feature | Estado |
-|---------|--------|
-| Polling Worker | ✅ |
-| Webhook endpoint | ✅ |
-| UltraMsg API client | ✅ |
-| Request inspector | ✅ |
+Estado actual:
 
-**Nota:** Proyecto separado, no integrado en solución principal.
+- ya existe `appsettings.Local.json`
+- ya hay warnings al arranque
+- ya se reconstruyo memoria minima para la PC de trabajo
 
----
+Falta:
 
-## 5. Deuda Técnica Actual
+- recovery guiado
+- seed minimo garantizado por dominio
+- diagnostico visible en UI y no solo en logs
 
-### 5.1 Sin Cambios desde v2
+### 3.2 [Alta] El carril SQL mejora mucho con rutas deterministicas, pero todavia no esta del todo desacoplado
 
-| Problema | Ubicación | Severidad |
-|---------|-----------|-----------|
-| Vistas SQL hardcodeadas | 18+ lugares | Alta |
-| Magic numbers | DocsAnswerService.cs | Media |
-| Excepciones genéricas | ForecastingService.cs:45,79 | Baja |
-| TODO explícito | DocsAnswerService.cs:10 | Baja |
+Durante esta etapa se confirmo que preguntas demo de alto valor:
 
-### 5.2 Code Smells Principales
+- `Que prensa lleva mas scrap en el turno actual?`
+- `Cuales son los 5 numeros de parte con mas scrap?`
 
-| # | Problema | Severidad | Ubicación |
-|---|----------|-----------|-----------|
-| 1 | Vistas SQL hardcodeadas | Alta | 18+ ubicaciones |
-| 2 | God Object | Media | DocsAnswerService.cs (330 líneas) |
-| 3 | Lógica de dominio embebida | Alta | PatternMatcherService.cs |
-| 4 | Sin tests unitarios | Alta | Proyecto completo |
-| 5 | Logging insuficiente | Alta | Servicios críticos sin log |
+no conviene dejarlas al LLM puro.
 
----
+Ya se corrigio bastante:
 
-## 6. Proyectos Externos Detectados
+- patterns demo para scrap
+- schema docs forzados para `vw_KpiScrap_v1`
+- semantic hints de columna:
+  - `ScrapQty`
+  - `PartNumber`
+  - `OperationDate`
+  - `ShiftId`
 
-### 6.1 UltraMsgWebhookSpike ⚠️
+Sin embargo, el sistema todavia conserva dependencia de rutas tacticas y seeds especiales.
 
-| Atributo | Valor |
-|----------|-------|
-| Propósito | Integración WhatsApp via UltraMsg API |
-| Líneas | ~135 |
-| Estado | **No integrado** en VannaLight.slnx |
-| ¿Se usará? | Desconocido |
+### 3.3 [Media-Alta] El prompt SQL tenia estructura correcta, pero podia quedar "ciego"
 
-**Preguntas:**
-- ¿Es para permitir chatting via WhatsApp?
-- ¿Se integrará con VannaLight.Api?
-- ¿Es un experimento que se descartará?
+Se confirmo con prompts reales que en algunos casos entraban:
 
-### 6.2 .codex-build/RuntimeJobAuditor ⚠️
+- `PISTAS SEMANTICAS DEL DOMINIO`
+- `OBJETOS SQL PERMITIDOS`
 
-| Atributo | Valor |
-|----------|-------|
-| Propósito | Auditoría de jobs runtime |
-| Líneas | ~1957 |
-| Estado | **No integrado** en VannaLight.slnx |
+pero no necesariamente:
 
----
+- `ESQUEMAS RELEVANTES RECUPERADOS`
+- `EJEMPLOS RELEVANTES`
 
-## 7. Recomendaciones Actualizadas
+Eso llevo a columnas inventadas como:
 
-### Fase 1: Crítico
-- [ ] Implementar autenticación (Propuesta 1)
-- [ ] Mover vistas SQL a configuración
+- `ScrapQuantity`
+- `Qty`
 
-### Fase 2: Importante
-- [ ] Evaluar destino de UltraMsgWebhookSpike
-  - ¿Integrar con VannaLight.Api?
-  - ¿Descartar?
-- [ ] Evaluar destino de .codex-build
-- [ ] Agregar tests unitarios
-- [ ] Implementar SymSpell para corrección de typos
+Estado actual:
 
-### Fase 3: Mejora
-- [ ] Evaluar embeddings vectoriales (lazy)
-- [ ] Documentar arquitectura multi-tenant
-- [ ] Actualizar UglyToad.PdfPig a versión estable (0.1.9+)
+- ya se reforzo el grounding
+- ya se siembran hints de columna
+- ya se fuerza `SchemaDocs` de `dbo.vw_KpiScrap_v1` en preguntas sensibles
 
----
+Falta:
 
-## 8. Preguntas Abiertas
+- documentar minimos obligatorios por dominio
+- seguir reduciendo dependencia del LLM para consultas demo
 
-| # | Pregunta | Prioridad |
-|---|----------|-----------|
-| 1 | ¿UltraMsgWebhookSpike se integrará o se descarta? | 🔴 |
-| 2 | ¿El soporte multi-tenant está listo para producción? | 🟡 |
-| 3 | ¿Se implementará autenticación antes de clientes externos? | 🔴 |
-| 4 | ¿Cuál es el roadmap para los proyectos externos? | 🟡 |
+### 3.4 [Media] `TemplateSqlBuilder` tenia hardcodeo excesivo
 
----
+El builder cumplio bien como solucion tactica del piloto, pero estaba creciendo con demasiada logica por `PatternKey`.
 
-## 9. Comparativa Histórica
+Estado actual:
 
-| Versión | Fecha | Puntuación | Cambios |
-|---------|-------|------------|---------|
-| v1 | 14/03 | 4.9/10 | Baseline |
-| v2 | 26/03 | 5.4/10 | +Configuración, -Empty catch |
-| **v3** | 03/04 | **5.8/10** | +Multi-tenant, +WhatsApp spike, +Dependencias corregidas |
+- ya se migro una parte a templates declarativos
+- el startup siembra `SqlTemplate` reutilizable para varias rutas demo
+- el builder ya puede resolver tokens por:
+  - metrica
+  - dimension
+  - tiempo
+- ya existe fallback generico para:
+  - consultas agrupadas/top
+  - consultas de total simple
 
-**Tendencia:** 🟢 En evolución positiva, pero sin cambios críticos resueltos.
+Concluson:
 
----
+**ya se corrigio el riesgo principal, pero todavia no esta terminada la migracion completa a modelo declarativo.**
 
-## 10. Conclusión
+### 3.5 [Media] El carril documental ya es usable, pero aun requiere estabilizacion de performance
 
-El proyecto ha evolucionado con **multi-tenancy** y **WhatsApp integration**, mostrando maduración hacia un producto comercial. Sin embargo:
+Progreso real:
 
-**Pendiente crítico:**
-- ⚠️ Autenticación (necesario para vender)
-- ⚠️ Vistas SQL configurables (necesario para multi-cliente)
+- ya indexa por dominio
+- ya tiene timeout
+- ya evita pendientes infinitos
+- ya instrumenta tiempos por etapa
 
-**Nuevo:**
-- ✅ Arquitectura multi-tenant preparada
-- ⚠️ WhatsApp integration en progreso
+Lo pendiente no es "hacerlo funcionar", sino:
 
-**Recomendación:** Priorizar autenticación y configuración de BD antes de nuevas features.
+- reducir latencia
+- mejorar prefiltrado por numero de parte
+- terminar feedback de usuario final
+
+### 3.6 [Alta] La automatizacion de pruebas sigue siendo muy baja
+
+El proyecto mejoro mucho por validacion manual dirigida, pero sigue con una brecha seria:
+
+- casi no hay pruebas automatizadas
+- no hay regresion fuerte sobre carriles demo
+- mucho depende de pruebas interactivas y memoria operativa del equipo
+
+Esto es el principal riesgo tecnico si el piloto se sigue moviendo o crece de alcance.
 
 ---
 
-*Informe generado automáticamente. Última actualización: 2026-04-03*
+## 4. Cambios Positivos Relevantes Detectados
+
+### 4.1 SQL / Prompt / Retrieval
+
+- reuse exacto por `TrainingExamples` verificados
+- self-correction con un reintento
+- logging `SqlPerf`
+- logging `LlmPerf`
+- schema grounding mas rico
+- hints de columna para KPI scrap
+- patterns demo reforzados
+
+### 4.2 Runtime local
+
+- soporte real de perfiles Hardware LLM
+- timeout SQL configurable
+- chequeos defensivos de memoria local al arranque
+- separacion mas clara entre PC trabajo y PC casa
+
+### 4.3 Admin
+
+- filtro de secciones en dropdown
+- dominios y contextos mas seguros
+- docs PDF mucho mas claro
+- feedback visual de reindex y upload
+- editor RAG filtrado por contexto activo
+
+### 4.4 Declaratividad
+
+- primer paso serio para salir del hardcodeo del builder SQL
+- templates reutilizables por:
+  - metrica
+  - dimension
+  - tiempo
+
+---
+
+## 5. Riesgos Actuales para el Piloto
+
+### Riesgo 1. Contexto frio o memoria local incompleta
+
+Probabilidad: alta  
+Impacto: alto
+
+Mitigacion actual:
+
+- warnings en startup
+- reconstruccion minima por onboarding
+- backlog con minimos obligatorios por dominio
+
+### Riesgo 2. Dependencia del LLM para preguntas demo que deberian ser deterministicas
+
+Probabilidad: media  
+Impacto: alto
+
+Mitigacion actual:
+
+- patterns demo
+- templates declarativos
+- hints de columna
+
+### Riesgo 3. Diferencias entre entornos de trabajo y casa
+
+Probabilidad: alta  
+Impacto: medio-alto
+
+Mitigacion actual:
+
+- `appsettings.Local.json`
+- prune de contexts por maquina
+- handoff de trabajo
+
+### Riesgo 4. Poca cobertura automatizada
+
+Probabilidad: alta  
+Impacto: alto
+
+Mitigacion actual:
+
+- ninguna fuerte
+
+Este sigue siendo el riesgo mas grande de mediano plazo.
+
+---
+
+## 6. Recomendaciones Prioritarias
+
+### Fase inmediata
+
+- consolidar los templates declarativos del carril SQL
+- documentar minimos obligatorios por dominio:
+  - `AllowedObjects`
+  - `SchemaDocs`
+  - `SemanticHints`
+  - `TrainingExamples`
+- cerrar checklist operativo de recovery local
+- terminar performance del carril documental
+
+### Fase corta posterior al piloto
+
+- pruebas automatizadas de rutas demo SQL
+- health check visible para:
+  - contexto activo
+  - memoria minima
+  - perfil LLM
+  - docs indexados
+- seguir migrando `TemplateSqlBuilder` hacia configuracion declarativa
+
+### Fase de estabilizacion
+
+- menos dependencia de seeds desde startup
+- export/import formal de conocimiento por dominio
+- smoke tests automatizados por carril:
+  - SQL
+  - PDF
+  - ML
+
+---
+
+## 7. Veredicto Final
+
+VannaLight esta en una posicion mucho mejor que la que reflejaba la auditoria anterior.
+
+No estamos frente a un prototipo caotico. Estamos frente a un piloto:
+
+- funcional
+- demostrable
+- con buena direccion arquitectonica
+
+pero todavia con deuda clara en:
+
+- operacion local
+- cobertura automatizada
+- y reduccion completa de acoplamientos tacticos
+
+### Veredicto
+
+**El proyecto esta listo para cerrar el piloto con confianza razonable, siempre que se mantenga la disciplina operativa y se completen los guardarrailes ya identificados en backlog.**
+
+---
+
+## 8. Anexos
+
+### Evidencia tecnica reciente considerada
+
+- [BACKLOG.md](C:/Users/edggom/source/repos/malditokoala/VannaLight/BACKLOG.md)
+- [HANDOFF_TRABAJO.md](C:/Users/edggom/source/repos/malditokoala/VannaLight/HANDOFF_TRABAJO.md)
+- [Program.cs](C:/Users/edggom/source/repos/malditokoala/VannaLight/VannaLight.Api/Program.cs)
+- [AskUseCase.cs](C:/Users/edggom/source/repos/malditokoala/VannaLight/VannaLight.Core/UseCases/AskUseCase.cs)
+- [TemplateSqlBuilder.cs](C:/Users/edggom/source/repos/malditokoala/VannaLight/VannaLight.Infrastructure/Retrieval/TemplateSqlBuilder.cs)
+- [PatternMatcherService.cs](C:/Users/edggom/source/repos/malditokoala/VannaLight/VannaLight.Infrastructure/Retrieval/PatternMatcherService.cs)
+
+### Nota metodologica
+
+Esta auditoria se enfoca en:
+
+- estado real del piloto
+- comportamiento observado en trabajo reciente
+- arquitectura y deuda tecnica efectiva
+
+No intenta ser un inventario exhaustivo de cada archivo del repo, sino una fotografia accionable para toma de decisiones tecnica.
