@@ -973,7 +973,7 @@
 
                             <div class="subpanel onboarding-guide">
                                 <div class="subpanel-title">¿Por dónde empiezo?</div>
-                                <div class="onboarding-guide-copy">Sigue estos 4 pasos en orden. Cada uno habilita al siguiente. Business Rules, Semantic Hints manuales y Query Patterns son afinación avanzada y no bloquean este flujo base.</div>
+                                <div class="onboarding-guide-copy">Sigue los 4 pasos en orden. Lo demás es afinación secundaria y no bloquea este flujo base.</div>
 
                             <div class="subpanel onboarding-flow-summary">
                                 <div class="subpanel-title">Estado actual del wizard</div>
@@ -1026,7 +1026,7 @@
                                     <span class="step-panel-num">1</span>
                                     <div class="step-panel-text">
                                         <div class="step-panel-title">Configura el workspace</div>
-                                        <div class="step-panel-sub">Define el identificador interno, el nombre visible para usuarios y la base de datos que consultará este dominio.</div>
+                                        <div class="step-panel-sub">Define el identificador interno, el nombre visible y la base de datos que consultará este dominio.</div>
                                     </div>
                                 </div>
                                 <div class="form-grid-2">
@@ -1068,7 +1068,7 @@
                                             <select id="txtOnboardingConnectionName" class="field-input"></select>
                                             <button class="btn btn-ghost" type="button" onclick="toggleOnboardingConnectionEditor()">+ Nueva</button>
                                         </div>
-                                        <div class="field-hint">Selecciona una conexión existente o crea una nueva. Si la lista está vacía, agrega una primero.</div>
+                                        <div class="field-hint">Selecciona una conexión existente o crea una nueva si todavía no aparece aquí.</div>
                                         <div class="field-error" id="errOnboardingConnectionName"></div>
                                     </div>
                                 </div>
@@ -1101,7 +1101,7 @@
                                             </select>
                                             <button class="btn btn-ghost" type="button" onclick="buildOnboardingConnectionString(true)">Generar cadena</button>
                                         </div>
-                                        <div class="field-hint">Usa el asistente para construir la cadena sin memorizar la sintaxis de SQL Server.</div>
+                                        <div class="field-hint">Usa el asistente si quieres armar la cadena sin escribirla manualmente.</div>
                                     </div>
                                     <div class="subpanel" id="onboardingConnectionWizard">
                                         <div class="form-grid-2">
@@ -1197,7 +1197,7 @@
                             <div class="subpanel onboarding-support-toggle">
                                 <div>
                                     <div class="subpanel-title">Paneles de apoyo</div>
-                                    <div class="field-hint">Úsalos solo como referencia. No son obligatorios para completar el onboarding base.</div>
+                                    <div class="field-hint">Referencia opcional. El onboarding base no depende de estos paneles.</div>
                                 </div>
                                 <button class="btn btn-ghost" type="button" id="btnToggleOnboardingReferencePanels" onclick="toggleOnboardingReferencePanels()">Mostrar apoyo</button>
                             </div>
@@ -1253,7 +1253,7 @@
                                     <span class="step-panel-num">2</span>
                                     <div class="step-panel-text">
                                         <div class="step-panel-title">Elige las tablas permitidas</div>
-                                        <div class="step-panel-sub">Descubre el schema y marca únicamente las tablas o vistas que el motor SQL podrá consultar. Esto define el perímetro seguro del dominio.</div>
+                                        <div class="step-panel-sub">Descubre el schema y marca solo las tablas o vistas que el motor SQL podrá consultar. Esto define el perímetro seguro del dominio.</div>
                                     </div>
                                 </div>
                                 <div class="inline-actions">
@@ -1335,7 +1335,7 @@
                                     </div>
                                 </div>
                                 <div class="action-meta" id="onboardingStatusMeta">
-                                    <span class="meta-empty">Usa el botón "Preparar dominio" en la barra inferior para ejecutar este paso.</span>
+                                    <span class="meta-empty">Cuando estés conforme con las tablas, ejecuta “Preparar dominio” para generar el contexto técnico base.</span>
                                 </div>
                             </div>
 
@@ -1344,7 +1344,7 @@
                                     <span class="step-panel-num">4</span>
                                     <div class="step-panel-text">
                                         <div class="step-panel-title">Prueba real del dominio</div>
-                                        <div class="step-panel-sub">Ejecuta una pregunta en lenguaje natural. Si el motor genera SQL correcto y devuelve datos, el dominio está listo para uso.</div>
+                                        <div class="step-panel-sub">Ejecuta una pregunta real. Si el motor genera SQL correcto y devuelve datos coherentes, el dominio está listo para uso.</div>
                                     </div>
                                 </div>
                                 <div class="field-group">
@@ -1356,7 +1356,7 @@
                                 <div class="field-group">
                                     <label class="field-label">Escribe tu pregunta de prueba <span class="field-required">*</span></label>
                                     <textarea id="txtOnboardingValidationQuestion" class="field-input" rows="3" placeholder="Ej: ¿Cuántas órdenes se cerraron esta semana? · Muéstrame 5 registros de la tabla Orders."></textarea>
-                                    <div class="field-hint">Escribe en lenguaje natural. El sistema genera el T-SQL, lo ejecuta y muestra el resultado aquí abajo.</div>
+                                    <div class="field-hint">Escribe en lenguaje natural. Aquí verás el SQL generado y el resultado real de la base.</div>
                                     <div class="field-error" id="errOnboardingValidationQuestion"></div>
                                 </div>
                                 <div class="onboarding-validation-grid">
@@ -1376,7 +1376,7 @@
                             </div>
 
                             <div class="onboarding-section-break" aria-hidden="true">
-                                <span>Checklist de readiness</span>
+                                <span>Estado final del dominio</span>
                             </div>
 
                             <div class="subpanel onboarding-panel" id="onboardingStepPanel5">
@@ -1418,7 +1418,7 @@
                                     <div class="field-hint">Contiene workspace, conexión, allowed objects, business rules, semantic hints, query patterns y training examples. Úsalo para mover el dominio a otro ambiente sin rehacer el onboarding.</div>
                                 </div>
                                 <div class="action-meta" id="onboardingPackMeta">
-                                    <span class="meta-empty">Usa "Exportar pack" o "Importar pack" en la barra inferior.</span>
+                                    <span class="meta-empty">Usa “Exportar pack” o “Importar pack” solo si ya terminaste el flujo base.</span>
                                 </div>
                                 <div class="rag-banner" id="onboardingPackBanner"></div>
                             </div>
@@ -1428,7 +1428,7 @@
 
                         <div class="editor-actions">
                             <div class="action-meta" id="onboardingMeta">
-                                <span class="meta-empty">Comienza llenando el Paso 1 y presiona "Guardar workspace".</span>
+                                <span class="meta-empty">Completa el paso actual y usa la acción principal para avanzar al siguiente.</span>
                             </div>
                             <div class="inline-actions">
                                 <button class="btn btn-ghost" type="button" onclick="startNewOnboardingWorkspace()">+ Nuevo workspace</button>

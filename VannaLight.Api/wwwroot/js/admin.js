@@ -58,32 +58,32 @@ const adminScopedTabs = new Set(['allowed', 'business-rules', 'semantics', 'patt
 
 const promptConfigFields = [
     { key: 'SystemPersona', valueType: 'string', elementId: 'txtPromptSystemPersona', description: 'Persona base del system prompt SQL.' },
-    { key: 'TaskInstruction', valueType: 'string', elementId: 'txtPromptTaskInstruction', description: 'Instrucción principal del system prompt SQL.' },
-    { key: 'ContextInstruction', valueType: 'string', elementId: 'txtPromptContextInstruction', description: 'Instrucción de uso de contexto del system prompt SQL.' },
-    { key: 'SqlSyntaxRules', valueType: 'string', elementId: 'txtPromptSqlSyntaxRules', description: 'Bloque editable de reglas críticas de sintaxis T-SQL.' },
-    { key: 'TimeInterpretationRules', valueType: 'string', elementId: 'txtPromptTimeInterpretationRules', description: 'Bloque editable de interpretación temporal para el prompt SQL.' },
+    { key: 'TaskInstruction', valueType: 'string', elementId: 'txtPromptTaskInstruction', description: 'InstrucciÃ³n principal del system prompt SQL.' },
+    { key: 'ContextInstruction', valueType: 'string', elementId: 'txtPromptContextInstruction', description: 'InstrucciÃ³n de uso de contexto del system prompt SQL.' },
+    { key: 'SqlSyntaxRules', valueType: 'string', elementId: 'txtPromptSqlSyntaxRules', description: 'Bloque editable de reglas crÃ­ticas de sintaxis T-SQL.' },
+    { key: 'TimeInterpretationRules', valueType: 'string', elementId: 'txtPromptTimeInterpretationRules', description: 'Bloque editable de interpretaciÃ³n temporal para el prompt SQL.' },
     { key: 'BusinessRulesHeader', valueType: 'string', elementId: 'txtPromptBusinessRulesHeader', description: 'Encabezado para el bloque de business rules del prompt SQL.' },
-    { key: 'SemanticHintsHeader', valueType: 'string', elementId: 'txtPromptSemanticHintsHeader', description: 'Encabezado para el bloque de pistas semánticas del prompt SQL.' },
+    { key: 'SemanticHintsHeader', valueType: 'string', elementId: 'txtPromptSemanticHintsHeader', description: 'Encabezado para el bloque de pistas semÃ¡nticas del prompt SQL.' },
     { key: 'AllowedObjectsHeader', valueType: 'string', elementId: 'txtPromptAllowedObjectsHeader', description: 'Encabezado para el bloque de objetos permitidos del prompt SQL.' },
     { key: 'SchemasHeader', valueType: 'string', elementId: 'txtPromptSchemasHeader', description: 'Encabezado para el bloque de schema docs del prompt SQL.' },
     { key: 'ExamplesHeader', valueType: 'string', elementId: 'txtPromptExamplesHeader', description: 'Encabezado para el bloque de examples del prompt SQL.' },
     { key: 'QuestionHeader', valueType: 'string', elementId: 'txtPromptQuestionHeader', description: 'Encabezado para la pregunta del usuario en el prompt SQL.' },
     { key: 'MaxPromptChars', valueType: 'int', elementId: 'txtPromptMaxPromptChars', description: 'Presupuesto total del prompt SQL en caracteres.' },
-    { key: 'MaxRulesChars', valueType: 'int', elementId: 'txtPromptMaxRulesChars', description: 'Presupuesto máximo para reglas de negocio en el prompt SQL.' },
-    { key: 'MaxSemanticHintsChars', valueType: 'int', elementId: 'txtPromptMaxSemanticHintsChars', description: 'Presupuesto máximo para pistas semánticas del prompt SQL.' },
-    { key: 'MaxSchemasChars', valueType: 'int', elementId: 'txtPromptMaxSchemasChars', description: 'Presupuesto máximo para schema docs en el prompt SQL.' },
-    { key: 'MaxExamplesChars', valueType: 'int', elementId: 'txtPromptMaxExamplesChars', description: 'Presupuesto máximo para examples en el prompt SQL.' },
-    { key: 'MaxRules', valueType: 'int', elementId: 'txtPromptMaxRules', description: 'Cantidad máxima de business rules enviadas al prompt SQL.' },
-    { key: 'MaxSemanticHints', valueType: 'int', elementId: 'txtPromptMaxSemanticHints', description: 'Cantidad máxima de pistas semánticas enviadas al prompt SQL.' },
-    { key: 'MaxSchemas', valueType: 'int', elementId: 'txtPromptMaxSchemas', description: 'Cantidad máxima de schema docs enviados al prompt SQL.' },
-    { key: 'MaxExamples', valueType: 'int', elementId: 'txtPromptMaxExamples', description: 'Cantidad máxima de training examples enviados al prompt SQL.' }
+    { key: 'MaxRulesChars', valueType: 'int', elementId: 'txtPromptMaxRulesChars', description: 'Presupuesto mÃ¡ximo para reglas de negocio en el prompt SQL.' },
+    { key: 'MaxSemanticHintsChars', valueType: 'int', elementId: 'txtPromptMaxSemanticHintsChars', description: 'Presupuesto mÃ¡ximo para pistas semÃ¡nticas del prompt SQL.' },
+    { key: 'MaxSchemasChars', valueType: 'int', elementId: 'txtPromptMaxSchemasChars', description: 'Presupuesto mÃ¡ximo para schema docs en el prompt SQL.' },
+    { key: 'MaxExamplesChars', valueType: 'int', elementId: 'txtPromptMaxExamplesChars', description: 'Presupuesto mÃ¡ximo para examples en el prompt SQL.' },
+    { key: 'MaxRules', valueType: 'int', elementId: 'txtPromptMaxRules', description: 'Cantidad mÃ¡xima de business rules enviadas al prompt SQL.' },
+    { key: 'MaxSemanticHints', valueType: 'int', elementId: 'txtPromptMaxSemanticHints', description: 'Cantidad mÃ¡xima de pistas semÃ¡nticas enviadas al prompt SQL.' },
+    { key: 'MaxSchemas', valueType: 'int', elementId: 'txtPromptMaxSchemas', description: 'Cantidad mÃ¡xima de schema docs enviados al prompt SQL.' },
+    { key: 'MaxExamples', valueType: 'int', elementId: 'txtPromptMaxExamples', description: 'Cantidad mÃ¡xima de training examples enviados al prompt SQL.' }
 ];
 
 const retrievalConfigFields = [
-    { section: 'Retrieval', key: 'Domain', valueType: 'string', elementId: 'txtRetrievalDomain', description: 'Dominio operativo para retrieval y validación.' },
+    { section: 'Retrieval', key: 'Domain', valueType: 'string', elementId: 'txtRetrievalDomain', description: 'Dominio operativo para retrieval y validaciÃ³n.' },
     { section: 'UiDefaults', key: 'AdminDomain', valueType: 'string', elementId: 'txtUiAdminDomain', description: 'Dominio por defecto para pantallas administrativas.' },
     { section: 'Retrieval', key: 'TopExamples', valueType: 'int', elementId: 'txtRetrievalTopExamples', description: 'Cantidad de training examples candidatos para retrieval.' },
-    { section: 'Retrieval', key: 'MinExampleScore', valueType: 'double', elementId: 'txtRetrievalMinExampleScore', description: 'Score mínimo para considerar un training example relevante.' },
+    { section: 'Retrieval', key: 'MinExampleScore', valueType: 'double', elementId: 'txtRetrievalMinExampleScore', description: 'Score mÃ­nimo para considerar un training example relevante.' },
     { section: 'Retrieval', key: 'TopSchemaDocs', valueType: 'int', elementId: 'txtRetrievalTopSchemaDocs', description: 'Cantidad de schema docs relevantes a incluir.' },
     { section: 'Retrieval', key: 'FallbackSchemaDocs', valueType: 'int', elementId: 'txtRetrievalFallbackSchemaDocs', description: 'Cantidad de schema docs de fallback cuando no hay match fuerte.' }
 ];
@@ -101,31 +101,31 @@ const onboardingTourSteps = [
         targetId: 'onboardingStepPanel1',
         stepLabel: 'Paso 1',
         title: 'Configura el workspace',
-        body: 'Aquí defines el workspace, el contexto de datos y la conexión que usará todo el flujo. Cuando guardas este paso, habilitas el resto del wizard.'
+        body: 'AquÃ­ defines el workspace, el contexto de datos y la conexiÃ³n que usarÃ¡ todo el flujo. Cuando guardas este paso, habilitas el resto del wizard.'
     },
     {
         targetId: 'onboardingStepPanel2b',
         stepLabel: 'Paso 2',
         title: 'Elige las tablas permitidas',
-        body: 'Descubre el schema y deja marcadas solo las tablas o vistas que el motor podrá consultar. Aquí defines el perímetro seguro del dominio.'
+        body: 'Descubre el schema y deja marcadas solo las tablas o vistas que el motor podrÃ¡ consultar. AquÃ­ defines el perÃ­metro seguro del dominio.'
     },
     {
         targetId: 'onboardingStepPanel3',
         stepLabel: 'Paso 3',
         title: 'Prepara el dominio',
-        body: 'Este paso genera el contexto técnico del motor: schema docs y pistas del dominio. Cuando sale bien, ya puedes probar una pregunta real.'
+        body: 'Este paso genera el contexto tÃ©cnico del motor: schema docs y pistas del dominio. Cuando sale bien, ya puedes probar una pregunta real.'
     },
     {
         targetId: 'onboardingStepPanel4',
         stepLabel: 'Paso 4',
         title: 'Haz una prueba real',
-        body: 'Corre una pregunta guiada contra el pipeline real. El wizard te muestra el SQL generado, el resultado y si el dominio ya respondió correctamente.'
+        body: 'Corre una pregunta guiada contra el pipeline real. El wizard te muestra el SQL generado, el resultado y si el dominio ya respondiÃ³ correctamente.'
     },
     {
         targetId: 'onboardingStepPanel5',
         stepLabel: 'Checklist final',
         title: 'Confirma readiness',
-        body: 'Este resumen te dice si el dominio ya está listo para usuarios internos o si todavía necesita más curación antes de salir a operación.'
+        body: 'Este resumen te dice si el dominio ya estÃ¡ listo para usuarios internos o si todavÃ­a necesita mÃ¡s curaciÃ³n antes de salir a operaciÃ³n.'
     }
 ];
 
@@ -264,7 +264,7 @@ function renderRagContextBanner() {
 
     const context = getActiveAdminContext();
     if (!context?.tenantKey || !context?.domain || !context?.connectionName) {
-        banner.textContent = 'Selecciona primero un workspace y un contexto válido en Onboarding.';
+        banner.textContent = 'Selecciona primero un workspace y un contexto vÃ¡lido en Onboarding.';
         banner.classList.add('is-empty');
         return;
     }
@@ -430,7 +430,7 @@ function refreshAdminDomainSelectors() {
             });
             documentsSelect.disabled = false;
             if (documentsHint) {
-                documentsHint.textContent = 'Si no hay contexto activo, se usa el dominio default configurado o el que selecciones aquí.';
+                documentsHint.textContent = 'Si no hay contexto activo, se usa el dominio default configurado o el que selecciones aquÃ­.';
             }
         }
     }
@@ -445,7 +445,7 @@ function syncAdminScopedFiltersToContext(context) {
     const normalized = normalizeAdminContext(context);
     const domain = normalized?.domain || '';
     const tenantDisplayName = normalized?.tenantDisplayName || normalized?.tenantKey || 'sin workspace';
-    const connectionName = normalized?.connectionName || 'sin conexión';
+    const connectionName = normalized?.connectionName || 'sin conexiÃ³n';
 
     defaultAllowedDomain = domain;
     defaultBusinessRuleDomain = domain;
@@ -467,7 +467,7 @@ function syncAdminScopedFiltersToContext(context) {
             setScopedTabContextBanner(config, `${tenantDisplayName} / ${domain} / ${connectionName}`);
         } else {
             setScopedTabHint(config, `Selecciona un contexto en Onboarding para ver ${config.label}.`);
-            setScopedTabContextBanner(config, 'Selecciona un workspace y un contexto válido en Onboarding.', true);
+            setScopedTabContextBanner(config, 'Selecciona un workspace y un contexto vÃ¡lido en Onboarding.', true);
         }
     });
 
@@ -492,7 +492,7 @@ async function activateAdminScopedTab(tabKey) {
 
     const context = getActiveAdminContext();
     if (!context?.domain) {
-        renderContextRequiredState(tabKey, 'Selecciona primero un workspace y un contexto válido en Onboarding.');
+        renderContextRequiredState(tabKey, 'Selecciona primero un workspace y un contexto vÃ¡lido en Onboarding.');
         return;
     }
 
@@ -514,7 +514,7 @@ async function setAdminActiveContext(rawContext, options = {}) {
         if (normalized) {
             await activateAdminScopedTab(currentScopedTab);
         } else {
-            renderContextRequiredState(currentScopedTab, 'Selecciona primero un workspace y un contexto válido en Onboarding.');
+            renderContextRequiredState(currentScopedTab, 'Selecciona primero un workspace y un contexto vÃ¡lido en Onboarding.');
         }
     }
 
@@ -630,7 +630,7 @@ function populateOnboardingConnectionOptions() {
     if (!select) return;
 
     if (!globalConnectionProfiles.length) {
-        select.innerHTML = '<option value="">Selecciona o crea una conexión</option>';
+        select.innerHTML = '<option value="">Selecciona o crea una conexiÃ³n</option>';
         renderOnboardingConnectionCatalog();
         return;
     }
@@ -639,13 +639,13 @@ function populateOnboardingConnectionOptions() {
     const options = globalConnectionProfiles.map(profile => {
         const connectionName = profile.connectionName || profile.ConnectionName || '';
         const profileKey = profile.profileKey || profile.ProfileKey || 'default';
-        const databaseName = profile.databaseName || profile.DatabaseName || '—';
+        const databaseName = profile.databaseName || profile.DatabaseName || 'â€”';
         const isActive = !!(profile.isActive || profile.IsActive);
-        const label = `${connectionName} · ${databaseName} · ${profileKey}${isActive ? ' · activo' : ''}`;
+        const label = `${connectionName} Â· ${databaseName} Â· ${profileKey}${isActive ? ' Â· activo' : ''}`;
         return `<option value="${escHtml(connectionName)}">${escHtml(label)}</option>`;
     });
 
-    select.innerHTML = ['<option value="">Selecciona una conexión guardada</option>', ...options].join('');
+    select.innerHTML = ['<option value="">Selecciona una conexiÃ³n guardada</option>', ...options].join('');
     if (currentConnectionName && globalConnectionProfiles.some(profile =>
         String(profile.connectionName || profile.ConnectionName || '') === currentConnectionName)) {
         select.value = currentConnectionName;
@@ -667,7 +667,7 @@ function renderOnboardingConnectionCatalog() {
                     <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
                     <path d="M5 5v14c0 1.66 3.1 3 7 3s7-1.34 7-3V5"></path>
                 </svg>
-                ${needsInitialOnboardingSetup() ? 'Empieza creando tu primera conexión desde este panel' : 'Aún no hay conexiones configuradas'}
+                ${needsInitialOnboardingSetup() ? 'Empieza creando tu primera conexiÃ³n desde este panel' : 'AÃºn no hay conexiones configuradas'}
             </div>`;
         return;
     }
@@ -676,8 +676,8 @@ function renderOnboardingConnectionCatalog() {
     list.innerHTML = globalConnectionProfiles.map(profile => {
         const connectionName = profile.connectionName || profile.ConnectionName || '';
         const profileKey = profile.profileKey || profile.ProfileKey || 'default';
-        const databaseName = profile.databaseName || profile.DatabaseName || '—';
-        const serverHost = profile.serverHost || profile.ServerHost || '—';
+        const databaseName = profile.databaseName || profile.DatabaseName || 'â€”';
+        const serverHost = profile.serverHost || profile.ServerHost || 'â€”';
         const description = profile.description || profile.Description || '';
         const isActive = !!(profile.isActive || profile.IsActive);
         const isSelected = selectedConnectionName && selectedConnectionName === connectionName;
@@ -687,7 +687,7 @@ function renderOnboardingConnectionCatalog() {
                     <div class="hi-question">${escHtml(connectionName)}</div>
                     <div class="hi-time">${escHtml(databaseName)}</div>
                 </div>
-                <div class="onboarding-connection-meta">${escHtml(serverHost)} · Perfil ${escHtml(profileKey)}</div>
+                <div class="onboarding-connection-meta">${escHtml(serverHost)} Â· Perfil ${escHtml(profileKey)}</div>
                 <div class="hi-badges">
                     <span class="hi-verify ${isActive ? 'verified' : 'rejected'}">${isActive ? 'Activa' : 'Inactiva'}</span>
                     ${description ? `<span class="hi-status ok"><span class="dot"></span>${escHtml(description)}</span>` : ''}
@@ -734,7 +734,7 @@ function renderOnboardingRuntimeContexts() {
         return `
             <div class="history-item onboarding-mapping is-clickable ${isSelected ? 'is-selected' : ''}" onclick="applyOnboardingRuntimeContext('${jsString(tenantKey)}','${jsString(domain)}','${jsString(connectionName)}','${jsString(profileKey)}')">
                 <div class="hi-top">
-                    <div class="hi-question">${escHtml(tenantDisplayName)} · ${escHtml(domain)}</div>
+                    <div class="hi-question">${escHtml(tenantDisplayName)} Â· ${escHtml(domain)}</div>
                     <div class="hi-time">${escHtml(connectionName)}</div>
                 </div>
                 <div class="hi-badges">
@@ -809,7 +809,7 @@ function renderOnboardingTenantList() {
         return `
             <div class="history-item onboarding-context-card ${isSelected ? 'selected' : ''}" onclick="applyOnboardingRuntimeContext('${jsString(tenantKey)}','${jsString(domain)}','${jsString(connectionName)}','${jsString(profileKey)}')">
                 <div class="hi-top">
-                    <div class="hi-question">${escHtml(tenantDisplayName)} · ${escHtml(domain)}</div>
+                    <div class="hi-question">${escHtml(tenantDisplayName)} Â· ${escHtml(domain)}</div>
                     <div class="hi-time">${escHtml(connectionName)}</div>
                 </div>
                 <div class="hi-badges">
@@ -844,7 +844,7 @@ function renderOnboardingTenantList() {
                     <path d="M3 12h18"></path>
                     <circle cx="12" cy="12" r="9"></circle>
                 </svg>
-                Aún no hay workspaces registrados
+                AÃºn no hay workspaces registrados
             </div>`;
         return;
     }
@@ -973,7 +973,7 @@ function renderTenantDomains() {
                     <path d="M4 12h16"></path>
                     <path d="M4 18h16"></path>
                 </svg>
-                Este workspace aún no tiene mappings
+                Este workspace aÃºn no tiene mappings
             </div>`;
         return;
     }
@@ -1151,9 +1151,9 @@ function humanizeOnboardingFieldName(field) {
         tenantKey: 'Workspace / Tenant',
         displayName: 'Nombre visible',
         domain: 'Contexto de datos / Domain',
-        connectionName: 'Conexión de base de datos',
+        connectionName: 'ConexiÃ³n de base de datos',
         connectionString: 'Connection String',
-        systemProfileKey: 'Perfil técnico'
+        systemProfileKey: 'Perfil tÃ©cnico'
     };
 
     return map[field] || field;
@@ -1183,7 +1183,7 @@ function humanizeOnboardingErrorMessage(message) {
         .replaceAll('TenantKey', 'Workspace / Tenant')
         .replaceAll('DisplayName', 'Nombre visible')
         .replaceAll('Domain', 'Contexto de datos / Domain')
-        .replaceAll('ConnectionName', 'Conexión de base de datos')
+        .replaceAll('ConnectionName', 'ConexiÃ³n de base de datos')
         .replaceAll('ConnectionString', 'Connection String')
         .replaceAll('AllowedObjects', 'tablas permitidas')
         .replaceAll('SemanticHints', 'pistas del dominio')
@@ -1243,9 +1243,9 @@ function clearOnboardingStep1Errors() {
 function validateOnboardingStep1Fields(showErrors = true) {
     const validations = [
         ['tenantKey', getValue('txtOnboardingTenantKey').trim(), 'Escribe una clave para identificar este workspace.'],
-        ['displayName', getValue('txtOnboardingDisplayName').trim(), 'Escribe el nombre visible que verán los usuarios.'],
-        ['domain', getValue('txtOnboardingDomain').trim(), 'Define el contexto de datos que usará este dominio.'],
-        ['connectionName', getValue('txtOnboardingConnectionName').trim(), 'Selecciona una conexión de base de datos.']
+        ['displayName', getValue('txtOnboardingDisplayName').trim(), 'Escribe el nombre visible que verÃ¡n los usuarios.'],
+        ['domain', getValue('txtOnboardingDomain').trim(), 'Define el contexto de datos que usarÃ¡ este dominio.'],
+        ['connectionName', getValue('txtOnboardingConnectionName').trim(), 'Selecciona una conexiÃ³n de base de datos.']
     ];
 
     const missing = [];
@@ -1272,7 +1272,7 @@ function validateOnboardingConnectionFields(showErrors = true) {
 
     if (!connectionName) {
         missing.push('connectionName');
-        if (showErrors) setOnboardingFieldError('newConnectionName', 'Escribe un nombre para guardar esta conexión.');
+        if (showErrors) setOnboardingFieldError('newConnectionName', 'Escribe un nombre para guardar esta conexiÃ³n.');
     } else if (showErrors) {
         clearOnboardingFieldError('newConnectionName');
     }
@@ -1328,41 +1328,41 @@ function getOnboardingFlowState() {
     const hasValidation = isOnboardingValidationSuccessful(globalOnboardingValidation);
 
     let currentStep = 1;
-    let currentStepLabel = 'Paso 1 · Workspace';
-    let currentStepHint = 'Empieza configurando el workspace, el dominio y la conexión a la base.';
+    let currentStepLabel = 'Paso 1 Â· Workspace';
+    let currentStepHint = 'Empieza configurando el workspace, el dominio y la conexiÃ³n a la base.';
     let requiredAction = needsInitialOnboardingSetup()
-        ? 'Crear o seleccionar una conexión válida y guardar el workspace.'
-        : 'Completar tenant, dominio y conexión, luego guardar el workspace.';
+        ? 'Crear o seleccionar una conexiÃ³n vÃ¡lida y guardar el workspace.'
+        : 'Completar tenant, dominio y conexiÃ³n, luego guardar el workspace.';
     let nextAction = 'Descubrir el schema para elegir tablas permitidas.';
     let progress = 0;
-    let progressHint = 'Aún no hay pasos obligatorios completados.';
+    let progressHint = 'AÃºn no hay pasos obligatorios completados.';
 
     if (hasWorkspace) {
         currentStep = 2;
-        currentStepLabel = 'Paso 2 · Tablas permitidas';
-        currentStepHint = 'Ya existe contexto mínimo; ahora toca definir el perímetro seguro del dominio.';
+        currentStepLabel = 'Paso 2 Â· Tablas permitidas';
+        currentStepHint = 'Ya existe contexto mÃ­nimo; ahora toca definir el perÃ­metro seguro del dominio.';
         requiredAction = hasAllowedSelection
-            ? 'Guardar la selección actual de tablas permitidas.'
+            ? 'Guardar la selecciÃ³n actual de tablas permitidas.'
             : 'Descubrir schema y seleccionar al menos una tabla o vista permitida.';
         nextAction = 'Preparar el dominio para generar schema docs e hints.';
         progress = 1;
-        progressHint = 'El workspace base ya quedó configurado.';
+        progressHint = 'El workspace base ya quedÃ³ configurado.';
     }
 
     if (hasAllowed) {
         currentStep = 3;
-        currentStepLabel = 'Paso 3 · Preparar dominio';
-        currentStepHint = 'El perímetro seguro ya existe; ahora falta generar el contexto técnico mínimo.';
-        requiredAction = 'Ejecutar la preparación del dominio para generar schema docs y semantic hints base.';
+        currentStepLabel = 'Paso 3 Â· Preparar dominio';
+        currentStepHint = 'El perÃ­metro seguro ya existe; ahora falta generar el contexto tÃ©cnico mÃ­nimo.';
+        requiredAction = 'Ejecutar la preparaciÃ³n del dominio para generar schema docs y semantic hints base.';
         nextAction = 'Hacer una pregunta real para validar el dominio.';
         progress = 2;
-        progressHint = 'El dominio ya sabe qué objetos puede consultar.';
+        progressHint = 'El dominio ya sabe quÃ© objetos puede consultar.';
     }
 
     if (isInitialized) {
         currentStep = 4;
-        currentStepLabel = 'Paso 4 · Prueba real';
-        currentStepHint = 'El motor ya tiene contexto técnico suficiente para intentar una consulta de negocio.';
+        currentStepLabel = 'Paso 4 Â· Prueba real';
+        currentStepHint = 'El motor ya tiene contexto tÃ©cnico suficiente para intentar una consulta de negocio.';
         requiredAction = 'Ejecutar una pregunta real y revisar que el SQL y el resultado sean correctos.';
         nextAction = 'Si responde bien, el dominio ya puede considerarse listo para salida inicial.';
         progress = 3;
@@ -1371,12 +1371,12 @@ function getOnboardingFlowState() {
 
     if (hasValidation) {
         currentStep = 4;
-        currentStepLabel = 'Listo · Onboarding base completo';
-        currentStepHint = 'El flujo base ya quedó operativo para una primera salida.';
-        requiredAction = 'No hay bloqueos base pendientes; lo siguiente es afinación opcional.';
-        nextAction = 'Business Rules, Semantic Hints manuales y Query Patterns pueden refinarse después.';
+        currentStepLabel = 'Listo Â· Onboarding base completo';
+        currentStepHint = 'El flujo base ya quedÃ³ operativo para una primera salida.';
+        requiredAction = 'No hay bloqueos base pendientes; lo siguiente es afinaciÃ³n opcional.';
+        nextAction = 'Business Rules, Semantic Hints manuales y Query Patterns pueden refinarse despuÃ©s.';
         progress = 4;
-        progressHint = 'Los 4 pasos obligatorios del onboarding base están completos.';
+        progressHint = 'Los 4 pasos obligatorios del onboarding base estÃ¡n completos.';
     }
 
     return {
@@ -1425,7 +1425,7 @@ function renderOnboardingFlowSummary() {
         chips.unshift('<span class="meta-chip training-no">En configuracion</span>');
     }
 
-    chips.push('<span class="meta-empty">Las pestañas de curacion avanzada son opcionales para cerrar el onboarding base.</span>');
+    chips.push('<span class="meta-empty">Las pestaÃ±as de curacion avanzada son opcionales para cerrar el onboarding base.</span>');
     meta.innerHTML = chips.join('');
 }
 
@@ -1456,7 +1456,7 @@ function renderOnboardingActionGuidance() {
 
     if (!hasWorkspace) {
         meta.innerHTML = needsInitialOnboardingSetup()
-            ? '<span class="meta-empty">Empieza creando una conexión y luego guarda el workspace. Eso habilita el resto del wizard.</span>'
+            ? '<span class="meta-empty">Empieza creando una conexiÃ³n y luego guarda el workspace. Eso habilita el resto del wizard.</span>'
             : '<span class="meta-empty">Empieza guardando el workspace. Eso habilita el resto del wizard.</span>';
         return;
     }
@@ -1472,7 +1472,7 @@ function renderOnboardingActionGuidance() {
     }
 
     if (!isInitialized) {
-        meta.innerHTML = '<span class="meta-empty">Siguiente paso: prepara el dominio para generar el contexto técnico del motor.</span>';
+        meta.innerHTML = '<span class="meta-empty">Siguiente paso: prepara el dominio para generar el contexto tÃ©cnico del motor.</span>';
         return;
     }
 
@@ -1482,7 +1482,7 @@ function renderOnboardingActionGuidance() {
     }
 
     meta.innerHTML = `
-        <span class="meta-chip verify-ok">Onboarding básico completado</span>
+        <span class="meta-chip verify-ok">Onboarding bÃ¡sico completado</span>
         <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingDomain').trim() || 'sin-domain')}</span>
         <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingConnectionName').trim() || 'sin-conexion')}</span>`;
 }
@@ -1513,24 +1513,24 @@ function buildOnboardingTourRuntimeNote(stepIndex) {
     const allowedObjectsCount = globalOnboardingStatus?.allowedObjectsCount ?? globalOnboardingStatus?.AllowedObjectsCount ?? 0;
     const schemaDocsCount = globalOnboardingStatus?.schemaDocsCount ?? globalOnboardingStatus?.SchemaDocsCount ?? 0;
     const semanticHintsCount = globalOnboardingStatus?.semanticHintsCount ?? globalOnboardingStatus?.SemanticHintsCount ?? 0;
-    const currentConnection = getValue('txtOnboardingConnectionName').trim() || 'sin conexión';
+    const currentConnection = getValue('txtOnboardingConnectionName').trim() || 'sin conexiÃ³n';
 
     switch (stepIndex) {
         case 0:
-            return currentConnection === 'sin conexión'
-                ? 'Ahora mismo todavía falta seleccionar una conexión para que el wizard pueda continuar.'
-                : `La conexión actual del wizard es ${currentConnection}.`;
+            return currentConnection === 'sin conexiÃ³n'
+                ? 'Ahora mismo todavÃ­a falta seleccionar una conexiÃ³n para que el wizard pueda continuar.'
+                : `La conexiÃ³n actual del wizard es ${currentConnection}.`;
         case 1:
             if (!globalOnboardingSchemaCandidates.length) {
-                return 'Todavía no hay schema cargado. El siguiente clic útil aquí es “Descubrir schema”.';
+                return 'TodavÃ­a no hay schema cargado. El siguiente clic Ãºtil aquÃ­ es â€œDescubrir schemaâ€.';
             }
             return `Ahora mismo hay ${selectedTables} objeto(s) seleccionados y ${allowedObjectsCount} ya guardado(s).`;
         case 2:
             return `Estado actual: ${allowedObjectsCount} tablas, ${schemaDocsCount} schema docs y ${semanticHintsCount} pistas del dominio.`;
         case 3:
             return isOnboardingValidationSuccessful(globalOnboardingValidation)
-                ? 'La prueba actual ya respondió correctamente.'
-                : 'Aquí esperamos ver SQL generado, resultado y una respuesta marcada como correcta.';
+                ? 'La prueba actual ya respondiÃ³ correctamente.'
+                : 'AquÃ­ esperamos ver SQL generado, resultado y una respuesta marcada como correcta.';
         case 4:
             return !!(health?.hasAllowedObjects ?? health?.HasAllowedObjects)
                 ? 'Usa este cierre para decidir si el dominio ya puede pasar a usuarios internos.'
@@ -1745,16 +1745,16 @@ async function validateOnboardingConnection() {
 
         const body = await safeJson(res);
         if (!res.ok) {
-            showOnboardingConnectionBanner('err', humanizeOnboardingErrorMessage(body?.Error || ('Error validando conexión. Código: ' + res.status)));
+            showOnboardingConnectionBanner('err', humanizeOnboardingErrorMessage(body?.Error || ('Error validando conexiÃ³n. CÃ³digo: ' + res.status)));
             return;
         }
 
         setOnboardingConnectionMeta(
-            `Servidor: ${body?.ServerHost || 'n/d'} · Base: ${body?.DatabaseName || 'n/d'} · Auth integrada: ${body?.IntegratedSecurity ? 'sí' : 'no'}`,
+            `Servidor: ${body?.ServerHost || 'n/d'} Â· Base: ${body?.DatabaseName || 'n/d'} Â· Auth integrada: ${body?.IntegratedSecurity ? 'sÃ­' : 'no'}`,
             'meta-chip training-no');
-        showOnboardingConnectionBanner('ok', body?.Message || 'Conexión validada correctamente.');
+        showOnboardingConnectionBanner('ok', body?.Message || 'ConexiÃ³n validada correctamente.');
     } catch (e) {
-        showOnboardingConnectionBanner('err', 'Error de red validando conexión: ' + e.message);
+        showOnboardingConnectionBanner('err', 'Error de red validando conexiÃ³n: ' + e.message);
     } finally {
         if (spinner) spinner.style.display = 'none';
     }
@@ -1767,7 +1767,7 @@ async function saveOnboardingConnection() {
 
     const missing = validateOnboardingConnectionFields(true);
     if (missing.length) {
-        showOnboardingConnectionBanner('warn', `Completa ${formatOnboardingMissingFields(missing)} antes de guardar la conexión.`);
+        showOnboardingConnectionBanner('warn', `Completa ${formatOnboardingMissingFields(missing)} antes de guardar la conexiÃ³n.`);
         return;
     }
 
@@ -1788,7 +1788,7 @@ async function saveOnboardingConnection() {
 
         const body = await safeJson(res);
         if (!res.ok) {
-            showOnboardingConnectionBanner('err', humanizeOnboardingErrorMessage(body?.Error || ('Error guardando conexión. Código: ' + res.status)));
+            showOnboardingConnectionBanner('err', humanizeOnboardingErrorMessage(body?.Error || ('Error guardando conexiÃ³n. CÃ³digo: ' + res.status)));
             return;
         }
 
@@ -1797,13 +1797,13 @@ async function saveOnboardingConnection() {
         setValue('txtOnboardingConnectionName', body?.ConnectionName || connectionName);
         persistOnboardingWorkspaceState();
         setOnboardingConnectionMeta(
-            `Guardada: ${body?.ConnectionName || connectionName} · ${body?.ServerHost || 'n/d'} · ${body?.DatabaseName || 'n/d'}`,
+            `Guardada: ${body?.ConnectionName || connectionName} Â· ${body?.ServerHost || 'n/d'} Â· ${body?.DatabaseName || 'n/d'}`,
             'meta-chip status-ok');
-        showOnboardingConnectionBanner('ok', body?.Message || 'Conexión guardada correctamente.');
+        showOnboardingConnectionBanner('ok', body?.Message || 'ConexiÃ³n guardada correctamente.');
         toggleOnboardingConnectionEditor(false);
         renderOnboardingActionGuidance();
     } catch (e) {
-        showOnboardingConnectionBanner('err', 'Error de red guardando conexión: ' + e.message);
+        showOnboardingConnectionBanner('err', 'Error de red guardando conexiÃ³n: ' + e.message);
     } finally {
         if (spinner) spinner.style.display = 'none';
     }
@@ -1815,7 +1815,7 @@ async function loadOnboardingSchemaCandidates() {
 
     if (!connectionName || !domain) {
         validateOnboardingStep1Fields(true);
-        showOnboardingBanner('warn', 'Primero guarda el workspace con un contexto de datos y una conexión.');
+        showOnboardingBanner('warn', 'Primero guarda el workspace con un contexto de datos y una conexiÃ³n.');
         return;
     }
 
@@ -1879,7 +1879,7 @@ function renderOnboardingSchemaCandidates() {
                 Descubre el schema para seleccionar los objetos permitidos
             </div>`;
 
-        if (meta) meta.innerHTML = '<span class="meta-empty">Aún no se ha cargado el schema de la conexión.</span>';
+        if (meta) meta.innerHTML = '<span class="meta-empty">AÃºn no se ha cargado el schema de la conexiÃ³n.</span>';
         if (saveBtn) saveBtn.disabled = true;
         renderOnboardingActionGuidance();
         return;
@@ -1984,7 +1984,7 @@ async function saveOnboardingAllowedObjects() {
             await loadOnboardingStatus();
         } else {
             const body = await safeJson(res);
-            showOnboardingBanner('err', humanizeOnboardingErrorMessage(body?.Error || ('Error al guardar tablas permitidas. Código: ' + res.status)));
+            showOnboardingBanner('err', humanizeOnboardingErrorMessage(body?.Error || ('Error al guardar tablas permitidas. CÃ³digo: ' + res.status)));
         }
     } catch (e) {
         showOnboardingBanner('err', 'Error de red: ' + e.message);
@@ -2001,7 +2001,7 @@ async function initializeOnboardingDomain() {
 
     if (!domain || !connectionName) {
         validateOnboardingStep1Fields(true);
-        showOnboardingBanner('warn', 'Primero guarda el workspace y asegúrate de tener una conexión válida.');
+        showOnboardingBanner('warn', 'Primero guarda el workspace y asegÃºrate de tener una conexiÃ³n vÃ¡lida.');
         return;
     }
 
@@ -2029,7 +2029,7 @@ async function initializeOnboardingDomain() {
             loadSemanticHints();
         } else {
             const body = await safeJson(res);
-            showOnboardingBanner('err', humanizeOnboardingErrorMessage(body?.Error || ('Error al preparar el dominio. Código: ' + res.status)));
+            showOnboardingBanner('err', humanizeOnboardingErrorMessage(body?.Error || ('Error al preparar el dominio. CÃ³digo: ' + res.status)));
         }
     } catch (e) {
         showOnboardingBanner('err', 'Error de red: ' + e.message);
@@ -2085,7 +2085,7 @@ function renderOnboardingStatus() {
     const meta = document.getElementById('onboardingStatusMeta');
     if (meta) {
         if (!status) {
-            meta.innerHTML = '<span class="meta-empty">Ejecuta la inicialización para dejar el dominio listo para pruebas.</span>';
+            meta.innerHTML = '<span class="meta-empty">Ejecuta la inicializaciÃ³n para dejar el dominio listo para pruebas.</span>';
         } else {
             meta.innerHTML = `
                 <span class="meta-chip status-ok">${escHtml(domain || '')}</span>
@@ -2208,7 +2208,7 @@ async function saveOnboardingStep1() {
             await selectOnboardingTenant(tenantKey);
         } else {
             const body = await safeJson(res);
-            showOnboardingBanner('err', humanizeOnboardingErrorMessage(body?.Error || ('Error al guardar el workspace. Código: ' + res.status)));
+            showOnboardingBanner('err', humanizeOnboardingErrorMessage(body?.Error || ('Error al guardar el workspace. CÃ³digo: ' + res.status)));
         }
     } catch (e) {
         showOnboardingBanner('err', 'Error de red al guardar el workspace: ' + e.message);
@@ -2236,7 +2236,7 @@ function setOnboardingMeta(mapping) {
             return;
         }
 
-        meta.innerHTML = '<span class="meta-empty">Workspace sin mapping default aún</span>';
+        meta.innerHTML = '<span class="meta-empty">Workspace sin mapping default aÃºn</span>';
         return;
     }
 
@@ -2298,7 +2298,7 @@ function renderOnboardingValidation() {
 
     if (meta) {
         if (!isInitialized) {
-            meta.innerHTML = '<span class="meta-empty">Completa la preparación del dominio antes de ejecutar una prueba.</span>';
+            meta.innerHTML = '<span class="meta-empty">Completa la preparaciÃ³n del dominio antes de ejecutar una prueba.</span>';
         } else if (!globalOnboardingValidation) {
             meta.innerHTML = `
                 <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingDomain').trim() || 'sin-domain')}</span>
@@ -2340,8 +2340,8 @@ function buildOnboardingSuggestedQuestions() {
         const objectName = String(item.objectName || item.ObjectName || '').trim();
         if (!objectName) return;
 
-        suggestions.push(`Muéstrame 5 registros de ${objectName}.`);
-        suggestions.push(`¿Cuántos registros hay en ${objectName}?`);
+        suggestions.push(`MuÃ©strame 5 registros de ${objectName}.`);
+        suggestions.push(`Â¿CuÃ¡ntos registros hay en ${objectName}?`);
     });
 
     return [...new Set(suggestions)].slice(0, 4);
@@ -2361,7 +2361,7 @@ async function runOnboardingValidationQuestion() {
     const isInitialized = !!(health?.hasSchemaDocs ?? health?.HasSchemaDocs) && !!(health?.hasSemanticHints ?? health?.HasSemanticHints);
 
     if (!isInitialized) {
-        showOnboardingValidationBanner('warn', 'Completa la preparación del dominio antes de ejecutar una prueba.');
+        showOnboardingValidationBanner('warn', 'Completa la preparaciÃ³n del dominio antes de ejecutar una prueba.');
         return;
     }
 
@@ -2402,7 +2402,7 @@ async function runOnboardingValidationQuestion() {
 
         const body = await safeJson(res);
         if (!res.ok) {
-            showOnboardingValidationBanner('err', body?.Error || ('Error al iniciar la prueba. Código: ' + res.status));
+            showOnboardingValidationBanner('err', body?.Error || ('Error al iniciar la prueba. CÃ³digo: ' + res.status));
             globalOnboardingValidation.status = 'Failed';
             globalOnboardingValidation.errorText = body?.Error || 'No se pudo encolar la prueba.';
             renderOnboardingValidation();
@@ -2414,7 +2414,7 @@ async function runOnboardingValidationQuestion() {
         renderOnboardingValidation();
 
         if (!globalOnboardingValidation.jobId) {
-            showOnboardingValidationBanner('err', 'La API no devolvió un JobId para monitorear la prueba.');
+            showOnboardingValidationBanner('err', 'La API no devolviÃ³ un JobId para monitorear la prueba.');
             return;
         }
 
@@ -2462,12 +2462,12 @@ async function pollOnboardingValidationJob(jobId) {
 
         if (isTerminalOnboardingJobStatus(status)) {
             if (isOnboardingValidationSuccessful(globalOnboardingValidation)) {
-                showOnboardingValidationBanner('ok', 'La pregunta de prueba respondió correctamente. El dominio ya tiene un camino básico funcional.');
+                showOnboardingValidationBanner('ok', 'La pregunta de prueba respondiÃ³ correctamente. El dominio ya tiene un camino bÃ¡sico funcional.');
                 maybeCelebrateOnboardingCompletion(globalOnboardingValidation);
             } else if (String(status).toLowerCase() === 'requiresreview') {
-                showOnboardingValidationBanner('warn', 'La prueba llegó a revisión. El dominio necesita curación adicional antes de salir a usuarios.');
+                showOnboardingValidationBanner('warn', 'La prueba llegÃ³ a revisiÃ³n. El dominio necesita curaciÃ³n adicional antes de salir a usuarios.');
             } else {
-                showOnboardingValidationBanner('err', 'La prueba falló. Revisa AllowedObjects, SchemaDocs y SemanticHints antes de continuar.');
+                showOnboardingValidationBanner('err', 'La prueba fallÃ³. Revisa AllowedObjects, SchemaDocs y SemanticHints antes de continuar.');
             }
             return;
         }
@@ -2489,7 +2489,7 @@ function isOnboardingValidationSuccessful(validation) {
 
 function formatOnboardingValidationSql(validation) {
     if (!validation?.sqlText) {
-        return 'Aún no se ha ejecutado ninguna prueba.';
+        return 'AÃºn no se ha ejecutado ninguna prueba.';
     }
 
     return String(validation.sqlText).trim();
@@ -2502,7 +2502,7 @@ function formatOnboardingValidationResult(validation) {
 
     const status = String(validation.status || 'Queued');
     if (!isTerminalOnboardingJobStatus(status)) {
-        return `Estado: ${status}\n\nLa prueba sigue ejecutándose.`;
+        return `Estado: ${status}\n\nLa prueba sigue ejecutÃ¡ndose.`;
     }
 
     if (validation.errorText) {
@@ -2523,7 +2523,7 @@ function formatOnboardingValidationResult(validation) {
         return `Estado: ${status}\n\n${String(validation.resultJson).slice(0, 4000)}`;
     }
 
-    return `Estado: ${status}\n\nLa consulta terminó sin datos serializados visibles.`;
+    return `Estado: ${status}\n\nLa consulta terminÃ³ sin datos serializados visibles.`;
 }
 
 function inferResultCount(parsedResult) {
@@ -2588,10 +2588,10 @@ function openOnboardingCompletionModal(validation = globalOnboardingValidation) 
     const question = String(validation?.question || getValue('txtOnboardingValidationQuestion').trim() || '').trim();
     const resultCount = validation?.resultCount;
 
-    title.textContent = 'Configuración completada satisfactoriamente';
+    title.textContent = 'ConfiguraciÃ³n completada satisfactoriamente';
     body.textContent = question
-        ? `La pregunta final respondió correctamente y este dominio ya quedó listo para empezar a usarse. Puedes seguir afinándolo, pero el onboarding básico ya quedó cerrado con éxito. Pregunta validada: "${question}".`
-        : 'La pregunta final respondió correctamente y este dominio ya quedó listo para empezar a usarse. Puedes seguir afinándolo, pero el onboarding básico ya quedó cerrado con éxito.';
+        ? `La pregunta final respondiÃ³ correctamente y este dominio ya quedÃ³ listo para empezar a usarse. Puedes seguir afinÃ¡ndolo, pero el onboarding bÃ¡sico ya quedÃ³ cerrado con Ã©xito. Pregunta validada: "${question}".`
+        : 'La pregunta final respondiÃ³ correctamente y este dominio ya quedÃ³ listo para empezar a usarse. Puedes seguir afinÃ¡ndolo, pero el onboarding bÃ¡sico ya quedÃ³ cerrado con Ã©xito.';
     chips.innerHTML = `
         <span class="meta-chip status-ok">${escHtml(tenantKey)}</span>
         <span class="meta-chip training-no">${escHtml(domain)}</span>
@@ -2635,7 +2635,7 @@ function renderOnboardingReadiness() {
             <span class="meta-chip verify-ok">Dominio listo</span>
             <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingDomain').trim() || 'sin-domain')}</span>
             <span class="meta-chip training-no">${escHtml(getValue('txtOnboardingConnectionName').trim() || 'sin-conexion')}</span>
-            <span class="meta-chip status-ok">Onboarding básico completado</span>`;
+            <span class="meta-chip status-ok">Onboarding bÃ¡sico completado</span>`;
         return;
     }
 
@@ -2862,14 +2862,14 @@ async function exportOnboardingDomainPack() {
         const res = await fetch(`/api/admin/domain-pack/export?tenantKey=${encodeURIComponent(tenantKey)}&domain=${encodeURIComponent(domain)}`);
         const body = await safeJson(res);
         if (!res.ok || !body) {
-            showOnboardingPackBanner('err', body?.Error || ('Error al exportar el pack. Código: ' + res.status));
+            showOnboardingPackBanner('err', body?.Error || ('Error al exportar el pack. CÃ³digo: ' + res.status));
             return;
         }
 
         const serialized = JSON.stringify(body, null, 2);
         setValue('txtOnboardingDomainPackJson', serialized);
         renderOnboardingPackMeta(body);
-        showOnboardingPackBanner('ok', 'Domain pack exportado correctamente. Ya quedó cargado en el editor y listo para descargarse o copiarse.');
+        showOnboardingPackBanner('ok', 'Domain pack exportado correctamente. Ya quedÃ³ cargado en el editor y listo para descargarse o copiarse.');
         downloadTextFile(`${sanitizeFileName(tenantKey)}-${sanitizeFileName(domain)}-domain-pack.json`, serialized);
     } catch (e) {
         showOnboardingPackBanner('err', 'Error de red exportando el pack: ' + e.message);
@@ -2890,7 +2890,7 @@ async function importOnboardingDomainPack() {
     try {
         pack = JSON.parse(raw);
     } catch (e) {
-        showOnboardingPackBanner('err', 'El JSON del pack no es válido: ' + e.message);
+        showOnboardingPackBanner('err', 'El JSON del pack no es vÃ¡lido: ' + e.message);
         return;
     }
 
@@ -2907,7 +2907,7 @@ async function importOnboardingDomainPack() {
         });
         const body = await safeJson(res);
         if (!res.ok) {
-            showOnboardingPackBanner('err', body?.Error || ('Error al importar el pack. Código: ' + res.status));
+            showOnboardingPackBanner('err', body?.Error || ('Error al importar el pack. CÃ³digo: ' + res.status));
             return;
         }
 
@@ -3154,7 +3154,7 @@ async function saveSystemConfigEntriesBulk(entries, spinnerId, successMessage) {
             await loadSystemConfig();
         } else {
             const body = await safeJson(res);
-            showSystemConfigBanner('err', body?.Error || ('Error al guardar. Código: ' + res.status));
+            showSystemConfigBanner('err', body?.Error || ('Error al guardar. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showSystemConfigBanner('err', 'Error de red: ' + e.message);
@@ -3204,7 +3204,7 @@ function renderSystemConfig() {
                 </div>
                 <div class="hi-badges">
                     <span class="hi-verify verified">${editable ? 'UI' : 'LOCK'}</span>
-                    <span class="hi-status ok"><span class="dot"></span>${escHtml(String(value).slice(0, 48) || '(vacío)')}</span>
+                    <span class="hi-status ok"><span class="dot"></span>${escHtml(String(value).slice(0, 48) || '(vacÃ­o)')}</span>
                 </div>
             </div>`;
     }).join('');
@@ -3314,7 +3314,7 @@ async function saveSystemConfigEntry() {
             if (refreshedIdx >= 0) loadSystemConfigEditor(refreshedIdx);
         } else {
             const body = await safeJson(res);
-            showSystemConfigBanner('err', body?.Error || ('Error al guardar. Código: ' + res.status));
+            showSystemConfigBanner('err', body?.Error || ('Error al guardar. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showSystemConfigBanner('err', 'Error de red: ' + e.message);
@@ -3371,7 +3371,7 @@ async function loadHistory() {
         globalJobs = [];
         hideRagBanner();
         resetRagEditor('Selecciona un contexto en Onboarding para revisar consultas.');
-        renderRagEmptyState('Selecciona primero un workspace y un contexto válido en Onboarding.');
+        renderRagEmptyState('Selecciona primero un workspace y un contexto vÃ¡lido en Onboarding.');
         return;
     }
 
@@ -3572,7 +3572,7 @@ function loadEditor(i, options = {}) {
         ragMeta.innerHTML = `
             <span class="meta-chip ${opClass}">${escHtml(status)}</span>
             <span class="meta-chip ${vsClass}">Verif: ${escHtml(vs)}</span>
-            <span class="meta-chip ${trClass}">RAG: ${trained ? 'Sí' : 'No'}</span>
+            <span class="meta-chip ${trClass}">RAG: ${trained ? 'SÃ­' : 'No'}</span>
             ${feedbackChip}
             <span class="meta-time">${escHtml(created)}</span>
             ${feedbackTime}`;
@@ -3606,7 +3606,7 @@ async function saveCorrection() {
 
     if (!jobId || !question || !sql) return;
     if (!context?.tenantKey || !context?.domain || !context?.connectionName) {
-        showRagBanner('warn', 'Selecciona primero un contexto válido en Onboarding antes de guardar en memoria RAG.');
+        showRagBanner('warn', 'Selecciona primero un contexto vÃ¡lido en Onboarding antes de guardar en memoria RAG.');
         return;
     }
 
@@ -3637,7 +3637,7 @@ async function saveCorrection() {
             if (refreshedIdx >= 0) loadEditor(refreshedIdx, { preserveBanner: true });
         } else {
             const body = await safeJson(res);
-            showRagBanner('err', body?.Error || ('Error al guardar. Código: ' + res.status));
+            showRagBanner('err', body?.Error || ('Error al guardar. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showRagBanner('err', 'Error de red: ' + e.message);
@@ -3664,11 +3664,11 @@ async function reindexSchema() {
         const body = await safeJson(res);
 
         if (res.ok) {
-            showSchemaBanner('ok', body?.Message || body?.message || 'Reindexación de schema completada correctamente.');
+            showSchemaBanner('ok', body?.Message || body?.message || 'ReindexaciÃ³n de schema completada correctamente.');
         } else {
             showSchemaBanner(
                 'err',
-                body?.Error || body?.error || body?.Detail || body?.detail || ('Error al reindexar schema. Código: ' + res.status)
+                body?.Error || body?.error || body?.Detail || body?.detail || ('Error al reindexar schema. CÃ³digo: ' + res.status)
             );
         }
     } catch (e) {
@@ -3837,7 +3837,7 @@ function resetAllowedObjectForm() {
     if (toggleBtn) { toggleBtn.disabled = true; toggleBtn.textContent = 'Activar / Desactivar'; }
 
     const meta = document.getElementById('allowedMeta');
-    if (meta) meta.innerHTML = `<span class="meta-empty">Ningún objeto seleccionado</span>`;
+    if (meta) meta.innerHTML = `<span class="meta-empty">NingÃºn objeto seleccionado</span>`;
 
     syncAllowedActionButtons();
     hideAllowedBanner();
@@ -3890,7 +3890,7 @@ async function saveAllowedObject() {
             else { resetAllowedObjectForm(); setValue('txtAllowedDomain', domain); }
         } else {
             const body = await safeJson(res);
-            showAllowedBanner('err', body?.Error || ('Error al guardar Allowed Object. Código: ' + res.status));
+            showAllowedBanner('err', body?.Error || ('Error al guardar Allowed Object. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showAllowedBanner('err', 'Error de red: ' + e.message);
@@ -3905,7 +3905,7 @@ async function toggleAllowedObjectStatus() {
     if (!id) { showAllowedBanner('warn', 'Selecciona un Allowed Object antes de cambiar su estado.'); return; }
 
     const currentItem = globalAllowedObjects.find(x => String(x.id ?? x.Id) === String(id));
-    if (!currentItem) { showAllowedBanner('err', 'No se encontró el Allowed Object seleccionado.'); return; }
+    if (!currentItem) { showAllowedBanner('err', 'No se encontrÃ³ el Allowed Object seleccionado.'); return; }
 
     const nextIsActive = !(currentItem.isActive ?? currentItem.IsActive);
     const btn = document.getElementById('btnAllowedToggle');
@@ -3922,7 +3922,7 @@ async function toggleAllowedObjectStatus() {
             selectAllowedObject(Number(id));
         } else {
             const body = await safeJson(res);
-            showAllowedBanner('err', body?.Error || ('Error al actualizar estatus. Código: ' + res.status));
+            showAllowedBanner('err', body?.Error || ('Error al actualizar estatus. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showAllowedBanner('err', 'Error de red: ' + e.message);
@@ -4132,7 +4132,7 @@ async function saveBusinessRule() {
             else { resetBusinessRuleForm(); setValue('txtBusinessRuleDomain', domain); }
         } else {
             const body = await safeJson(res);
-            showBusinessRuleBanner('err', body?.Error || ('Error al guardar Business Rule. Código: ' + res.status));
+            showBusinessRuleBanner('err', body?.Error || ('Error al guardar Business Rule. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showBusinessRuleBanner('err', 'Error de red: ' + e.message);
@@ -4147,7 +4147,7 @@ async function toggleBusinessRuleStatus() {
     if (!id) { showBusinessRuleBanner('warn', 'Selecciona una Business Rule antes de cambiar su estado.'); return; }
 
     const currentItem = globalBusinessRules.find(x => String(x.id ?? x.Id) === String(id));
-    if (!currentItem) { showBusinessRuleBanner('err', 'No se encontró la Business Rule seleccionada.'); return; }
+    if (!currentItem) { showBusinessRuleBanner('err', 'No se encontrÃ³ la Business Rule seleccionada.'); return; }
 
     const nextIsActive = !(currentItem.isActive ?? currentItem.IsActive);
     const btn = document.getElementById('btnBusinessRuleToggle');
@@ -4164,7 +4164,7 @@ async function toggleBusinessRuleStatus() {
             selectBusinessRule(Number(id));
         } else {
             const body = await safeJson(res);
-            showBusinessRuleBanner('err', body?.Error || ('Error al actualizar estatus. Código: ' + res.status));
+            showBusinessRuleBanner('err', body?.Error || ('Error al actualizar estatus. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showBusinessRuleBanner('err', 'Error de red: ' + e.message);
@@ -4338,7 +4338,7 @@ function resetSemanticHintForm() {
     if (toggleBtn) { toggleBtn.disabled = true; toggleBtn.textContent = 'Activar / Desactivar'; }
 
     const meta = document.getElementById('semanticHintMeta');
-    if (meta) meta.innerHTML = `<span class="meta-empty">Ninguna pista semántica seleccionada</span>`;
+    if (meta) meta.innerHTML = `<span class="meta-empty">Ninguna pista semÃ¡ntica seleccionada</span>`;
 
     syncSemanticHintActionButtons();
     hideSemanticHintBanner();
@@ -4409,7 +4409,7 @@ async function saveSemanticHint() {
             if (savedId !== null) selectSemanticHint(savedId);
         } else {
             const body = await safeJson(res);
-            showSemanticHintBanner('err', body?.Error || ('Error al guardar Semantic Hint. Código: ' + res.status));
+            showSemanticHintBanner('err', body?.Error || ('Error al guardar Semantic Hint. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showSemanticHintBanner('err', 'Error de red: ' + e.message);
@@ -4421,10 +4421,10 @@ async function saveSemanticHint() {
 
 async function toggleSemanticHintStatus() {
     const id = getValue('txtSemanticHintId');
-    if (!id) { showSemanticHintBanner('warn', 'Selecciona una pista semántica antes de cambiar su estado.'); return; }
+    if (!id) { showSemanticHintBanner('warn', 'Selecciona una pista semÃ¡ntica antes de cambiar su estado.'); return; }
 
     const currentItem = globalSemanticHints.find(x => String(x.id ?? x.Id) === String(id));
-    if (!currentItem) { showSemanticHintBanner('err', 'No se encontró la Semantic Hint seleccionada.'); return; }
+    if (!currentItem) { showSemanticHintBanner('err', 'No se encontrÃ³ la Semantic Hint seleccionada.'); return; }
 
     const nextIsActive = !(currentItem.isActive ?? currentItem.IsActive);
     const btn = document.getElementById('btnSemanticHintToggle');
@@ -4443,7 +4443,7 @@ async function toggleSemanticHintStatus() {
             selectSemanticHint(Number(id));
         } else {
             const body = await safeJson(res);
-            showSemanticHintBanner('err', body?.Error || ('Error al actualizar estatus. Código: ' + res.status));
+            showSemanticHintBanner('err', body?.Error || ('Error al actualizar estatus. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showSemanticHintBanner('err', 'Error de red: ' + e.message);
@@ -4622,7 +4622,7 @@ function resetQueryPatternForm() {
     if (toggleBtn) { toggleBtn.disabled = true; toggleBtn.textContent = 'Activar / Desactivar'; }
 
     const meta = document.getElementById('queryPatternMeta');
-    if (meta) meta.innerHTML = `<span class="meta-empty">Ningún pattern seleccionado</span>`;
+    if (meta) meta.innerHTML = `<span class="meta-empty">NingÃºn pattern seleccionado</span>`;
 
     syncQueryPatternActionButtons();
     hideQueryPatternBanner();
@@ -4706,7 +4706,7 @@ async function saveQueryPattern() {
             if (savedId !== null) await selectQueryPattern(savedId);
         } else {
             const body = await safeJson(res);
-            showQueryPatternBanner('err', body?.Error || ('Error al guardar Query Pattern. Código: ' + res.status));
+            showQueryPatternBanner('err', body?.Error || ('Error al guardar Query Pattern. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showQueryPatternBanner('err', 'Error de red: ' + e.message);
@@ -4721,7 +4721,7 @@ async function toggleQueryPatternStatus() {
     if (!id) { showQueryPatternBanner('warn', 'Selecciona un Query Pattern antes de cambiar su estado.'); return; }
 
     const currentItem = globalQueryPatterns.find(x => String(x.id ?? x.Id) === String(id));
-    if (!currentItem) { showQueryPatternBanner('err', 'No se encontró el Query Pattern seleccionado.'); return; }
+    if (!currentItem) { showQueryPatternBanner('err', 'No se encontrÃ³ el Query Pattern seleccionado.'); return; }
 
     const nextIsActive = !(currentItem.isActive ?? currentItem.IsActive);
     const btn = document.getElementById('btnQueryPatternToggle');
@@ -4740,7 +4740,7 @@ async function toggleQueryPatternStatus() {
             await selectQueryPattern(Number(id));
         } else {
             const body = await safeJson(res);
-            showQueryPatternBanner('err', body?.Error || ('Error al actualizar estatus. Código: ' + res.status));
+            showQueryPatternBanner('err', body?.Error || ('Error al actualizar estatus. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showQueryPatternBanner('err', 'Error de red: ' + e.message);
@@ -4886,7 +4886,7 @@ function resetQueryPatternTermForm() {
     if (toggleBtn) { toggleBtn.disabled = true; toggleBtn.textContent = 'Activar / Desactivar'; }
 
     const meta = document.getElementById('queryPatternTermMeta');
-    if (meta) meta.innerHTML = `<span class="meta-empty">Ningún term seleccionado</span>`;
+    if (meta) meta.innerHTML = `<span class="meta-empty">NingÃºn term seleccionado</span>`;
 
     syncQueryPatternTermActionButtons();
     hideQueryPatternTermBanner();
@@ -4956,7 +4956,7 @@ async function saveQueryPatternTerm() {
             if (savedId !== null) selectQueryPatternTerm(savedId);
         } else {
             const body = await safeJson(res);
-            showQueryPatternTermBanner('err', body?.Error || ('Error al guardar Query Pattern Term. Código: ' + res.status));
+            showQueryPatternTermBanner('err', body?.Error || ('Error al guardar Query Pattern Term. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showQueryPatternTermBanner('err', 'Error de red: ' + e.message);
@@ -4971,7 +4971,7 @@ async function toggleQueryPatternTermStatus() {
     if (!id) { showQueryPatternTermBanner('warn', 'Selecciona un term antes de cambiar su estado.'); return; }
 
     const currentItem = globalQueryPatternTerms.find(x => String(x.id ?? x.Id) === String(id));
-    if (!currentItem) { showQueryPatternTermBanner('err', 'No se encontró el Query Pattern Term seleccionado.'); return; }
+    if (!currentItem) { showQueryPatternTermBanner('err', 'No se encontrÃ³ el Query Pattern Term seleccionado.'); return; }
 
     const nextIsActive = !(currentItem.isActive ?? currentItem.IsActive);
     const btn = document.getElementById('btnQueryPatternTermToggle');
@@ -4990,7 +4990,7 @@ async function toggleQueryPatternTermStatus() {
             selectQueryPatternTerm(Number(id));
         } else {
             const body = await safeJson(res);
-            showQueryPatternTermBanner('err', body?.Error || ('Error al actualizar estatus. Código: ' + res.status));
+            showQueryPatternTermBanner('err', body?.Error || ('Error al actualizar estatus. CÃ³digo: ' + res.status));
         }
     } catch (e) {
         showQueryPatternTermBanner('err', 'Error de red: ' + e.message);
@@ -5025,7 +5025,7 @@ function clearQueryPatternTermsState() {
     if (count) count.textContent = '0';
 
     const meta = document.getElementById('queryPatternTermMeta');
-    if (meta) meta.innerHTML = `<span class="meta-empty">Ningún term seleccionado</span>`;
+    if (meta) meta.innerHTML = `<span class="meta-empty">NingÃºn term seleccionado</span>`;
 
     syncQueryPatternTermActionButtons();
     hideQueryPatternTermBanner();
@@ -5103,7 +5103,7 @@ async function loadProfiles() {
                         ${escHtml(name)}
                         ${isActive ? '<span class="pi-active-pill">ACTIVO</span>' : ''}
                     </div>
-                    <div class="pi-summary">GPU Layers: ${gpu} · Context: ${Number(ctx).toLocaleString('es-MX')}</div>
+                    <div class="pi-summary">GPU Layers: ${gpu} Â· Context: ${Number(ctx).toLocaleString('es-MX')}</div>
                 </div>`;
         }).join('');
 
@@ -5189,7 +5189,7 @@ async function saveProfileSettings() {
         if (res.ok) { showAlert('ok', 'Ajustes guardados correctamente.'); await loadProfiles(); }
         else {
             const bodyErr = await safeJson(res);
-            showAlert('err', bodyErr?.Error || ('Error al guardar ajustes. Código: ' + res.status));
+            showAlert('err', bodyErr?.Error || ('Error al guardar ajustes. CÃ³digo: ' + res.status));
         }
     } catch (e) { showAlert('err', 'Error de red: ' + e.message); }
     finally {
@@ -5211,7 +5211,7 @@ async function activateSelectedProfile() {
         if (res.ok) {
             showAlert('warn', `
                 <div style="font-size:.85rem;font-weight:600;margin-bottom:4px;color:#f8fafc">Perfil activado correctamente</div>
-                <div style="font-size:.75rem;color:#fbbf24;opacity:.9">IMPORTANTE: Detén y vuelve a ejecutar la API para que LLamaSharp cargue los nuevos pesos en la VRAM.</div>
+                <div style="font-size:.75rem;color:#fbbf24;opacity:.9">IMPORTANTE: DetÃ©n y vuelve a ejecutar la API para que LLamaSharp cargue los nuevos pesos en la VRAM.</div>
             `);
             await loadProfiles();
             const activateBtn = document.getElementById('btnActivate');
@@ -5269,13 +5269,13 @@ function showAdminToast(type, message, title = '', timeoutMs = 4200) {
     toast.className = `admin-toast ${type || 'ok'}`;
 
     const toastTitle = title || (type === 'ok'
-        ? 'Operación completada'
+        ? 'OperaciÃ³n completada'
         : type === 'warn'
-            ? 'Atención'
-            : 'Ocurrió un error');
+            ? 'AtenciÃ³n'
+            : 'OcurriÃ³ un error');
 
     toast.innerHTML = `
-        <button type="button" class="admin-toast-close" aria-label="Cerrar notificación">×</button>
+        <button type="button" class="admin-toast-close" aria-label="Cerrar notificaciÃ³n">Ã—</button>
         <div class="admin-toast-title">${escHtml(toastTitle)}</div>
         <div class="admin-toast-body">${escHtml(message)}</div>`;
 
@@ -5329,7 +5329,7 @@ function applyDocumentsStatusUi(status) {
         status?.defaultDomain ||
         status?.DefaultDomain ||
         getDocumentsDomainFilter() ||
-        '—';
+        'â€”';
 
     if (uploadBtn) uploadBtn.dataset.blocked = rootExists ? 'false' : 'true';
     if (reindexBtn) reindexBtn.dataset.blocked = rootExists ? 'false' : 'true';
@@ -5339,7 +5339,7 @@ function applyDocumentsStatusUi(status) {
     if (activeBanner) {
         activeBanner.textContent = rootExists
             ? `Contexto documental listo. Dominio activo: ${effectiveDomain}. PDFs en disco: ${filesOnDisk}. Indexados: ${indexedDocuments}.`
-            : `Contexto documental activo: ${effectiveDomain}. Falta configurar una carpeta válida en Docs:RootPath antes de subir o reindexar.`;
+            : `Contexto documental activo: ${effectiveDomain}. Falta configurar una carpeta vÃ¡lida en Docs:RootPath antes de subir o reindexar.`;
     }
 }
 
@@ -5389,7 +5389,7 @@ function renderDocumentsList() {
                     <path d="M8 3h7l5 5v13a1 1 0 0 1-1 1H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
                     <path d="M15 3v6h6"></path>
                 </svg>
-                No hay documentos indexados para este dominio todavía.
+                No hay documentos indexados para este dominio todavÃ­a.
             </div>`;
         return;
     }
@@ -5414,7 +5414,7 @@ function renderDocumentsList() {
                     <span class="hi-verify verified">${escHtml(documentType.toUpperCase())}</span>
                 </div>
                 <div class="document-item-meta">
-                    <span class="meta-chip status-ok">${pageCount} págs</span>
+                    <span class="meta-chip status-ok">${pageCount} pÃ¡gs</span>
                     <span class="meta-chip training-no">${chunkCount} chunks</span>
                     ${updatedUtc ? `<span class="meta-chip training-no">${escHtml(formatAdminDateTime(updatedUtc))}</span>` : ''}
                 </div>
@@ -5430,10 +5430,10 @@ function renderDocumentChunks() {
     const pageCountEl = document.getElementById('txtDocumentPageCount');
 
     const selected = globalDocuments.find(doc => String(doc.docId || doc.DocId || '') === String(selectedDocumentId || '')) || null;
-    if (nameEl) nameEl.textContent = selected ? String(selected.title || selected.Title || selected.fileName || selected.FileName || 'Documento') : '—';
+    if (nameEl) nameEl.textContent = selected ? String(selected.title || selected.Title || selected.fileName || selected.FileName || 'Documento') : 'â€”';
     if (metaEl) {
         metaEl.textContent = selected
-            ? `${String(selected.fileName || selected.FileName || 'sin-archivo')} · ${Number(selected.chunkCount || selected.ChunkCount || 0)} chunks`
+            ? `${String(selected.fileName || selected.FileName || 'sin-archivo')} Â· ${Number(selected.chunkCount || selected.ChunkCount || 0)} chunks`
             : 'Selecciona un documento de la lista para ver sus chunks.';
     }
     if (chunkCountEl) chunkCountEl.textContent = String(globalDocumentChunks.length);
@@ -5461,7 +5461,7 @@ function renderDocumentChunks() {
                     <path d="M4 12h16"></path>
                     <path d="M4 18h10"></path>
                 </svg>
-                Este documento todavía no tiene chunks indexados o la carga falló.
+                Este documento todavÃ­a no tiene chunks indexados o la carga fallÃ³.
             </div>`;
         return;
     }
@@ -5481,8 +5481,8 @@ function renderDocumentChunks() {
             <div class="document-chunk-card">
                 <div class="document-chunk-head">
                     <div>
-                        <div class="document-chunk-title">${escHtml(title || `Página ${page} · Chunk ${order}`)}</div>
-                        <div class="document-chunk-sub">${section ? escHtml(section) + ' · ' : ''}Página ${page} · Orden ${order}</div>
+                        <div class="document-chunk-title">${escHtml(title || `PÃ¡gina ${page} Â· Chunk ${order}`)}</div>
+                        <div class="document-chunk-sub">${section ? escHtml(section) + ' Â· ' : ''}PÃ¡gina ${page} Â· Orden ${order}</div>
                     </div>
                     <div class="document-chunk-meta">
                         ${isCover ? '<span class="meta-chip verify-ok">Cover</span>' : ''}
@@ -5491,7 +5491,7 @@ function renderDocumentChunks() {
                 </div>
                 <div class="document-item-meta">
                     ${partNumbers ? `<span class="meta-chip status-ok">${escHtml(partNumbers)}</span>` : ''}
-                    ${normalizedTokens ? `<span class="meta-chip training-no">${escHtml(normalizedTokens.slice(0, 96))}${normalizedTokens.length > 96 ? '…' : ''}</span>` : ''}
+                    ${normalizedTokens ? `<span class="meta-chip training-no">${escHtml(normalizedTokens.slice(0, 96))}${normalizedTokens.length > 96 ? 'â€¦' : ''}</span>` : ''}
                 </div>
                 <div class="document-chunk-text">${escHtml(text)}</div>
             </div>`;
@@ -5565,16 +5565,16 @@ async function loadDocumentsStatus() {
         setText('txtDocumentsRootPath', normalized.rootPath || 'Sin ruta configurada');
         setText('txtDocumentsFilesOnDisk', String(normalized.filesOnDisk));
         setText('txtDocumentsIndexedCount', String(normalized.indexedDocuments));
-        setText('txtDocumentsDefaultDomain', `Dominio documental activo: ${normalized.effectiveDomain || normalized.defaultDomain || '—'}`);
+        setText('txtDocumentsDefaultDomain', `Dominio documental activo: ${normalized.effectiveDomain || normalized.defaultDomain || 'â€”'}`);
         applyDocumentsStatusUi(normalized);
         return normalized;
     } catch (e) {
         setText('txtDocumentsRootExists', 'Error');
-        setText('txtDocumentsRootPath', 'No pude leer la configuración documental.');
+        setText('txtDocumentsRootPath', 'No pude leer la configuraciÃ³n documental.');
         setText('txtDocumentsFilesOnDisk', '0');
         setText('txtDocumentsIndexedCount', '0');
-        setText('txtDocumentsDefaultDomain', 'Dominio documental activo: —');
-        applyDocumentsStatusUi({ RootExists: false, EffectiveDomain: getDocumentsDomainFilter() || '—', FilesOnDisk: 0, IndexedDocuments: 0 });
+        setText('txtDocumentsDefaultDomain', 'Dominio documental activo: â€”');
+        applyDocumentsStatusUi({ RootExists: false, EffectiveDomain: getDocumentsDomainFilter() || 'â€”', FilesOnDisk: 0, IndexedDocuments: 0 });
         return null;
     }
 }
@@ -5607,8 +5607,8 @@ async function reindexDocumentsAdmin() {
     const domain = getDocumentsDomainFilter();
     const status = await loadDocumentsStatus();
     if (!(status?.rootExists ?? status?.RootExists)) {
-        showDocumentsBanner('warn', 'No puedo reindexar porque no hay una carpeta documental válida configurada en Docs:RootPath.');
-        showAdminToast('warn', 'Falta una carpeta documental válida antes de reindexar.', 'Reindex no disponible');
+        showDocumentsBanner('warn', 'No puedo reindexar porque no hay una carpeta documental vÃ¡lida configurada en Docs:RootPath.');
+        showAdminToast('warn', 'Falta una carpeta documental vÃ¡lida antes de reindexar.', 'Reindex no disponible');
         return;
     }
 
@@ -5621,23 +5621,23 @@ async function reindexDocumentsAdmin() {
             throw new Error(body?.Error || body?.Message || `HTTP ${res.status}`);
         }
 
-        const resultDomain = body?.domain || body?.Domain || domain || '—';
+        const resultDomain = body?.domain || body?.Domain || domain || 'â€”';
         const totalFiles = Number(body?.totalFiles ?? body?.TotalFiles ?? 0);
         const indexed = Number(body?.indexed ?? body?.Indexed ?? 0);
         const skipped = Number(body?.skipped ?? body?.Skipped ?? 0);
         const errors = Number(body?.errors ?? body?.Errors ?? 0);
         const message = body?.message || body?.Message || 'Reindex completado.';
 
-        showDocumentsBanner('ok', `${message} Dominio: ${resultDomain} · Total: ${totalFiles} · Indexados: ${indexed} · Omitidos: ${skipped} · Errores: ${errors}`);
+        showDocumentsBanner('ok', `${message} Dominio: ${resultDomain} Â· Total: ${totalFiles} Â· Indexados: ${indexed} Â· Omitidos: ${skipped} Â· Errores: ${errors}`);
         showAdminToast(
             'ok',
-            `Dominio ${resultDomain} · Total ${totalFiles} · Indexados ${indexed} · Omitidos ${skipped} · Errores ${errors}`,
+            `Dominio ${resultDomain} Â· Total ${totalFiles} Â· Indexados ${indexed} Â· Omitidos ${skipped} Â· Errores ${errors}`,
             'Reindex completado'
         );
         await loadDocumentsAdmin(true);
     } catch (e) {
         showDocumentsBanner('err', 'Error reindexando documentos: ' + e.message);
-        showAdminToast('err', String(e.message || e), 'Reindex falló', 5200);
+        showAdminToast('err', String(e.message || e), 'Reindex fallÃ³', 5200);
     } finally {
         setDocumentsBusy(false, '');
     }
@@ -5656,8 +5656,8 @@ async function uploadDocumentAdmin() {
 
     const status = await loadDocumentsStatus();
     if (!(status?.rootExists ?? status?.RootExists)) {
-        showDocumentsBanner('warn', 'No puedo subir PDFs porque no hay una carpeta documental válida configurada en Docs:RootPath.');
-        showAdminToast('warn', 'Falta una carpeta documental válida antes de subir PDFs.', 'Carga no disponible');
+        showDocumentsBanner('warn', 'No puedo subir PDFs porque no hay una carpeta documental vÃ¡lida configurada en Docs:RootPath.');
+        showAdminToast('warn', 'Falta una carpeta documental vÃ¡lida antes de subir PDFs.', 'Carga no disponible');
         return;
     }
 
@@ -5680,17 +5680,17 @@ async function uploadDocumentAdmin() {
         }
 
         if (files.length > 1) {
-            showDocumentsBanner('ok', `${body?.message || body?.Message || 'Carga masiva completada.'} Se ejecutará reindex para dejar todos los documentos disponibles.`);
-            showAdminToast('ok', 'Carga masiva completada. Se ejecutará el reindex a continuación.', 'PDFs cargados');
+            showDocumentsBanner('ok', `${body?.message || body?.Message || 'Carga masiva completada.'} Se ejecutarÃ¡ reindex para dejar todos los documentos disponibles.`);
+            showAdminToast('ok', 'Carga masiva completada. Se ejecutarÃ¡ el reindex a continuaciÃ³n.', 'PDFs cargados');
         } else {
-            showDocumentsBanner('ok', `${body?.message || body?.Message || 'Documento cargado.'} Se ejecutará reindex para dejarlo disponible.`);
-            showAdminToast('ok', 'Documento cargado correctamente. Se ejecutará el reindex a continuación.', 'PDF cargado');
+            showDocumentsBanner('ok', `${body?.message || body?.Message || 'Documento cargado.'} Se ejecutarÃ¡ reindex para dejarlo disponible.`);
+            showAdminToast('ok', 'Documento cargado correctamente. Se ejecutarÃ¡ el reindex a continuaciÃ³n.', 'PDF cargado');
         }
         if (input) input.value = '';
         await reindexDocumentsAdmin();
     } catch (e) {
         showDocumentsBanner('err', 'Error subiendo documento: ' + e.message);
-        showAdminToast('err', String(e.message || e), 'Carga falló', 5200);
+        showAdminToast('err', String(e.message || e), 'Carga fallÃ³', 5200);
     } finally {
         setDocumentsBusy(false, '');
     }
@@ -5727,22 +5727,22 @@ function formatBytes(value) {
 function renderConnectionOptionsForSelect(selectId, selected, emptyLabel) {
     const select = document.getElementById(selectId);
     if (!select) return;
-    const options = [`<option value="">${escHtml(emptyLabel || '(usar conexión operacional por defecto)')}</option>`]
+    const options = [`<option value="">${escHtml(emptyLabel || '(usar conexiÃ³n operacional por defecto)')}</option>`]
         .concat((globalConnectionProfiles || []).map(profile => {
             const value = profile?.connectionName || profile?.ConnectionName || '';
             const description = profile?.description || profile?.Description || '';
-            return `<option value="${escAttr(value)}">${escHtml(description ? `${value} · ${description}` : value)}</option>`;
+            return `<option value="${escAttr(value)}">${escHtml(description ? `${value} Â· ${description}` : value)}</option>`;
         }));
     select.innerHTML = options.join('');
     select.value = selected || '';
 }
 
 function renderMlConnectionOptions(selected) {
-    renderConnectionOptionsForSelect('selMlConnectionName', selected, '(usar conexión operacional por defecto)');
+    renderConnectionOptionsForSelect('selMlConnectionName', selected, '(usar conexiÃ³n operacional por defecto)');
 }
 
 function renderPredictionConnectionOptions(selected) {
-    renderConnectionOptionsForSelect('selPredictionConnectionName', selected, '(usar conexión del domain pack o default)');
+    renderConnectionOptionsForSelect('selPredictionConnectionName', selected, '(usar conexiÃ³n del domain pack o default)');
 }
 
 function getDefaultPredictionDomain() {
@@ -5809,16 +5809,16 @@ function renderMlModeNotice() {
     const looksNorthwind = connectionName.toLowerCase().includes('northwind');
 
     if (mode === 'CustomSql') {
-        box.innerHTML = `<strong>Modo genérico activado.</strong> Aquí ya no trabajamos con scrap, producción ni downtime. El modelo se entrena desde una consulta canónica y puede apuntar a ventas, demanda, tickets o cualquier otra serie temporal siempre que devuelva <code>SeriesKey</code>, <code>ObservedOn</code>, <code>BucketKey</code>, <code>BucketLabel</code>, <code>BucketStartTick</code>, <code>BucketEndTick</code>, <code>TargetValue</code>.`;
+        box.innerHTML = `<strong>Modo genÃ©rico activado.</strong> AquÃ­ ya no trabajamos con scrap, producciÃ³n ni downtime. El modelo se entrena desde una consulta canÃ³nica y puede apuntar a ventas, demanda, tickets o cualquier otra serie temporal siempre que devuelva <code>SeriesKey</code>, <code>ObservedOn</code>, <code>BucketKey</code>, <code>BucketLabel</code>, <code>BucketStartTick</code>, <code>BucketEndTick</code>, <code>TargetValue</code>.`;
         return;
     }
 
     if (looksNorthwind) {
-        box.innerHTML = `<strong>Atención.</strong> Seleccionaste una conexión que parece no industrial. Para Northwind o sistemas de ventas conviene cambiar a <code>CustomSql</code> o usar un <code>Prediction Profile</code> del dominio, porque <code>KpiViews</code> asume un esquema de planta con producción, scrap, downtime y turnos.`;
+        box.innerHTML = `<strong>AtenciÃ³n.</strong> Seleccionaste una conexiÃ³n que parece no industrial. Para Northwind o sistemas de ventas conviene cambiar a <code>CustomSql</code> o usar un <code>Prediction Profile</code> del dominio, porque <code>KpiViews</code> asume un esquema de planta con producciÃ³n, scrap, downtime y turnos.`;
         return;
     }
 
-    box.innerHTML = `<strong>Modo industrial transicional.</strong> <code>KpiViews</code> sigue siendo útil para plantas ERP con vistas KPI ya existentes. Si quieres un diseño más profesional y multi-dominio, usa <code>CustomSql</code> para la fuente del dataset y administra la semántica de negocio desde <code>Prediction Profiles</code>.`;
+    box.innerHTML = `<strong>Modo industrial transicional.</strong> <code>KpiViews</code> sigue siendo Ãºtil para plantas ERP con vistas KPI ya existentes. Si quieres un diseÃ±o mÃ¡s profesional y multi-dominio, usa <code>CustomSql</code> para la fuente del dataset y administra la semÃ¡ntica de negocio desde <code>Prediction Profiles</code>.`;
 }
 
 function toggleMlSourceModeFields() {
@@ -5860,12 +5860,12 @@ function applyMlSourcePreset(presetKey) {
     if (presetKey === 'northwind-daily-units') {
         setValue('txtMlProfileName', 'northwind-daily-units');
         setValue('txtMlDisplayName', 'Northwind Daily Units Forecast');
-        setValue('txtMlDescription', 'Perfil genérico para forecast de unidades vendidas por producto y por día en Northwind.');
+        setValue('txtMlDescription', 'Perfil genÃ©rico para forecast de unidades vendidas por producto y por dÃ­a en Northwind.');
         setValue('txtMlTrainingSql', getNorthwindDailyUnitsSql());
     } else if (presetKey === 'northwind-monthly-sales') {
         setValue('txtMlProfileName', 'northwind-monthly-units');
         setValue('txtMlDisplayName', 'Northwind Monthly Units Forecast');
-        setValue('txtMlDescription', 'Perfil genérico para forecast de unidades mensuales por país en Northwind.');
+        setValue('txtMlDescription', 'Perfil genÃ©rico para forecast de unidades mensuales por paÃ­s en Northwind.');
         setValue('txtMlTrainingSql', getNorthwindMonthlySalesSql());
     }
 
@@ -5881,14 +5881,14 @@ function renderMlStatus() {
 
     setText('mlStatusBadge', modelExists ? 'READY' : 'EMPTY');
     setText('txtMlStatusSummary', modelExists
-        ? 'Hay un modelo serializado disponible para predicción.'
-        : 'Todavía no existe un modelo entrenado o no se pudo encontrar el archivo.');
+        ? 'Hay un modelo serializado disponible para predicciÃ³n.'
+        : 'TodavÃ­a no existe un modelo entrenado o no se pudo encontrar el archivo.');
     setText('txtMlModelExists', modelExists ? 'Disponible' : 'No existe');
-    setText('txtMlModelUpdated', `Última actualización: ${body?.ModelLastWriteUtc ? formatAdminDateTime(body.ModelLastWriteUtc) : '—'}`);
+    setText('txtMlModelUpdated', `Ãšltima actualizaciÃ³n: ${body?.ModelLastWriteUtc ? formatAdminDateTime(body.ModelLastWriteUtc) : 'â€”'}`);
     setText('txtMlModelSize', formatBytes(body?.ModelSizeBytes));
     setText('txtMlConnectionReady', connReady ? 'Lista' : 'Falta');
     setText('txtMlModelPath', body?.ModelPath || 'Sin ruta configurada');
-    setText('txtMlModelDirectory', `Directorio de modelos: ${body?.ModelDirectory || '—'}`);
+    setText('txtMlModelDirectory', `Directorio de modelos: ${body?.ModelDirectory || 'â€”'}`);
     populateMlProfileForm(body);
 
     const list = document.getElementById('mlStatusList');
@@ -5904,7 +5904,7 @@ function renderMlStatus() {
                 <span class="hi-verify ${modelExists ? 'verified' : 'pending'}">${modelExists ? 'READY' : 'EMPTY'}</span>
             </div>
             <div class="document-item-meta">
-                <span class="meta-chip ${connReady ? 'status-ok' : 'verify-pending'}">${connReady ? 'Conexión operacional lista' : 'Sin conexión operacional'}</span>
+                <span class="meta-chip ${connReady ? 'status-ok' : 'verify-pending'}">${connReady ? 'ConexiÃ³n operacional lista' : 'Sin conexiÃ³n operacional'}</span>
                 <span class="meta-chip ${aligned ? 'verified' : 'verify-pending'}">${aligned ? 'Modelo alineado con perfil' : 'Modelo desalineado'}</span>
                 <span class="meta-chip training-no">${escHtml(formatBytes(body?.ModelSizeBytes))}</span>
                 <span class="meta-chip training-no">${escHtml(body?.ModelLastWriteUtc ? formatAdminDateTime(body.ModelLastWriteUtc) : 'Sin entrenamiento')}</span>
@@ -5914,13 +5914,13 @@ function renderMlStatus() {
             <div class="document-item-head">
                 <div>
                     <div class="document-item-title">${escHtml(body?.DisplayName || 'Perfil ML')}</div>
-                    <div class="document-item-sub">${sourceMode === 'CustomSql' ? 'Fuente canónica por SQL custom.' : 'Fuente clásica por vistas KPI y tabla de turnos.'}</div>
+                    <div class="document-item-sub">${sourceMode === 'CustomSql' ? 'Fuente canÃ³nica por SQL custom.' : 'Fuente clÃ¡sica por vistas KPI y tabla de turnos.'}</div>
                 </div>
             </div>
             <div class="document-item-meta">
                 <span class="meta-chip training-no">Modo: ${escHtml(sourceMode)}</span>
-                <span class="meta-chip training-no">Conexión: ${escHtml(body?.ConnectionName || 'default operacional')}</span>
-                <span class="meta-chip training-no">${escHtml(sourceMode === 'CustomSql' ? 'Custom SQL canónico' : `ShiftTable: ${body?.ShiftTableName || '—'}`)}</span>
+                <span class="meta-chip training-no">ConexiÃ³n: ${escHtml(body?.ConnectionName || 'default operacional')}</span>
+                <span class="meta-chip training-no">${escHtml(sourceMode === 'CustomSql' ? 'Custom SQL canÃ³nico' : `ShiftTable: ${body?.ShiftTableName || 'â€”'}`)}</span>
             </div>
         </div>`;
 }
@@ -6049,17 +6049,17 @@ function renderPredictionDomainPackSummary() {
 
     const pack = globalPredictionDomainPack;
     if (!pack) {
-        host.innerHTML = '<strong>Sin Domain Pack.</strong> No se pudo resolver el vocabulario analítico para este dominio.';
+        host.innerHTML = '<strong>Sin Domain Pack.</strong> No se pudo resolver el vocabulario analÃ­tico para este dominio.';
         renderPredictionGuidedSelectors();
         return;
     }
 
     const metrics = Array.isArray(pack.metrics || pack.Metrics) ? (pack.metrics || pack.Metrics) : [];
     const dimensions = Array.isArray(pack.dimensions || pack.Dimensions) ? (pack.dimensions || pack.Dimensions) : [];
-    const metricText = metrics.length ? metrics.map(x => x.key || x.Key).filter(Boolean).join(', ') : 'sin métricas definidas';
+    const metricText = metrics.length ? metrics.map(x => x.key || x.Key).filter(Boolean).join(', ') : 'sin mÃ©tricas definidas';
     const dimensionText = dimensions.length ? dimensions.map(x => x.key || x.Key).filter(Boolean).join(', ') : 'sin dimensiones definidas';
 
-    host.innerHTML = `<strong>${escHtml(pack.displayName || pack.DisplayName || pack.key || pack.Key || 'Domain Pack')}</strong><br>Métricas: ${escHtml(metricText)}<br>Dimensiones: ${escHtml(dimensionText)}`;
+    host.innerHTML = `<strong>${escHtml(pack.displayName || pack.DisplayName || pack.key || pack.Key || 'Domain Pack')}</strong><br>MÃ©tricas: ${escHtml(metricText)}<br>Dimensiones: ${escHtml(dimensionText)}`;
     renderPredictionGuidedSelectors();
 }
 
@@ -6068,7 +6068,7 @@ function renderPredictionProfileList() {
     if (!list) return;
 
     if (!globalPredictionProfiles.length) {
-        list.innerHTML = `<div class="empty-state" style="min-height:180px">No hay Prediction Profiles para este dominio todavía.</div>`;
+        list.innerHTML = `<div class="empty-state" style="min-height:180px">No hay Prediction Profiles para este dominio todavÃ­a.</div>`;
         return;
     }
 
@@ -6083,12 +6083,12 @@ function renderPredictionProfileList() {
                 <div class="prediction-profile-title">${escHtml(profile.displayName || profile.DisplayName || profile.profileKey || profile.ProfileKey || 'Prediction Profile')}</div>
                 <div class="prediction-profile-sub">${escHtml(profile.profileKey || profile.ProfileKey || '')}</div>
                 <div class="prediction-profile-meta">
-                    <span class="meta-chip training-no">${escHtml(profile.targetMetricKey || profile.TargetMetricKey || '—')}</span>
+                    <span class="meta-chip training-no">${escHtml(profile.targetMetricKey || profile.TargetMetricKey || 'â€”')}</span>
                     <span class="meta-chip training-no">${escHtml(sourceMode)}</span>
                     <span class="meta-chip training-no">${escHtml(horizon)}</span>
                     <span class="meta-chip ${profile.isActive || profile.IsActive ? 'status-ok' : 'verify-pending'}">${profile.isActive || profile.IsActive ? 'Activo' : 'Inactivo'}</span>
                 </div>
-                <div class="prediction-profile-sub">${escHtml(`Conexión: ${connection}`)}</div>
+                <div class="prediction-profile-sub">${escHtml(`ConexiÃ³n: ${connection}`)}</div>
             </div>`;
     }).join('');
 }
@@ -6139,7 +6139,7 @@ function buildPredictionProfileDraft(domain) {
         GroupByJson: northwind ? '["product"]' : '["part","shift"]',
         FiltersJson: '',
         Notes: northwind
-            ? 'Perfil inicial para forecast de unidades vendidas por producto y por día.'
+            ? 'Perfil inicial para forecast de unidades vendidas por producto y por dÃ­a.'
             : 'Perfil inicial para forecasting industrial por turno.',
         IsActive: true
     };
@@ -6275,7 +6275,7 @@ async function loadMlAdmin() {
         renderMlStatus();
         await loadPredictionProfilesAdmin();
         if (globalMlStatus?.ConnectionError) {
-            showMlBanner('warn', `Perfil ML cargado, pero la conexión no está lista: ${globalMlStatus.ConnectionError}`);
+            showMlBanner('warn', `Perfil ML cargado, pero la conexiÃ³n no estÃ¡ lista: ${globalMlStatus.ConnectionError}`);
         } else {
             hideMlBanner();
         }
@@ -6332,7 +6332,7 @@ async function trainMlModelAdmin() {
 
         globalMlStatus = body;
         renderMlStatus();
-        showMlBanner('ok', `${body?.Message || 'Entrenamiento completado.'} Modelo: ${body?.ModelExists ? 'disponible' : 'sin archivo'} · Actualizado: ${body?.ModelLastWriteUtc ? formatAdminDateTime(body.ModelLastWriteUtc) : '—'}`);
+        showMlBanner('ok', `${body?.Message || 'Entrenamiento completado.'} Modelo: ${body?.ModelExists ? 'disponible' : 'sin archivo'} Â· Actualizado: ${body?.ModelLastWriteUtc ? formatAdminDateTime(body.ModelLastWriteUtc) : 'â€”'}`);
         await loadMlAdmin();
     } catch (e) {
         showMlBanner('err', 'Error entrenando modelo ML: ' + e.message);
@@ -6580,7 +6580,7 @@ function ensureOnboardingSchemaAssistUI() {
     if (!panel.querySelector('.onboarding-step-intro')) {
         const intro = document.createElement('div');
         intro.className = 'onboarding-step-intro';
-        intro.textContent = 'Solo estas tablas o vistas podran ser consultadas por el motor. Empieza por las recomendadas, revisa con cuidado las mas pesadas y evita seleccionar todo por defecto.';
+        intro.textContent = 'Elige solo lo necesario para responder el piloto. Prioriza objetos recomendados y evita abrir el dominio mas de lo necesario.';
         legacyActions?.insertAdjacentElement('beforebegin', intro);
     }
 
@@ -6607,21 +6607,7 @@ function ensureOnboardingSchemaAssistUI() {
         meta?.insertAdjacentElement('beforebegin', toolbar);
     }
 
-    if (!panel.querySelector('.onboarding-schema-helper-grid')) {
-        const helper = document.createElement('div');
-        helper.className = 'onboarding-schema-helper-grid';
-        helper.innerHTML = `
-            <div class="onboarding-inline-hint-card">
-                <div class="subpanel-title">Empieza por lo util</div>
-                <div class="subpanel-desc">Prioriza vistas KPI y tablas de negocio que realmente respondan preguntas del piloto.</div>
-            </div>
-            <div class="onboarding-inline-hint-card caution-tone">
-                <div class="subpanel-title">Revisar con cuidado</div>
-                <div class="subpanel-desc">Objetos con muchas columnas y pocas llaves suelen ser mas dificiles de usar bien.</div>
-            </div>`;
-        const meta = document.getElementById('onboardingSchemaMeta');
-        meta?.insertAdjacentElement('beforebegin', helper);
-    }
+    panel.querySelector('.onboarding-schema-helper-grid')?.remove();
 }
 
 function ensureOnboardingPreparationUI() {
@@ -6783,6 +6769,18 @@ function renderOnboardingCompactReadiness() {
     setText('txtOnboardingCompactTables', state.hasAllowed ? `${selectedCount || 'OK'} activos` : 'Sin seleccionar');
     setText('txtOnboardingCompactContext', state.isInitialized ? 'Preparado' : 'Sin preparar');
     setText('txtOnboardingCompactValidation', state.hasValidation ? 'Validada' : 'Pendiente');
+    setText(
+        'txtOnboardingCompactSummary',
+        !state.hasWorkspace
+            ? 'Empieza por guardar el workspace y la conexion.'
+            : !state.hasAllowed
+                ? 'El siguiente paso es elegir y guardar las tablas permitidas.'
+                : !state.isInitialized
+                    ? 'Ya puedes preparar el dominio con el contexto tecnico base.'
+                    : state.hasValidation
+                        ? 'El flujo base ya quedo completado.'
+                        : 'Solo falta correr una prueba real del dominio.'
+    );
     updateReadinessCard('compactWorkspaceCard', state.hasWorkspace);
     updateReadinessCard('compactTablesCard', state.hasAllowed);
     updateReadinessCard('compactContextCard', state.isInitialized);
@@ -6798,7 +6796,10 @@ function syncOnboardingFooterActions() {
         document.getElementById('btnOnboardingInitialize'),
         document.getElementById('btnOnboardingRunValidation')
     ].filter(Boolean);
-    actions.forEach(button => button.style.display = 'none');
+    actions.forEach(button => {
+        button.style.display = 'none';
+        button.classList.remove('onboarding-primary-cta-active');
+    });
 
     let activeButton = document.getElementById('btnOnboardingSaveStep1');
     let footerCopy = 'Completa tenant, dominio y conexion para guardar el workspace.';
@@ -6818,6 +6819,7 @@ function syncOnboardingFooterActions() {
 
     if (activeButton) {
         activeButton.style.display = 'inline-flex';
+        activeButton.classList.add('onboarding-primary-cta-active');
     }
     if (footerHint) {
         footerHint.textContent = footerCopy;
@@ -6861,6 +6863,7 @@ function renderOnboardingSchemaCandidates() {
         const haystack = [item.schemaName, item.SchemaName, item.objectName, item.ObjectName, item.description, item.Description].join(' ').toLowerCase();
         const objectType = normalizeOnboardingObjectType(item.objectType || item.ObjectType || '');
         const isRecommended = !!(item.isSuggested ?? item.IsSuggested ?? item.isCurrentlyAllowed ?? item.IsCurrentlyAllowed);
+        const isCurrentlyAllowed = !!(item.isCurrentlyAllowed ?? item.IsCurrentlyAllowed);
         const isSelected = !!item.isSelected;
         const isRisky = isRiskyOnboardingCandidate(item);
         if (search && !haystack.includes(search)) return false;
@@ -6896,13 +6899,14 @@ function renderOnboardingSchemaCandidates() {
         const objectType = item.objectType || item.ObjectType || '';
         const desc = item.description || item.Description || '';
         const isRecommended = !!(item.isSuggested ?? item.IsSuggested ?? item.isCurrentlyAllowed ?? item.IsCurrentlyAllowed);
+        const isCurrentlyAllowed = !!(item.isCurrentlyAllowed ?? item.IsCurrentlyAllowed);
         const isSelected = !!item.isSelected;
         const columnCount = item.columnCount ?? item.ColumnCount ?? 0;
         const pkCount = item.primaryKeyCount ?? item.PrimaryKeyCount ?? 0;
         const fkCount = item.foreignKeyCount ?? item.ForeignKeyCount ?? 0;
         const risky = isRiskyOnboardingCandidate(item);
         const sourceIndex = globalOnboardingSchemaCandidates.indexOf(item);
-        return `<label class="schema-candidate ${isSelected ? 'is-selected' : ''} ${isRecommended ? 'is-recommended' : ''} ${risky ? 'is-risky' : ''}"><input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleOnboardingSchemaCandidate(${sourceIndex}, this.checked)" /><div class="schema-candidate-body"><div class="schema-candidate-head"><div><div class="hi-question">${escHtml(schemaName)}.${escHtml(objectName)}</div><div class="schema-candidate-submeta">${escHtml(objectType)} · ${columnCount} cols · ${pkCount} pk · ${fkCount} fk</div></div><div class="schema-candidate-tags">${isRecommended ? '<span class="meta-chip status-ok">Recomendada</span>' : ''}${risky ? '<span class="meta-chip verify-pending">Revisar</span>' : ''}</div></div>${desc ? `<div class="schema-candidate-desc">${escHtml(desc)}</div>` : ''}</div></label>`;
+        return `<label class="schema-candidate ${isSelected ? 'is-selected' : ''} ${isRecommended ? 'is-recommended' : ''} ${risky ? 'is-risky' : ''} ${isCurrentlyAllowed ? 'is-currently-allowed' : ''}"><input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleOnboardingSchemaCandidate(${sourceIndex}, this.checked)" /><div class="schema-candidate-body"><div class="schema-candidate-head"><div><div class="hi-question">${escHtml(schemaName)}.${escHtml(objectName)}</div><div class="schema-candidate-submeta">${escHtml(objectType)} - ${columnCount} cols - ${pkCount} pk - ${fkCount} fk</div></div><div class="schema-candidate-tags">${isCurrentlyAllowed ? '<span class="meta-chip training-no">Ya permitida</span>' : ''}${isRecommended ? '<span class="meta-chip status-ok">Recomendada</span>' : ''}${risky ? '<span class="meta-chip verify-pending">Revisar</span>' : ''}</div></div>${desc ? `<div class="schema-candidate-desc">${escHtml(desc)}</div>` : '<div class="schema-candidate-desc">Sin descripcion disponible. Revisala por nombre, tipo y llaves antes de permitirla.</div>'}</div></label>`;
     }).join('');
 
     if (saveBtn) saveBtn.disabled = selectedCount === 0;
@@ -7061,34 +7065,19 @@ function ensureOnboardingWorkspaceGuidedUI() {
 
     ensureOnboardingStepGoal('onboardingStepPanel1', 'Exito de este paso: el sistema ya conoce el workspace, el dominio semantico y la conexion con la que descubrira el schema.');
 
-    const advancedToggleRow = panel.querySelector('.advanced-toggle-row');
-    if (advancedToggleRow && !panel.querySelector('.onboarding-workspace-intro')) {
-        const intro = document.createElement('div');
+    const firstGroup = panel.querySelector('.form-grid-2');
+    let intro = panel.querySelector('.onboarding-workspace-intro');
+    if (!intro) {
+        intro = document.createElement('div');
         intro.className = 'onboarding-step-intro onboarding-workspace-intro';
         intro.innerHTML = `
-            <div class="subpanel-title">Que estas configurando</div>
-            <div class="subpanel-desc">Aqui dejas listo el contexto base del dominio: nombre visible, workspace, conexion y una descripcion breve para que el equipo lo reconozca despues.</div>
+            <div class="subpanel-title">Que dejas listo aqui</div>
+            <div class="subpanel-desc">Workspace, dominio y conexion. Cuando esto queda guardado, el flujo puede pasar al schema sin ambiguedad.</div>
         `;
-        advancedToggleRow.insertAdjacentElement('beforebegin', intro);
+        firstGroup?.insertAdjacentElement('beforebegin', intro);
     }
 
-    if (!panel.querySelector('.onboarding-workspace-checklist')) {
-        const checklist = document.createElement('div');
-        checklist.className = 'onboarding-schema-helper-grid onboarding-workspace-checklist';
-        checklist.innerHTML = `
-            <div class="onboarding-inline-hint-card success-tone">
-                <div class="subpanel-title">Paso completo cuando</div>
-                <div class="subpanel-desc">Tenant, dominio y conexion quedan guardados correctamente.</div>
-            </div>
-            <div class="onboarding-inline-hint-card">
-                <div class="subpanel-title">Lo que sigue despues</div>
-                <div class="subpanel-desc">Descubrir el schema y elegir solo las tablas o vistas necesarias para el piloto.</div>
-            </div>`;
-        const supportToggle = document.getElementById('onboardingReferencePanels')?.previousElementSibling;
-        if (supportToggle) {
-            supportToggle.insertAdjacentElement('beforebegin', checklist);
-        }
-    }
+    panel.querySelector('.onboarding-workspace-checklist')?.remove();
 
     const connectionActions = document.getElementById('onboardingConnectionMeta')?.parentElement;
     connectionActions?.classList.add('onboarding-connection-actions');
@@ -7105,31 +7094,25 @@ function ensureOnboardingCompactReadinessUI() {
         summary.className = 'subpanel onboarding-compact-readiness-shell';
         summary.innerHTML = `
             <div class="onboarding-compact-readiness-head">
-                <div>
-                    <div class="subpanel-title">Checklist rapido del onboarding</div>
-                    <div class="subpanel-desc">Siempre visible para saber que ya quedo listo y que sigue bloqueando el flujo base.</div>
-                </div>
+                <div class="subpanel-title">Estado rapido</div>
+                <div class="subpanel-desc" id="txtOnboardingCompactSummary">Revisa en segundos que paso ya quedo listo y que sigue.</div>
             </div>
             <div class="onboarding-compact-readiness">
                 <div class="compact-readiness-card" id="compactWorkspaceCard">
-                    <div class="hero-kicker">Workspace</div>
+                    <div class="hero-kicker">1. Workspace</div>
                     <div class="compact-readiness-value" id="txtOnboardingCompactWorkspace">Pendiente</div>
-                    <div class="subpanel-desc">Nombre, dominio y conexion.</div>
                 </div>
                 <div class="compact-readiness-card" id="compactTablesCard">
-                    <div class="hero-kicker">Tablas permitidas</div>
+                    <div class="hero-kicker">2. Tablas</div>
                     <div class="compact-readiness-value" id="txtOnboardingCompactTables">Pendiente</div>
-                    <div class="subpanel-desc">Perimetro seguro del dominio.</div>
                 </div>
                 <div class="compact-readiness-card" id="compactContextCard">
-                    <div class="hero-kicker">Contexto generado</div>
+                    <div class="hero-kicker">3. Contexto</div>
                     <div class="compact-readiness-value" id="txtOnboardingCompactContext">Pendiente</div>
-                    <div class="subpanel-desc">Schema docs e hints base.</div>
                 </div>
                 <div class="compact-readiness-card" id="compactValidationCard">
-                    <div class="hero-kicker">Prueba real</div>
+                    <div class="hero-kicker">4. Prueba</div>
                     <div class="compact-readiness-value" id="txtOnboardingCompactValidation">Pendiente</div>
-                    <div class="subpanel-desc">SQL valido y resultado coherente.</div>
                 </div>
             </div>`;
         stepper.insertAdjacentElement('afterend', summary);
@@ -7145,12 +7128,9 @@ function ensureOnboardingFooterBarUI() {
     const actions = footer.querySelector('.inline-actions');
     if (!actions) return;
 
-    let bar = footer.querySelector('.onboarding-footer-bar');
-    if (!bar) {
-        bar = document.createElement('div');
-        bar.className = 'onboarding-footer-bar';
-        footer.appendChild(bar);
-    }
+    footer.querySelector('.onboarding-footer-bar')?.remove();
+    footer.querySelector('#onboardingPrimaryActionHost')?.remove();
+    footer.querySelector('#onboardingSecondaryActions')?.remove();
 
     let info = document.getElementById('onboardingFooterInfo');
     if (!info) {
@@ -7160,30 +7140,16 @@ function ensureOnboardingFooterBarUI() {
         info.innerHTML = `
             <div class="subpanel-title">Siguiente paso</div>
             <div class="subpanel-desc" id="onboardingFooterHint">Completa tenant, dominio y conexion para guardar el workspace.</div>`;
-        bar.appendChild(info);
     }
 
-    let primary = document.getElementById('onboardingPrimaryActionHost');
-    if (!primary) {
-        primary = document.createElement('div');
-        primary.id = 'onboardingPrimaryActionHost';
-        primary.className = 'onboarding-primary-action-host';
-        bar.appendChild(primary);
+    if (info.parentElement !== footer) {
+        footer.insertBefore(info, footer.firstChild);
     }
-
-    let secondary = document.getElementById('onboardingSecondaryActions');
-    if (!secondary) {
-        secondary = document.createElement('div');
-        secondary.id = 'onboardingSecondaryActions';
-        secondary.className = 'onboarding-secondary-actions';
-        footer.appendChild(secondary);
+    if (meta && meta.parentElement !== footer) {
+        footer.insertBefore(meta, actions);
     }
-
-    if (meta && meta.parentElement !== secondary) {
-        secondary.appendChild(meta);
-    }
-    if (actions.parentElement !== secondary) {
-        secondary.appendChild(actions);
+    if (actions.parentElement !== footer) {
+        footer.appendChild(actions);
     }
 
     const primaryIds = new Set([
@@ -7196,10 +7162,8 @@ function ensureOnboardingFooterBarUI() {
     [...actions.children].forEach(button => {
         if (!(button instanceof HTMLElement) || button.tagName !== 'BUTTON') return;
         if (primaryIds.has(button.id)) {
-            if (button.parentElement !== primary) {
-                primary.appendChild(button);
-            }
             button.classList.add('onboarding-primary-cta');
+            button.classList.remove('onboarding-secondary-cta');
         } else {
             button.classList.remove('onboarding-primary-cta');
             button.classList.add('onboarding-secondary-cta');

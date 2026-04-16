@@ -26,6 +26,29 @@
   - mover gradualmente la configuracion especifica de la base de datos al onboarding, evitando seguir dispersandola en menus tecnicos
 
 ### Hecho hoy
+- Refactor correctivo del onboarding en Admin para recuperar estabilidad visual del wizard:
+  - se elimino el patron de doble sticky entre resumen superior y footer inferior
+  - `onboarding-footer-bar` deja de comportarse como barra flotante y vuelve al flujo normal del layout
+  - `onboardingCompactReadiness` se redujo a un resumen breve de 4 indicadores, sin copy largo invasivo
+  - la action bar inferior recupera contraste con:
+    - fondo mas solido
+    - borde visible
+    - sombra ligera
+    - CTA principal dominante
+  - se simplifico el Paso 1 para dejar:
+    - titulo
+    - subtitulo corto
+    - una sola ayuda contextual principal
+    - formulario sin checklist redundante encima
+  - el Paso 2 se limpio para priorizar:
+    - toolbar de filtros
+    - lista de schema
+    - tags utiles (`Recomendada`, `Revisar`, `Ya permitida`)
+  - se redujo el peso visual de ayudas y cards secundarias para que el onboarding vuelva a leerse como flujo secuencial
+  - objetivo:
+    - evitar superposiciones
+    - mejorar scroll largo en schema/tablas permitidas
+    - devolver claridad jerarquica al wizard
 - Primera iteracion del rediseÃ±o guiado del onboarding:
   - se agrego un bloque visible de `Estado actual del wizard`
   - ahora muestra:

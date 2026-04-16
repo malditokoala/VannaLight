@@ -2404,18 +2404,18 @@ body.modal-open {
     background: color-mix(in srgb, var(--onboarding-c) 5%, var(--surface));
     border: 1px solid color-mix(in srgb, var(--onboarding-c) 15%, var(--border));
     border-radius: var(--radius);
-    padding: 16px 18px;
+    padding: 14px 16px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
     min-height: 0;
 }
 
 .onboarding-guide-copy {
     font-family: var(--sans);
-    font-size: .82rem;
-    color: var(--text);
-    line-height: 1.5;
+    font-size: .78rem;
+    color: var(--dim);
+    line-height: 1.45;
 }
 
 .onboarding-guide-list {
@@ -2425,8 +2425,8 @@ body.modal-open {
 }
 
 .onboarding-flow-summary {
-    background: color-mix(in srgb, var(--onboarding-c) 6%, var(--surface));
-    border: 1px solid color-mix(in srgb, var(--onboarding-c) 18%, var(--border));
+    background: color-mix(in srgb, var(--surface) 94%, var(--onboarding-c) 6%);
+    border: 1px solid color-mix(in srgb, var(--onboarding-c) 12%, var(--border));
 }
 
 .onboarding-summary-grid {
@@ -2436,14 +2436,14 @@ body.modal-open {
 }
 
 .onboarding-summary-card {
-    background: color-mix(in srgb, var(--surface) 88%, var(--onboarding-c) 12%);
-    border: 1px solid color-mix(in srgb, var(--onboarding-c) 12%, var(--border));
+    background: color-mix(in srgb, var(--surface) 92%, var(--onboarding-c) 8%);
+    border: 1px solid color-mix(in srgb, var(--border) 88%, var(--onboarding-c) 12%);
     border-radius: var(--radius);
-    padding: 14px 16px;
-    min-height: 96px;
+    padding: 12px 14px;
+    min-height: 84px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
 }
 
 .onboarding-summary-text {
@@ -2474,14 +2474,14 @@ body.modal-open {
     display: flex;
     gap: 10px;
     align-items: flex-start;
-    padding: 10px 12px;
+    padding: 9px 11px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     font-family: var(--sans);
-    font-size: .78rem;
+    font-size: .75rem;
     color: var(--dim);
-    line-height: 1.45;
+    line-height: 1.4;
     transition: border-color .15s;
 }
 
@@ -2867,17 +2867,17 @@ body.modal-open {
 .onboarding-hero {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    gap: 8px;
 }
 
 .hero-card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 14px 16px;
+    padding: 10px 12px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
     transition: border-color .15s;
 }
 
@@ -2891,6 +2891,15 @@ body.modal-open {
     letter-spacing: .1em;
     color: var(--muted);
     text-transform: uppercase;
+}
+
+.hero-card .hero-value {
+    font-size: 1.08rem;
+}
+
+.hero-card .hero-sub {
+    font-size: .68rem;
+    line-height: 1.3;
 }
 
 .hero-value {
@@ -3017,6 +3026,19 @@ body.modal-open {
     gap: 14px;
 }
 
+#pane-onboarding .section-header {
+    padding: 14px 16px;
+}
+
+#pane-onboarding .section-header-text .sh-title {
+    font-size: 1rem;
+}
+
+#pane-onboarding .section-header-text .sh-sub {
+    font-size: .72rem;
+    line-height: 1.35;
+}
+
 #pane-onboarding .section-header,
 #pane-onboarding .subpanel,
 #pane-onboarding .validation-card,
@@ -3068,9 +3090,9 @@ body.modal-open {
     z-index: 8;
     background: linear-gradient(180deg, rgba(9, 11, 17, .96), rgba(9, 11, 17, .9));
     backdrop-filter: blur(10px);
-    padding: 10px;
+    padding: 8px;
     border: 1px solid color-mix(in srgb, var(--onboarding-c) 18%, var(--border));
-    border-radius: 14px;
+    border-radius: 12px;
 }
 
 #pane-onboarding .step-copy-wrap {
@@ -3118,22 +3140,22 @@ body.modal-open {
 
 #pane-onboarding .step-panel-goal {
     margin: 12px 0 16px;
-    padding: 12px 14px;
+    padding: 10px 12px;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--onboarding-c) 10%, var(--surface));
-    border: 1px solid color-mix(in srgb, var(--onboarding-c) 22%, var(--border));
+    background: color-mix(in srgb, var(--surface) 95%, var(--onboarding-c) 5%);
+    border: 1px solid color-mix(in srgb, var(--onboarding-c) 14%, var(--border));
     color: var(--fg-secondary);
-    line-height: 1.55;
-    font-size: .82rem;
+    line-height: 1.48;
+    font-size: .78rem;
 }
 
 #pane-onboarding .onboarding-step-intro,
 #pane-onboarding .onboarding-preparation-summary {
     margin: 0 0 14px;
-    padding: 14px 16px;
+    padding: 12px 14px;
     border-radius: 10px;
     color: var(--fg-secondary);
-    line-height: 1.6;
+    line-height: 1.5;
 }
 
 #pane-onboarding .onboarding-schema-toolbar,
@@ -3149,6 +3171,10 @@ body.modal-open {
 #pane-onboarding .onboarding-schema-toolbar {
     grid-template-columns: minmax(260px, 1.4fr) repeat(2, minmax(180px, .8fr)) auto;
     align-items: center;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--onboarding-c) 14%, var(--border));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface) 95%, var(--onboarding-c) 5%);
 }
 
 #pane-onboarding .onboarding-schema-helper-grid,
@@ -3164,7 +3190,7 @@ body.modal-open {
 #pane-onboarding .onboarding-inline-hint-card,
 #pane-onboarding .process-card,
 #pane-onboarding .validation-overview-card {
-    padding: 14px 16px;
+    padding: 12px 14px;
     border-radius: 10px;
 }
 
@@ -3193,10 +3219,24 @@ body.modal-open {
     background: color-mix(in srgb, var(--surface) 92%, #000 8%);
 }
 
+#pane-onboarding #onboardingSchemaCandidateList.mini-scroll,
+#pane-onboarding #onboardingRuntimeContextList.mini-scroll,
+#pane-onboarding #onboardingConnectionCatalog.mini-scroll {
+    min-height: 0;
+    max-height: none;
+}
+
+#pane-onboarding #onboardingSchemaCandidateList {
+    border: 1px solid color-mix(in srgb, var(--border) 86%, #394760 14%);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--surface) 96%, #000 4%);
+    overflow: hidden;
+}
+
 #pane-onboarding .schema-candidate {
     grid-template-columns: 24px 1fr;
     gap: 12px;
-    padding: 14px 16px;
+    padding: 16px 18px;
 }
 
 #pane-onboarding .schema-candidate-head {
@@ -3220,6 +3260,10 @@ body.modal-open {
 
 #pane-onboarding .schema-candidate.is-recommended {
     border-left: 3px solid color-mix(in srgb, var(--ok-c) 70%, transparent);
+}
+
+#pane-onboarding .schema-candidate.is-currently-allowed {
+    background: color-mix(in srgb, var(--surface) 92%, var(--onboarding-c) 8%);
 }
 
 #pane-onboarding .schema-candidate.is-risky {
@@ -3261,15 +3305,11 @@ body.modal-open {
 }
 
 #pane-onboarding .onboarding-footer-bar {
-    position: sticky;
-    bottom: 12px;
-    z-index: 7;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 14px;
     padding: 14px 16px;
-    box-shadow: 0 18px 50px rgba(0, 0, 0, .35);
 }
 
 #pane-onboarding .onboarding-footer-meta {
@@ -3356,59 +3396,60 @@ body.modal-open {
    ONBOARDING UX REFACTOR ENHANCEMENTS - ROUND 2
 ----------------------------------------------------------- */
 #pane-onboarding .onboarding-compact-readiness-shell {
-    position: sticky;
-    top: 84px;
-    z-index: 6;
-    margin-top: 14px;
-    padding: 16px 18px;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, var(--surface-2)), var(--surface-2));
-    border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+    position: static;
+    z-index: auto;
+    margin-top: 12px;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    background: color-mix(in srgb, var(--surface) 94%, var(--onboarding-c) 6%);
+    border-color: color-mix(in srgb, var(--onboarding-c) 14%, var(--border));
 }
 
 #pane-onboarding .onboarding-compact-readiness-head {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 12px;
+    gap: 10px 16px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
 }
 
 #pane-onboarding .compact-readiness-value {
-    margin-top: 4px;
     color: var(--fg-primary);
     font-family: var(--cond);
-    font-size: 1.02rem;
+    font-size: .92rem;
     font-weight: 700;
-    letter-spacing: .04em;
+    letter-spacing: .03em;
 }
 
 #pane-onboarding .onboarding-footer-shell {
-    padding-top: 0;
-    border-top: none;
-    background: transparent;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 18px;
+    margin-top: 20px;
+    border: 1px solid color-mix(in srgb, var(--onboarding-c) 18%, var(--border));
+    border-radius: 14px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 88%, var(--onboarding-c) 12%), color-mix(in srgb, var(--surface) 96%, #000 4%));
+    box-shadow: 0 18px 32px rgba(0, 0, 0, .16);
 }
 
 #pane-onboarding .onboarding-footer-info {
     min-width: 0;
+    padding: 0;
 }
 
-#pane-onboarding .onboarding-primary-action-host {
-    display: flex;
+#pane-onboarding .onboarding-footer-info .subpanel-title {
+    margin-bottom: 3px;
+}
+
+#pane-onboarding .onboarding-footer-shell .action-meta {
+    max-width: 100%;
+}
+
+#pane-onboarding .onboarding-footer-shell .inline-actions {
+    gap: 10px;
     align-items: center;
-    justify-content: flex-end;
-    min-width: 240px;
-}
-
-#pane-onboarding .onboarding-secondary-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-#pane-onboarding .onboarding-secondary-actions .inline-actions {
-    gap: 10px;
-    flex-wrap: wrap;
 }
 
 #pane-onboarding .onboarding-secondary-cta {
@@ -3416,8 +3457,14 @@ body.modal-open {
 }
 
 #pane-onboarding .onboarding-primary-cta {
+    min-width: 0;
+}
+
+#pane-onboarding .onboarding-primary-cta-active {
+    order: -1;
     min-width: 240px;
     justify-content: center;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent), 0 12px 22px rgba(6, 12, 24, .22);
 }
 
 #pane-onboarding .onboarding-workspace-checklist {
@@ -3449,16 +3496,7 @@ body.modal-open {
 }
 
 @media (max-width: 1100px) {
-    #pane-onboarding .onboarding-compact-readiness-shell {
-        position: static;
-    }
-
-    #pane-onboarding .onboarding-primary-action-host {
-        width: 100%;
-        justify-content: stretch;
-    }
-
-    #pane-onboarding .onboarding-primary-cta {
+    #pane-onboarding .onboarding-primary-cta-active {
         width: 100%;
         min-width: 0;
     }
