@@ -816,7 +816,7 @@ public class AdminController(
                         connectionName = mapping.ConnectionName,
                         systemProfileKey = string.IsNullOrWhiteSpace(mapping.SystemProfileKey) ? "default" : mapping.SystemProfileKey,
                         isDefault = mapping.IsDefault,
-                        label = $"{tenant.DisplayName} Ã¯Â¿Â½ {mapping.Domain} Ã¯Â¿Â½ {mapping.ConnectionName}"
+                        label = $"{tenant.DisplayName} · {mapping.Domain} · {mapping.ConnectionName}"
                     });
                 }
             }

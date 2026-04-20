@@ -8,6 +8,7 @@ using VannaLight.Api.Hubs;
 using VannaLight.Api.Services;
 using VannaLight.Api.Services.Docs;
 using VannaLight.Api.Services.Predictions;
+using VannaLight.Api.Services.SqlAlerts;
 using VannaLight.Core.Abstractions;
 using VannaLight.Core.Models;
 using VannaLight.Core.Settings;
@@ -113,6 +114,7 @@ builder.Services.AddSingleton<IAppSecretStore>(_ => new SqliteAppSecretStore(sql
 builder.Services.AddSingleton<ITenantStore>(_ => new SqliteTenantStore(sqlitePath));
 builder.Services.AddSingleton<ITenantDomainStore>(_ => new SqliteTenantDomainStore(sqlitePath));
 builder.Services.AddSingleton<IPredictionProfileStore, SqlitePredictionProfileStore>();
+builder.Services.AddSingleton<ISqlAlertRuleStore>(_ => new SqliteSqlAlertRuleStore(sqlitePath));
 builder.Services.AddSingleton<ISystemConfigProvider, SystemConfigProvider>();
 builder.Services.AddSingleton<ISecretResolver, CompositeSecretResolver>();
 builder.Services.AddSingleton<IOperationalConnectionResolver, OperationalConnectionResolver>();
@@ -151,6 +153,14 @@ builder.Services.AddSingleton<IAllowedObjectStore, SqliteAllowedObjectStore>();
 builder.Services.AddSingleton<IQueryPatternStore, SqliteQueryPatternStore>();
 builder.Services.AddSingleton<IQueryPatternTermStore, SqliteQueryPatternTermStore>();
 builder.Services.AddSingleton<ISqlCacheService, SqlCacheService>();
+builder.Services.AddSingleton<ISqlAlertStateStore, SqliteSqlAlertStateStore>();
+builder.Services.AddSingleton<ISqlAlertEventStore, SqliteSqlAlertEventStore>();
+builder.Services.AddSingleton<ISqlAlertMetricCatalog, SqlAlertMetricCatalog>();
+builder.Services.AddSingleton<ISqlAlertQueryBuilder, SqlAlertQueryBuilder>();
+builder.Services.AddSingleton<ISqlAlertEvaluator, SqlAlertEvaluator>();
+builder.Services.AddTransient<UpsertSqlAlertRuleUseCase>();
+builder.Services.AddTransient<AcknowledgeSqlAlertUseCase>();
+builder.Services.AddTransient<ClearSqlAlertUseCase>();
 
 // Ingesta de esquema
 builder.Services.AddSingleton<ISchemaIngestor, SqlServerSchemaIngestor>();
@@ -187,6 +197,7 @@ builder.Services.AddSingleton<IPredictionAnswerService, PredictionAnswerService>
 // ---------------------------------------------------------
 builder.Services.AddSingleton<IAskRequestQueue, AskRequestQueue>();
 builder.Services.AddHostedService<InferenceWorker>();
+builder.Services.AddHostedService<SqlAlertEvaluationWorker>();
 
 var app = builder.Build();
 
@@ -473,7 +484,32 @@ static async Task EnsureSystemConfigDatabaseSetupAsync(
             UpdatedUtc TEXT NOT NULL,
             UNIQUE(Domain, ProfileKey)
         );
-    ";
+
+        CREATE TABLE IF NOT EXISTS SqlAlertRules (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            RuleKey TEXT NOT NULL,
+            TenantKey TEXT NOT NULL,
+            Domain TEXT NOT NULL,
+            ConnectionName TEXT NOT NULL,
+            DisplayName TEXT NOT NULL,
+            MetricKey TEXT NOT NULL,
+            DimensionKey TEXT NULL,
+            DimensionValue TEXT NULL,
+            ComparisonOperator INTEGER NOT NULL,
+            Threshold REAL NOT NULL,
+            TimeScope INTEGER NOT NULL,
+            EvaluationFrequencyMinutes INTEGER NOT NULL,
+            CooldownMinutes INTEGER NOT NULL,
+            IsActive INTEGER NOT NULL DEFAULT 1,
+            Notes TEXT NULL,
+            CreatedUtc TEXT NOT NULL,
+            UpdatedUtc TEXT NOT NULL,
+            UNIQUE(RuleKey)
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_SqlAlertRules_Domain_Connection
+            ON SqlAlertRules(Domain, ConnectionName, IsActive);
+        ";
 
     await connection.ExecuteAsync(sql);
     await EnsureContextManagementSchemaAsync(connection);
@@ -839,6 +875,47 @@ static async Task EnsureRuntimeDatabaseSetupAsync(IServiceProvider services)
         CREATE UNIQUE INDEX IF NOT EXISTS IX_LlmRuntimeProfile_SingleActive
             ON LlmRuntimeProfile(IsActive)
             WHERE IsActive = 1;
+
+        CREATE TABLE IF NOT EXISTS SqlAlertStates (
+            RuleId INTEGER PRIMARY KEY,
+            RuleKey TEXT NOT NULL,
+            LifecycleState INTEGER NOT NULL,
+            LastObservedValue REAL NULL,
+            LastEvaluationUtc TEXT NULL,
+            LastTriggeredUtc TEXT NULL,
+            LastAcknowledgedUtc TEXT NULL,
+            LastResolvedUtc TEXT NULL,
+            LastClearedUtc TEXT NULL,
+            LastErrorUtc TEXT NULL,
+            LastErrorMessage TEXT NULL,
+            OpenEventKey TEXT NULL,
+            UpdatedUtc TEXT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS SqlAlertEvents (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            RuleId INTEGER NOT NULL,
+            RuleKey TEXT NOT NULL,
+            TenantKey TEXT NOT NULL,
+            Domain TEXT NOT NULL,
+            ConnectionName TEXT NOT NULL,
+            EventType INTEGER NOT NULL,
+            LifecycleState INTEGER NOT NULL,
+            ObservedValue REAL NULL,
+            Threshold REAL NOT NULL,
+            ComparisonOperator INTEGER NOT NULL,
+            Message TEXT NOT NULL,
+            QuerySummary TEXT NULL,
+            SqlPreview TEXT NULL,
+            ErrorText TEXT NULL,
+            EventUtc TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_SqlAlertEvents_EventUtc
+            ON SqlAlertEvents(EventUtc DESC);
+
+        CREATE INDEX IF NOT EXISTS IX_SqlAlertEvents_Domain_Rule
+            ON SqlAlertEvents(Domain, RuleId, EventUtc DESC);
     ";
 
     await connection.ExecuteAsync(sql);

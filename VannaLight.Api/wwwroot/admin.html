@@ -6,7 +6,7 @@
     <title>VannaLight — Administración</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
-    <link href="/css/admin.css?v=20260406-docs-feedback-1" rel="stylesheet" />
+    <link href="/css/admin.css?v=20260418-onboarding-wizard-6" rel="stylesheet" />
 </head>
 <body>
     <div class="admin-toast-host" id="adminToastHost" aria-live="polite" aria-atomic="true"></div>
@@ -14,7 +14,7 @@
 
         <input type="hidden" id="txtJobId" />
 
-        <!-- ── TOPBAR ── -->
+        <!-- -- TOPBAR -- -->
         <header class="topbar">
             <div class="tb-left">
                 <div class="tb-logo">
@@ -38,7 +38,7 @@
             </div>
         </header>
 
-        <!-- ── MAIN AREA ── -->
+        <!-- -- MAIN AREA -- -->
         <div class="main-area">
 
             <!-- Tab rail -->
@@ -97,6 +97,16 @@
                     Onboarding
                 </button>
 
+                <button class="tab-btn" id="tab-sql-alerts" onclick="switchTab('sql-alerts')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3v6" />
+                        <path d="M12 13v8" />
+                        <path d="M5 12h14" />
+                        <path d="M7 7l10 10" />
+                    </svg>
+                    Alert Monitor
+                </button>
+
                 <button class="tab-btn" id="tab-config" onclick="switchTab('config')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 3v4" />
@@ -150,7 +160,7 @@
 
             </div>
 
-            <!-- ══ TAB: RAG ══ -->
+            <!-- -- TAB: RAG -- -->
             <div class="tab-content active" id="pane-rag">
                 <div class="rag-layout">
 
@@ -169,7 +179,7 @@
                         <div class="filter-bar">
                             <button class="filter-btn active-all" id="filter-all" onclick="setFilter('all')">Todos</button>
                             <button class="filter-btn" id="filter-pending" onclick="setFilter('pending')">Pendientes revisión</button>
-                            <button class="filter-btn" id="filter-negative" onclick="setFilter('negative')">Con 👎</button>
+                            <button class="filter-btn" id="filter-negative" onclick="setFilter('negative')">Con ??</button>
                             <button class="filter-btn" id="filter-verified" onclick="setFilter('verified')">Verificados</button>
                         </div>
                         <div class="context-active-banner" id="ragActiveContextBanner">Selecciona primero un workspace y un contexto válido en Onboarding.</div>
@@ -271,7 +281,7 @@
                 </div>
             </div>
 
-            <!-- ══ TAB: DOCUMENTS ══ -->
+            <!-- -- TAB: DOCUMENTS -- -->
             <div class="tab-content" id="pane-documents">
                 <div class="rag-layout">
 
@@ -426,7 +436,7 @@
                 </div>
             </div>
 
-            <!-- ══ TAB: ML ══ -->
+            <!-- -- TAB: ML -- -->
             <div class="tab-content" id="pane-ml">
                 <div class="rag-layout">
 
@@ -740,7 +750,7 @@
                 </div>
             </div>
 
-            <!-- ══ TAB: LLM ══ -->
+            <!-- -- TAB: LLM -- -->
             <div class="tab-content" id="pane-llm">
                 <div class="llm-layout">
 
@@ -819,7 +829,7 @@
                                         GPU Layers (VRAM)
                                     </label>
                                     <input type="number" id="txtGpuLayers" class="field-num key-param" placeholder="—" oninput="updateVram()" />
-                                    <div class="field-hint">Capas del modelo cargadas en GPU. RTX 4060 → 33–35 · Quadro T2000 → 12–15 · CPU only → 0</div>
+                                    <div class="field-hint">Capas del modelo cargadas en GPU. RTX 4060 ? 33–35 · Quadro T2000 ? 12–15 · CPU only ? 0</div>
                                 </div>
                                 <div class="field-group">
                                     <label class="field-label" style="color:var(--llm-c)">
@@ -832,11 +842,11 @@
                                     <div class="field-hint">Ventana de contexto del modelo. 4096 = estándar · 2048 = VRAM limitada</div>
                                 </div>
                                 <div class="field-group">
-                                    <label class="field-label">Batch Size <span class="field-label-hint" title="Tokens procesados en paralelo. Mayor = más rápido pero más VRAM.">ⓘ</span></label>
+                                    <label class="field-label">Batch Size <span class="field-label-hint" title="Tokens procesados en paralelo. Mayor = más rápido pero más VRAM.">?</span></label>
                                     <input type="number" id="txtBatchSize" class="field-num" placeholder="—" />
                                 </div>
                                 <div class="field-group">
-                                    <label class="field-label">U-Batch Size <span class="field-label-hint" title="Micro-batch para procesamiento en GPU. Generalmente igual o menor al batch size.">ⓘ</span></label>
+                                    <label class="field-label">U-Batch Size <span class="field-label-hint" title="Micro-batch para procesamiento en GPU. Generalmente igual o menor al batch size.">?</span></label>
                                     <input type="number" id="txtUBatchSize" class="field-num" placeholder="—" />
                                 </div>
                                 <div class="field-group full">
@@ -873,7 +883,7 @@
                 </div>
             </div>
 
-            <!-- ══ TAB: ONBOARDING ══ -->
+            <!-- -- TAB: ONBOARDING -- -->
             <div class="tab-content" id="pane-onboarding">
                 <div class="rag-layout">
 
@@ -926,7 +936,7 @@
                                 </div>
                                 <div class="section-header-text">
                                     <div class="sh-title">Wizard de Onboarding</div>
-                                    <div class="sh-sub">Activa un workspace nuevo de principio a fin. Sigue los 4 pasos en orden; la afinación avanzada viene después.</div>
+                                    <div class="sh-sub">Sigue los 4 pasos base en orden. Lo avanzado viene después.</div>
                                 </div>
                             </div>
 
@@ -953,71 +963,18 @@
                                 </div>
                             </div>
 
-                            <div class="onboarding-hero">
-                                <div class="hero-card">
-                                    <div class="hero-kicker">Ambiente</div>
-                                    <div class="hero-value" id="txtOnboardingEnvironment">—</div>
-                                    <div class="hero-sub">Ambiente activo del wizard</div>
-                                </div>
-                                <div class="hero-card">
-                                    <div class="hero-kicker">Perfil técnico</div>
-                                    <div class="hero-value" id="txtOnboardingSystemProfile">—</div>
-                                    <div class="hero-sub">Configuración técnica usada por este flujo</div>
-                                </div>
-                                <div class="hero-card">
-                                    <div class="hero-kicker">Conexiones</div>
-                                    <div class="hero-value" id="txtOnboardingConnectionCount">0</div>
-                                    <div class="hero-sub">Conexiones disponibles para este ambiente</div>
-                                </div>
-                            </div>
-
-                            <div class="subpanel onboarding-guide">
-                                <div class="subpanel-title">¿Por dónde empiezo?</div>
-                                <div class="onboarding-guide-copy">Sigue los 4 pasos en orden. Lo demás es afinación secundaria y no bloquea este flujo base.</div>
-
                             <div class="subpanel onboarding-flow-summary">
-                                <div class="subpanel-title">Estado actual del wizard</div>
-                                <div class="onboarding-summary-grid">
-                                    <div class="onboarding-summary-card">
-                                        <div class="hero-kicker">Paso actual</div>
-                                        <div class="hero-value" id="txtOnboardingCurrentStep">Paso 1</div>
-                                        <div class="hero-sub" id="txtOnboardingCurrentStepHint">Empieza configurando el workspace y la conexión.</div>
-                                    </div>
-                                    <div class="onboarding-summary-card">
-                                        <div class="hero-kicker">Obligatorio ahora</div>
-                                        <div class="onboarding-summary-text" id="txtOnboardingRequiredAction">Completa tenant, nombre visible, dominio y conexión.</div>
-                                    </div>
-                                    <div class="onboarding-summary-card">
-                                        <div class="hero-kicker">Después sigue</div>
-                                        <div class="onboarding-summary-text" id="txtOnboardingNextAction">Descubrir schema y elegir tablas permitidas.</div>
-                                    </div>
-                                    <div class="onboarding-summary-card">
-                                        <div class="hero-kicker">Progreso</div>
-                                        <div class="hero-value" id="txtOnboardingProgressValue">0 / 4</div>
-                                        <div class="hero-sub" id="txtOnboardingProgressHint">Aún no hay pasos completados.</div>
-                                    </div>
+                                <div class="hero-kicker">Paso actual</div>
+                                <div class="onboarding-summary-inline">
+                                    <span class="onboarding-current-step" id="txtOnboardingCurrentStep">Paso 1</span>
+                                    <span class="onboarding-summary-text" id="txtOnboardingRequiredAction">Completa tenant, nombre visible, dominio y conexión.</span>
                                 </div>
                                 <div class="action-meta" id="onboardingFlowSummaryMeta">
-                                    <span class="meta-empty">Usa este bloque para saber qué sí bloquea el onboarding y qué puedes dejar para después.</span>
+                                    <span class="meta-empty">Aquí verás solo lo que bloquea el flujo base.</span>
                                 </div>
-                            </div>
-                                <div class="onboarding-guide-list">
-                                    <div class="onboarding-guide-item" id="guideItem1">
-                                        <span class="guide-item-num">1</span>
-                                        <span>Define el <strong>workspace</strong>: nombre, dominio y conexión a la base de datos.</span>
-                                    </div>
-                                    <div class="onboarding-guide-item" id="guideItem2">
-                                        <span class="guide-item-num">2</span>
-                                        <span>Descubre el <strong>schema</strong> y marca solo las tablas que el motor puede consultar.</span>
-                                    </div>
-                                    <div class="onboarding-guide-item" id="guideItem3">
-                                        <span class="guide-item-num">3</span>
-                                        <span><strong>Prepara el dominio</strong>: genera contexto técnico, schema docs y pistas semánticas.</span>
-                                    </div>
-                                    <div class="onboarding-guide-item" id="guideItem4">
-                                        <span class="guide-item-num">4</span>
-                                        <span>Corre una <strong>pregunta real</strong> para confirmar que el dominio responde correctamente.</span>
-                                    </div>
+                                <div class="onboarding-wizard-nav">
+                                    <button class="btn btn-ghost" type="button" id="btnOnboardingPrevStep" onclick="goToPreviousOnboardingStep()">Anterior</button>
+                                    <button class="btn btn-primary" type="button" id="btnOnboardingNextStep" onclick="goToNextOnboardingStep()">Siguiente</button>
                                 </div>
                             </div>
 
@@ -1034,10 +991,10 @@
                                         <label class="field-label">
                                             Workspace / Tenant
                                             <span class="field-required" title="Requerido">*</span>
-                                            <span class="field-label-hint" title="Clave interna única. No cambies esto después de crear el workspace.">ⓘ</span>
+                                            <span class="field-label-hint" title="Clave interna única. No cambies esto después de crear el workspace.">?</span>
                                         </label>
                                         <input type="text" id="txtOnboardingTenantKey" class="field-input" placeholder="northwind-demo" />
-                                        <div class="field-hint">Clave corta y estable, sin espacios. Ejemplo: <code>produccion-mx</code> o <code>northwind-demo</code>. No cambia después de crearse.</div>
+                                        <div class="field-hint">Clave interna corta y estable. Ejemplo: <code>produccion-mx</code> o <code>northwind-demo</code>.</div>
                                         <div class="field-error" id="errOnboardingTenantKey"></div>
                                     </div>
                                     <div class="field-group">
@@ -1046,17 +1003,17 @@
                                             <span class="field-required" title="Requerido">*</span>
                                         </label>
                                         <input type="text" id="txtOnboardingDisplayName" class="field-input" placeholder="Northwind Demo" />
-                                        <div class="field-hint">Lo que verán los usuarios en la interfaz. Puede incluir espacios y mayúsculas.</div>
+                                        <div class="field-hint">Nombre visible en la interfaz para los usuarios.</div>
                                         <div class="field-error" id="errOnboardingDisplayName"></div>
                                     </div>
                                     <div class="field-group">
                                         <label class="field-label">
                                             Dominio semántico
                                             <span class="field-required" title="Requerido">*</span>
-                                            <span class="field-label-hint" title="El motor usa este nombre para separar el contexto de este workspace del de otros.">ⓘ</span>
+                                            <span class="field-label-hint" title="El motor usa este nombre para separar el contexto de este workspace del de otros.">?</span>
                                         </label>
                                         <input type="text" id="txtOnboardingDomain" class="field-input" placeholder="northwind-sales" />
-                                        <div class="field-hint">Agrupa el conocimiento de esta base. Usa el mismo valor que en Allowed Objects, Semantic Hints y Business Rules.</div>
+                                        <div class="field-hint">Usa el mismo dominio para Allowed Objects, Semantic Hints y reglas del dominio.</div>
                                         <div class="field-error" id="errOnboardingDomain"></div>
                                     </div>
                                     <div class="field-group">
@@ -1068,7 +1025,7 @@
                                             <select id="txtOnboardingConnectionName" class="field-input"></select>
                                             <button class="btn btn-ghost" type="button" onclick="toggleOnboardingConnectionEditor()">+ Nueva</button>
                                         </div>
-                                        <div class="field-hint">Selecciona una conexión existente o crea una nueva si todavía no aparece aquí.</div>
+                                        <div class="field-hint">Selecciona una conexión guardada o crea una nueva si todavía no existe.</div>
                                         <div class="field-error" id="errOnboardingConnectionName"></div>
                                     </div>
                                 </div>
@@ -1181,23 +1138,24 @@
                                 <div class="field-group">
                                     <label class="field-label">Descripción del workspace <span class="field-optional">opcional</span></label>
                                     <textarea id="txtOnboardingDescription" class="field-input" rows="2" placeholder="Ej. Base de ventas Northwind para pruebas de onboarding."></textarea>
-                                    <div class="field-hint">Contexto libre. Útil para recordar el propósito de este workspace más adelante.</div>
+                                    <div class="field-hint">Contexto opcional para recordar el propósito del workspace.</div>
                                 </div>
                                 <div class="advanced-toggle-row">
                                     <button class="btn btn-ghost" type="button" id="btnToggleOnboardingAdvanced" onclick="toggleOnboardingAdvancedOptions()">Opciones avanzadas</button>
-                                    <div class="field-hint">Solo necesario si usas un perfil técnico distinto al estándar.</div>
+                                    <div class="field-hint">Opcional. Déjalo cerrado si usarás el perfil estándar.</div>
                                 </div>
                                 <div class="field-group onboarding-advanced" id="onboardingAdvancedOptions" style="display:none">
-                                    <label class="field-label">Perfil técnico <span class="field-label-hint" title="Configuración del motor de inferencia. Déjalo en 'default' a menos que necesites una configuración especial.">ⓘ</span></label>
+                                    <label class="field-label">Perfil técnico <span class="field-label-hint" title="Configuración del motor de inferencia. Déjalo en 'default' a menos que necesites una configuración especial.">?</span></label>
                                     <input type="text" id="txtOnboardingSystemProfileKey" class="field-input" placeholder="default" />
                                     <div class="field-hint">En la mayoría de los casos déjalo en <strong>default</strong>. Cambia solo si el equipo de infraestructura te indicó un perfil específico.</div>
                                 </div>
+                                <div class="onboarding-step-action-host" id="onboardingStep1ActionHost"></div>
                             </div>
 
                             <div class="subpanel onboarding-support-toggle">
                                 <div>
-                                    <div class="subpanel-title">Paneles de apoyo</div>
-                                    <div class="field-hint">Referencia opcional. El onboarding base no depende de estos paneles.</div>
+                                    <div class="subpanel-title">Apoyo opcional</div>
+                                    <div class="field-hint">Referencia secundaria. El flujo base no depende de estos paneles.</div>
                                 </div>
                                 <button class="btn btn-ghost" type="button" id="btnToggleOnboardingReferencePanels" onclick="toggleOnboardingReferencePanels()">Mostrar apoyo</button>
                             </div>
@@ -1253,7 +1211,7 @@
                                     <span class="step-panel-num">2</span>
                                     <div class="step-panel-text">
                                         <div class="step-panel-title">Elige las tablas permitidas</div>
-                                        <div class="step-panel-sub">Descubre el schema y marca solo las tablas o vistas que el motor SQL podrá consultar. Esto define el perímetro seguro del dominio.</div>
+                                        <div class="step-panel-sub">Descubre el schema y marca solo lo necesario para el dominio. Este paso define el perímetro seguro del motor.</div>
                                     </div>
                                 </div>
                                 <div class="inline-actions">
@@ -1284,6 +1242,7 @@
                                         <span class="empty-state-sub">Presiona "Descubrir schema" para ver las tablas disponibles.</span>
                                     </div>
                                 </div>
+                                <div class="onboarding-step-action-host" id="onboardingStep2ActionHost"></div>
                             </div>
 
                             <div class="subpanel onboarding-panel" id="onboardingStepPanel3">
@@ -1337,6 +1296,7 @@
                                 <div class="action-meta" id="onboardingStatusMeta">
                                     <span class="meta-empty">Cuando estés conforme con las tablas, ejecuta “Preparar dominio” para generar el contexto técnico base.</span>
                                 </div>
+                                <div class="onboarding-step-action-host" id="onboardingStep3ActionHost"></div>
                             </div>
 
                             <div class="subpanel onboarding-panel" id="onboardingStepPanel4">
@@ -1373,17 +1333,19 @@
                                     <span class="meta-empty">Si el resultado es correcto, el dominio está listo para usuarios internos.</span>
                                 </div>
                                 <div class="rag-banner" id="onboardingValidationBanner"></div>
+                                <div class="onboarding-step-action-host" id="onboardingStep4ActionHost"></div>
                             </div>
 
-                            <div class="onboarding-section-break" aria-hidden="true">
+                            <div class="onboarding-section-break" id="onboardingFinalBreak" aria-hidden="true">
                                 <span>Estado final del dominio</span>
                             </div>
 
-                            <div class="subpanel onboarding-panel" id="onboardingStepPanel5">
+                            <div class="subpanel onboarding-panel onboarding-final-panel" id="onboardingStepPanel5">
                                 <div class="step-panel-header">
+                                    <span class="step-panel-num">5</span>
                                     <div class="step-panel-text">
                                         <div class="step-panel-title">¿Está listo el dominio?</div>
-                                        <div class="step-panel-sub">Los tres indicadores deben estar en verde para considerar este dominio listo para una primera salida. Business Rules y Query Patterns pueden afinarse después.</div>
+                                        <div class="step-panel-sub">Cierra el flujo base aquí. Exportar packs y afinación avanzada vienen después.</div>
                                     </div>
                                 </div>
                                 <div class="onboarding-readiness-grid">
@@ -1412,15 +1374,24 @@
                                 <div class="action-meta" id="onboardingReadinessMeta">
                                     <span class="meta-empty">Completa los 4 pasos para habilitar este dominio en el chat.</span>
                                 </div>
-                                <div class="field-group" style="margin-top:16px">
-                                    <label class="field-label">Domain Pack JSON <span class="field-optional">exportar / importar</span></label>
-                                    <textarea id="txtOnboardingDomainPackJson" class="sql-editor" rows="10" placeholder="El JSON del dominio completo aparecerá aquí al exportar.&#10;También puedes pegar un pack externo aquí para importarlo a este ambiente."></textarea>
-                                    <div class="field-hint">Contiene workspace, conexión, allowed objects, business rules, semantic hints, query patterns y training examples. Úsalo para mover el dominio a otro ambiente sin rehacer el onboarding.</div>
+                                <div class="onboarding-support-toggle onboarding-final-tools-toggle">
+                                    <div>
+                                        <div class="subpanel-title">Herramientas posteriores</div>
+                                        <div class="field-hint">Exportar o importar packs es opcional y solo conviene cuando el flujo base ya quedó estable.</div>
+                                    </div>
+                                    <button class="btn btn-ghost" type="button" id="btnToggleOnboardingFinalTools" onclick="toggleOnboardingFinalTools()">Mostrar herramientas</button>
                                 </div>
-                                <div class="action-meta" id="onboardingPackMeta">
-                                    <span class="meta-empty">Usa “Exportar pack” o “Importar pack” solo si ya terminaste el flujo base.</span>
+                                <div class="onboarding-reference-panels is-collapsed" id="onboardingFinalTools">
+                                    <div class="field-group" style="margin-top:16px">
+                                        <label class="field-label">Domain Pack JSON <span class="field-optional">exportar / importar</span></label>
+                                        <textarea id="txtOnboardingDomainPackJson" class="sql-editor" rows="10" placeholder="El JSON del dominio completo aparecerá aquí al exportar.&#10;También puedes pegar un pack externo aquí para importarlo a este ambiente."></textarea>
+                                        <div class="field-hint">Contiene workspace, conexión, allowed objects, business rules, semantic hints, query patterns y training examples. Úsalo para mover el dominio a otro ambiente sin rehacer el onboarding.</div>
+                                    </div>
+                                    <div class="action-meta" id="onboardingPackMeta">
+                                        <span class="meta-empty">Usa “Exportar pack” o “Importar pack” solo si ya terminaste el flujo base.</span>
+                                    </div>
+                                    <div class="rag-banner" id="onboardingPackBanner"></div>
                                 </div>
-                                <div class="rag-banner" id="onboardingPackBanner"></div>
                             </div>
 
                             <div class="rag-banner" id="onboardingBanner"></div>
@@ -1442,11 +1413,11 @@
                                 </button>
                                 <button class="btn btn-ok" type="button" id="btnOnboardingSaveAllowedObjects" onclick="saveOnboardingAllowedObjects()" disabled>
                                     <div class="btn-spinner" id="onboardingAllowedSpinner"></div>
-                                    Guardar tablas → Paso 3
+                                    Guardar tablas ? Paso 3
                                 </button>
                                 <button class="btn btn-amber" type="button" id="btnOnboardingInitialize" onclick="initializeOnboardingDomain()">
                                     <div class="btn-spinner" id="onboardingInitializeSpinner"></div>
-                                    Preparar dominio → Paso 4
+                                    Preparar dominio ? Paso 4
                                 </button>
                                 <button class="btn btn-primary" type="button" id="btnOnboardingRunValidation" onclick="runOnboardingValidationQuestion()">
                                     <div class="btn-spinner" id="onboardingValidationSpinner"></div>
@@ -1454,7 +1425,7 @@
                                 </button>
                                 <button class="btn btn-primary" type="button" id="btnOnboardingSaveStep1" onclick="saveOnboardingStep1()">
                                     <div class="btn-spinner" id="onboardingSpinner"></div>
-                                    Guardar workspace → Paso 2
+                                    Guardar workspace ? Paso 2
                                 </button>
                             </div>
                         </div>
@@ -1486,7 +1457,7 @@
                 </div>
             </div>
 
-            <!-- ══ TAB: SYSTEM CONFIG ══ -->
+            <!-- -- TAB: SYSTEM CONFIG -- -->
             <div class="tab-content" id="pane-config">
                 <div class="rag-layout">
 
@@ -1792,7 +1763,7 @@
                 </div>
             </div>
 
-            <!-- ══ TAB: ALLOWED OBJECTS ══ -->
+            <!-- -- TAB: ALLOWED OBJECTS -- -->
             <div class="tab-content" id="pane-allowed">
                 <div class="rag-layout">
 
@@ -1863,7 +1834,7 @@
                             </div>
                             <div class="form-grid-2">
                                 <div class="field-group">
-                                    <label class="field-label">Schema <span class="field-label-hint" title="Schema SQL de la base de datos. Generalmente 'dbo'.">ⓘ</span></label>
+                                    <label class="field-label">Schema <span class="field-label-hint" title="Schema SQL de la base de datos. Generalmente 'dbo'.">?</span></label>
                                     <input type="text" id="txtAllowedSchemaName" class="field-input" placeholder="dbo" />
                                     <div class="field-hint">Schema SQL donde reside el objeto. Casi siempre es <code>dbo</code>.</div>
                                 </div>
@@ -1916,7 +1887,7 @@
                 </div>
             </div>
 
-            <!-- ══ TAB: BUSINESS RULES ══ -->
+            <!-- -- TAB: BUSINESS RULES -- -->
             <div class="tab-content" id="pane-business-rules">
                 <div class="rag-layout">
 
@@ -1994,7 +1965,7 @@
                                     <div class="field-hint">Identificador corto y estable. Sin espacios, usa guión bajo.</div>
                                 </div>
                                 <div class="field-group">
-                                    <label class="field-label">Prioridad <span class="field-label-hint" title="0 = mayor prioridad. Las reglas con menor número se inyectan primero en el prompt.">ⓘ</span></label>
+                                    <label class="field-label">Prioridad <span class="field-label-hint" title="0 = mayor prioridad. Las reglas con menor número se inyectan primero en el prompt.">?</span></label>
                                     <input type="number" id="txtBusinessRulePriority" class="field-num" min="0" step="1" value="0" />
                                     <div class="field-hint">Número menor = mayor prioridad en el prompt.</div>
                                 </div>
@@ -2036,7 +2007,7 @@
                 </div>
             </div>
 
-            <!-- ══ TAB: SEMANTIC HINTS ══ -->
+            <!-- -- TAB: SEMANTIC HINTS -- -->
             <div class="tab-content" id="pane-semantics">
                 <div class="rag-layout">
 
@@ -2116,7 +2087,7 @@
                                     <div class="field-hint">Identificador único. Sin espacios, usa guión bajo.</div>
                                 </div>
                                 <div class="field-group">
-                                    <label class="field-label">Tipo <span class="field-label-hint" title="Clasifica la pista para que el motor la interprete correctamente.">ⓘ</span></label>
+                                    <label class="field-label">Tipo <span class="field-label-hint" title="Clasifica la pista para que el motor la interprete correctamente.">?</span></label>
                                     <select id="txtSemanticHintType" class="field-input">
                                         <option value="">Selecciona un tipo...</option>
                                         <option value="entity">entity</option>
@@ -2184,7 +2155,7 @@
                 </div>
             </div>
 
-            <!-- ══ TAB: QUERY PATTERNS ══ -->
+            <!-- -- TAB: QUERY PATTERNS -- -->
             <div class="tab-content" id="pane-patterns">
                 <div class="rag-layout">
 
@@ -2272,7 +2243,7 @@
                                           placeholder="Describe cuándo debe activarse este pattern. Ej: Se usa cuando el usuario pregunta por el top N de scrap agrupado por prensa."></textarea>
                             </div>
                             <div class="field-group">
-                                <label class="field-label">SQL Template <span class="field-label-hint" title="Plantilla SQL con parámetros como {TopN}, {TimeScopeFilter}. El motor sustituye los valores en runtime.">ⓘ</span></label>
+                                <label class="field-label">SQL Template <span class="field-label-hint" title="Plantilla SQL con parámetros como {TopN}, {TimeScopeFilter}. El motor sustituye los valores en runtime.">?</span></label>
                                 <textarea id="txtQueryPatternSqlTemplate" class="sql-editor" rows="8"
                                           placeholder="SELECT TOP ({TopN}) Press, SUM(ScrapQty) AS TotalScrap&#10;FROM vw_Scrap&#10;WHERE {TimeScopeFilter}&#10;GROUP BY Press&#10;ORDER BY TotalScrap DESC"></textarea>
                                 <div class="field-hint">Usa <code>{TopN}</code>, <code>{TimeScopeFilter}</code> y otros tokens que el motor sustituye automáticamente en runtime.</div>
@@ -2358,7 +2329,7 @@
                                         <div class="field-hint">Palabra o frase que el matcher buscará en la pregunta del usuario.</div>
                                     </div>
                                     <div class="field-group">
-                                        <label class="field-label">Grupo <span class="field-label-hint" title="Clasifica el rol de este term en el pattern.">ⓘ</span></label>
+                                        <label class="field-label">Grupo <span class="field-label-hint" title="Clasifica el rol de este term en el pattern.">?</span></label>
                                         <input type="text" id="txtQueryPatternTermGroup" class="field-input" list="queryPatternTermGroupOptions" placeholder="metric" />
                                         <div class="field-hint">metric · dimension · intent · qualifier · time_scope_today · time_scope_current_week · …</div>
                                         <datalist id="queryPatternTermGroupOptions">
@@ -2438,10 +2409,190 @@
                 </div>
             </div>
 
+            <div class="tab-content" id="pane-sql-alerts">
+                <div class="rag-layout sql-alerts-layout">
+                    <div class="panel-left">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 3v6"></path>
+                                    <path d="M12 13v8"></path>
+                                    <path d="M5 12h14"></path>
+                                </svg>
+                                Monitor de alertas SQL
+                            </div>
+                            <span class="panel-count" id="sqlAlertCount">—</span>
+                        </div>
+                        <div class="context-active-banner" id="sqlAlertContextBanner">Selecciona primero un workspace y un contexto válido en Onboarding.</div>
+                        <div class="history-scroll" id="sqlAlertList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="M12 8v4"></path>
+                                    <path d="M12 16h.01"></path>
+                                </svg>
+                                Cargando alertas SQL...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-right">
+                        <div class="editor-wrap">
+                            <div class="section-header">
+                                <div class="section-header-icon si-rag">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 3v6"></path>
+                                        <path d="M12 13v8"></path>
+                                        <path d="M5 12h14"></path>
+                                    </svg>
+                                </div>
+                                <div class="section-header-text">
+                                    <div class="sh-title">Gobernanza y soporte de alertas SQL</div>
+                                    <div class="sh-sub">La creación operativa vive en el chat principal. Esta vista queda para auditoría, troubleshooting, catálogo de métricas alertables y monitoreo técnico del contexto.</div>
+                                </div>
+                            </div>
+
+                            <input type="hidden" id="txtSqlAlertId" />
+
+                            <div class="form-grid-3">
+                                <div class="field-group">
+                                    <label class="field-label">Tenant</label>
+                                    <input type="text" id="txtSqlAlertTenantKey" class="field-input" placeholder="default" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Domain</label>
+                                    <input type="text" id="txtSqlAlertDomain" class="field-input" placeholder="erp-kpi-pilot" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Connection</label>
+                                    <input type="text" id="txtSqlAlertConnectionName" class="field-input" placeholder="ErpDb" />
+                                </div>
+                            </div>
+
+                            <div class="form-grid-2">
+                                <div class="field-group">
+                                    <label class="field-label">Nombre de regla</label>
+                                    <input type="text" id="txtSqlAlertDisplayName" class="field-input" placeholder="Scrap prensa P01 arriba del umbral" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Métrica</label>
+                                    <select id="txtSqlAlertMetricKey" class="field-input"></select>
+                                </div>
+                            </div>
+
+                            <div class="form-grid-3">
+                                <div class="field-group">
+                                    <label class="field-label">Dimensión opcional</label>
+                                    <select id="txtSqlAlertDimensionKey" class="field-input"></select>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Valor de dimensión</label>
+                                    <input type="text" id="txtSqlAlertDimensionValue" class="field-input" placeholder="P01 / PartNumber / Country" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Operador</label>
+                                    <select id="txtSqlAlertOperator" class="field-input">
+                                        <option value="1">></option>
+                                        <option value="2">>=</option>
+                                        <option value="3">&lt;</option>
+                                        <option value="4">&lt;=</option>
+                                        <option value="5">=</option>
+                                        <option value="6">!=</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-grid-4">
+                                <div class="field-group">
+                                    <label class="field-label">Umbral</label>
+                                    <input type="number" id="txtSqlAlertThreshold" class="field-input" step="0.01" min="0" value="50" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Ventana</label>
+                                    <select id="txtSqlAlertTimeScope" class="field-input">
+                                        <option value="1">Hoy</option>
+                                        <option value="2">Últimas 24h</option>
+                                        <option value="3">Turno actual</option>
+                                        <option value="4">Semana actual</option>
+                                        <option value="5">Mes actual</option>
+                                    </select>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Frecuencia (min)</label>
+                                    <input type="number" id="txtSqlAlertFrequency" class="field-input" min="1" value="5" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Cooldown (min)</label>
+                                    <input type="number" id="txtSqlAlertCooldown" class="field-input" min="0" value="30" />
+                                </div>
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label">Notas técnicas</label>
+                                <textarea id="txtSqlAlertNotes" class="field-input" rows="3" placeholder="Contexto operativo, troubleshooting o criterio de soporte para esta regla."></textarea>
+                            </div>
+
+                            <div class="field-group">
+                                <label style="display:flex;align-items:center;gap:8px;font-size:.78rem;color:var(--dim)">
+                                    <input type="checkbox" id="chkSqlAlertIsActive" checked />
+                                    Dejar regla activa al guardar
+                                </label>
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label">Preview técnico del SQL compilado</label>
+                                <textarea id="txtSqlAlertPreview" class="sql-editor sql-alert-preview" rows="7" readonly placeholder="Aquí puedes auditar el SQL gobernado que se compila desde la regla estructurada."></textarea>
+                                <div class="field-hint" id="sqlAlertCatalogHint">Selecciona un contexto activo para revisar el catálogo de métricas y dimensiones disponibles en ese dominio.</div>
+                            </div>
+
+                            <div class="rag-banner" id="sqlAlertBanner"></div>
+                        </div>
+
+                        <div class="editor-actions">
+                            <div class="action-meta" id="sqlAlertMeta">
+                                <span class="meta-empty">Ninguna alerta seleccionada</span>
+                            </div>
+                            <div class="inline-actions">
+                                <button class="btn btn-ghost" type="button" onclick="resetSqlAlertForm()">Nueva regla</button>
+                                <button class="btn btn-ghost" type="button" onclick="previewSqlAlert()">Preview técnico</button>
+                                <button class="btn btn-danger" type="button" id="btnSqlAlertToggle" onclick="toggleSqlAlertStatus()" disabled>Activar / Desactivar</button>
+                                <button class="btn btn-primary" type="button" id="btnSqlAlertSave" onclick="saveSqlAlert()">
+                                    <div class="btn-spinner" id="sqlAlertSpinner"></div>
+                                    Guardar regla
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="subpanel sql-alert-events-panel">
+                            <div class="subpanel-title">Últimos eventos</div>
+                            <div class="subpanel-desc">Aquí verás disparos, acknowledges, clears, resoluciones y fallos de evaluación para soporte y observabilidad del contexto activo.</div>
+                            <div class="history-scroll sql-alert-events-list" id="sqlAlertEventList">
+                                <div class="empty-state">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <path d="M12 8v4"></path>
+                                        <path d="M12 16h.01"></path>
+                                    </svg>
+                                    Cargando eventos...
+                                </div>
+                            </div>
+                            <div class="inline-actions sql-alert-events-actions">
+                                <button class="btn btn-ok" type="button" id="btnSqlAlertAck" onclick="ackSqlAlert()" disabled>Ack</button>
+                                <button class="btn btn-ghost" type="button" id="btnSqlAlertClear" onclick="clearSqlAlert()" disabled>Clear</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div><!-- /main-area -->
     </div><!-- /app -->
 
-    <script src="/js/admin.js?v=20260406-docs-feedback-1"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script src="/js/admin.js?v=20260418-onboarding-wizard-6"></script>
 </body>
 </html>
+
+
+
 

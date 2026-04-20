@@ -26,6 +26,40 @@
   - mover gradualmente la configuracion especifica de la base de datos al onboarding, evitando seguir dispersandola en menus tecnicos
 
 ### Hecho hoy
+- Ajuste adicional del onboarding para compactar el Paso 1 y reforzar el cierre del Paso 4:
+  - el editor inline de conexion se hizo visualmente mas compacto y menos invasivo
+  - el toggle `+ Nueva` ahora refleja mejor su estado:
+    - `+ Nueva`
+    - `Cerrar editor`
+  - el panel de prueba real ahora refuerza visualmente el exito:
+    - borde del paso en tono `ok`
+    - tarjetas de SQL/resultado con estado exitoso
+  - objetivo:
+    - que el paso 1 arranque menos pesado
+    - que una prueba correcta realmente se sienta como hito de cierre
+- Correccion adicional del onboarding Admin para volverlo mas secuencial y menos redundante:
+  - el resumen superior del wizard se colapso a un solo bloque compacto:
+    - `Paso actual`
+    - `Accion obligatoria ahora`
+    - chips de contexto/progreso
+  - se elimino la duplicacion visual del summary de 4 cards
+  - el CTA principal del onboarding ya no compite desde el footer:
+    - ahora se mueve al panel del paso activo
+    - cada paso tiene su propio `action host`
+    - el footer queda como barra secundaria de soporte
+  - la barra inferior se reforzo visualmente para que no se pierda con el fondo:
+    - fondo mas solido
+    - borde superior mas visible
+    - mejor contraste general
+  - el Paso 2 gano una toolbar mas guiada:
+    - buscador mas protagonista
+    - filtros agrupados
+    - conteo de `seleccionadas` y `visibles`
+    - mejor lectura del estado de seleccion
+  - se mantuvo un solo sticky real dentro del onboarding:
+    - el `stepper`
+  - validacion tecnica:
+    - `node --check VannaLight.Api/wwwroot/js/admin.js`
 - Refactor correctivo del onboarding en Admin para recuperar estabilidad visual del wizard:
   - se elimino el patron de doble sticky entre resumen superior y footer inferior
   - `onboarding-footer-bar` deja de comportarse como barra flotante y vuelve al flujo normal del layout
@@ -847,3 +881,275 @@ Fuera de alcance por ahora:
     - identificar que puntos del proceso cubre cada proyecto
     - detectar dependencias cruzadas
     - confirmar que funcionalidades deben vivir en cada sistema
+
+### Actualizacion 2026-04-17 - simplificacion correctiva del onboarding admin
+- Se elimino la capa superior redundante del onboarding:
+  - fuera `hero` de ambiente/perfil/conexiones
+  - fuera la guia textual de 4 pasos duplicada
+- El resumen global quedo concentrado en:
+  - `renderOnboardingFlowSummary()`
+  - resumen visual compacto de 4 estados (`Workspace`, `Tablas`, `Contexto`, `Prueba`)
+- `renderOnboardingActionGuidance()` se redujo a un hint corto, sin reexplicar todo el wizard.
+- El footer del onboarding quedo mas minimal:
+  - hint corto
+  - solo CTA principal visible
+  - acciones secundarias ocultas del foco principal
+- Se limpio el paso 3 y 4:
+  - fuera la grilla de proceso redundante del paso 3
+  - fuera el overview grande del paso 4
+  - se dejo una sola definicion compacta de exito para validacion
+- El paso 2 se mejoro para decision asistida:
+  - candidatos ordenados por prioridad real (`seleccionadas`, `ya permitidas`, `recomendadas`, `riesgosas`)
+  - meta de seleccion mas clara
+  - tags mas utiles y menos repetitivas
+- Se corrigieron residuos del refactor en `admin.js`:
+  - renderer duplicado de schema candidates eliminado
+  - linea duplicada de `renderOnboardingStatus()` eliminada
+  - `admin.js` vuelve a pasar `node --check`
+- Se reforzo el cierre del wizard para que no compita antes de tiempo:
+  - el panel 5 ya colapsa como el resto mientras todavia no aplica
+  - el separador `Estado final del dominio` solo aparece cuando ya entras al cierre real
+- La franja inferior del onboarding gano mas contraste visual:
+  - borde superior mas claro
+  - fondo mas solido
+  - sombra mas marcada
+  - ya no se pierde con el canvas oscuro
+- La zona avanzada del paso final quedo mas subordinada:
+  - el boton aparece deshabilitado hasta cerrar el onboarding base
+  - export/import y `Domain Pack JSON` quedan explicitamente fuera del foco principal
+
+### Actualizacion 2026-04-17 - limpieza UX del index principal
+- Se redujo el ruido tecnico por default en el chat:
+  - la consola del sistema ahora arranca colapsada
+  - se agrego toggle explicito para verla cuando haga falta
+- Se simplifico la franja de contexto:
+  - fuera el `context-hero` redundante
+  - el estado activo ahora resume contexto y etiqueta en una sola linea
+  - el selector recibe estado visual de error si intentas consultar SQL sin contexto
+- El historial lateral quedo mas compacto:
+  - pregunta truncada a dos lineas
+  - contexto resumido en una linea
+  - acciones ocultas hasta hover / item activo
+  - labels mas simples: `Abrir`, `Usar`, `Repetir`
+- El banner de estado ya no compite con resultados exitosos:
+  - se limpia al completar correctamente una consulta
+  - queda reservado para `info`, `warning` y `error`
+- La voz automatica ya es opt-in:
+  - se agrego toggle `TTS` en el sidebar
+  - `speakSummary()` solo habla si el usuario lo activo
+  - el texto hablado se sanea y se limita para evitar lecturas largas
+- Se reforzo tambien el estado de conexion del topbar:
+  - verde cuando esta activo
+  - amarillo al reconectar
+  - rojo si la conexion cae
+- Se hizo mas ligera la pantalla vacia y el estado con resultado:
+  - el `demo-strip` se compacta cuando ya existe resultado
+  - el foco vuelve al output en lugar de mantener las sugerencias compitiendo
+- El modo `ML` ahora tiene una ayuda minima mas usable:
+  - se agrego una guia compacta debajo del input solo para `pred`
+  - incluye plantillas rapidas para `producto`, `cliente`, `pais`, `mañana` y `semana`
+  - evita depender solo del placeholder libre para explicar como preguntar
+- Se reforzo la estabilidad general del layout principal:
+  - el `topbar` queda sticky y visible al hacer scroll
+  - ya no desaparece mientras recorres resultados largos
+- Se redujo aun mas la densidad del historial lateral:
+  - items con menos padding
+  - pregunta en una sola linea
+  - metadata mas compacta
+  - acciones mas pequeñas para que entren mas registros visibles
+- La tarjeta de resultado en `ML` ya no esta tan hardcodeada a scrap:
+  - el copy se vuelve mas genericamente predictivo
+  - usa `MetricKey` / `SeriesType` para hablar de metrica, entidad y horizonte
+  - ejemplos y placeholder tambien quedaron menos industriales
+- Se agrupo mejor el bloque principal de composicion:
+  - input, ayuda de modo y sugerencias quedaron como un solo stack visual
+  - el chat se siente menos fragmentado antes del primer resultado
+- Se ajusto tambien el comportamiento compacto del historial:
+  - en pantallas chicas las acciones quedan visibles sin depender de hover
+  - en desktop siguen discretas hasta foco / hover
+
+### Actualizacion 2026-04-17 - MVP de SQL Alerts estructuradas
+- Se implemento la nueva capability `SQL Alerts` respetando el split actual de VannaLight:
+  - `vanna_memory.db` para reglas (`SqlAlertRules`)
+  - `vanna_runtime.db` para estado/eventos (`SqlAlertStates`, `SqlAlertEvents`)
+- Se agrego el modelo de dominio base para alertas SQL:
+  - `SqlAlertRule`
+  - `SqlAlertState`
+  - `SqlAlertEvent`
+  - enums fuertes para operador, ventana temporal, estado lifecycle y tipo de evento
+- Se agregaron contratos nuevos en `Core` para:
+  - store de reglas
+  - store de estado runtime
+  - store de eventos
+  - catálogo semántico de métricas
+  - query builder seguro
+  - evaluador de alertas
+- Se agregaron casos de uso explícitos para:
+  - upsert de regla
+  - acknowledge manual
+  - clear manual
+- Se implementaron stores SQLite nuevos:
+  - `SqliteSqlAlertRuleStore`
+  - `SqliteSqlAlertStateStore`
+  - `SqliteSqlAlertEventStore`
+- Se implementó una capa de compilación segura a SQL:
+  - `SqlAlertMetricCatalog` apoyado en `DomainPackProvider`
+  - `SqlAlertQueryBuilder`
+  - validación fail-closed contra `AllowedObjects`
+  - parámetros tipados en vez de SQL libre del usuario
+- Se implementó el worker periódico:
+  - `SqlAlertEvaluationWorker`
+  - carga alertas activas
+  - evalúa por frecuencia
+  - aplica cooldown
+  - deduplica por estado `Closed/Open/Acknowledged`
+  - persiste `Triggered`, `Resolved` y `EvaluationFailed`
+- Se integró SignalR reutilizando `AssistantHub`:
+  - evento `SqlAlertEventRaised`
+  - toasts en admin
+  - notificación visible también en `index`
+- Se agregaron endpoints nuevos bajo `api/admin/sql-alerts`:
+  - listar alertas
+  - catálogo por contexto
+  - preview SQL
+  - crear / editar
+  - activar / desactivar
+  - ack
+  - clear
+  - listar eventos
+- Se agregó la nueva tab `SQL Alerts` en admin con:
+  - listado de alertas por contexto activo
+  - formulario estructurado
+  - preview del SQL compilado
+  - historial de eventos
+  - acciones de ack / clear / toggle
+- Se hizo también el cableado de cache busting:
+  - `admin.css`
+  - `admin.js`
+  - `index.js`
+- Pendiente siguiente fase:
+  - endurecer más el soporte multi-dominio en `CurrentShift`
+  - sumar más métricas base además de las industriales iniciales
+  - agregar badge/panel lateral de alertas en el chat
+
+### Actualizacion 2026-04-17 - Reposicionamiento de producto de SQL Alerts
+- Se movió la experiencia principal de `SQL Alerts` hacia `index` para alinearla con el uso operativo diario y con el roadmap de alertas creadas por usuario final.
+- En `index` se agregó:
+  - entry point desde resultado SQL exitoso (`Crear alerta`)
+  - modal compacto de creación estructurada con contexto ya resuelto
+  - banda de alertas del contexto activo
+  - lista compacta de actividad reciente
+  - acciones rápidas para `pausar/reanudar`, `ack` y `clear`
+  - toasts propios en tiempo real por SignalR
+- Se agregaron endpoints nuevos de superficie de usuario final en `api/sql-alerts`, reutilizando la lógica backend ya construida para reglas, eventos, stores, worker y SignalR.
+- `admin` se reposicionó como `Alert Monitor`:
+  - menos lenguaje de flujo primario
+  - más énfasis en gobernanza, auditoría, troubleshooting y observabilidad
+- Se añadió `wwwroot/css/index.css` para aislar el styling de la nueva experiencia de alertas del chat sin convertir `index` en un mini-admin.
+
+### Actualizacion 2026-04-18 - Pulido de SQL Alerts en index
+- Se agregó badge de alertas abiertas en el botón `SQL` del rail lateral para dar visibilidad inmediata a incidentes activos.
+- Se reforzó la separación visual entre:
+  - alertas activas del contexto
+  - actividad reciente de alertas
+- El flujo `Crear alerta` desde resultado SQL ahora llega con mejor ayuda contextual:
+  - resumen corto de la sugerencia detectada
+  - prefill más legible desde la última consulta SQL exitosa
+- Se mantuvo la experiencia compacta y operativa, sin arrastrar la complejidad completa de `admin` al chat principal.
+
+### Actualizacion 2026-04-18 - Modo simple para crear SQL Alerts
+- Se rediseñó el modal de creación de alertas en `index` para que se sienta como una herramienta operativa y no como configuración técnica.
+- Ahora el centro del flujo es un resumen vivo en lenguaje natural que se actualiza conforme el usuario cambia:
+  - indicador
+  - aplicar a / elemento
+  - condición
+  - límite
+  - periodo
+  - frecuencia
+- El primer nivel del formulario quedó reducido a tres preguntas:
+  - qué quieres vigilar
+  - cuándo quieres que te avise
+  - cómo lo revisamos
+- Se movieron a `Opciones avanzadas`:
+  - nombre editable
+  - no repetir aviso por
+  - notas operativas
+  - consulta técnica / preview SQL
+- Se reemplazó copy técnico por lenguaje de negocio:
+  - `Aplicar a`
+  - `Elemento`
+  - `Condición`
+  - `Límite`
+  - `Periodo`
+  - `Revisar cada`
+  - `No repetir aviso por`
+  - `Ver consulta técnica`
+- El nombre de la alerta ahora se autogenera y el CTA principal pasó a `Crear y activar alerta` cuando corresponde.
+### Actualizacion 2026-04-18 - SQL Alerts solo desde resultados SQL validados
+- En `index`, la creación de alertas ya no puede nacer desde cero: solo se habilita cuando existe una última consulta SQL exitosa, con contexto activo y resultado apto para monitoreo.
+- Se endureció la validación frontend de `resultado apto para alerta` para aceptar solo salidas con:
+  - contexto SQL activo
+  - métrica gobernada detectable
+  - datos devueltos
+  - columna numérica clara
+  - volumen razonable y semántica interpretable
+- Se extendió la inferencia de alertas para extraer `dimensionCandidates` desde las filas visibles del resultado.
+- Comportamiento nuevo según resultado:
+  - una entidad clara -> se preselecciona automáticamente
+  - varias entidades claras -> se muestran primero como selector guiado
+  - agregado global -> la alerta se crea a nivel `Todo`
+- El input manual quedó solo como fallback secundario cuando no hay candidatos suficientes o el usuario necesita otro valor.
+- La UX del modal ahora refuerza que la alerta significa “avísame si cambia esto que ya consulté y validé”, manteniendo intactos el payload estructurado, los endpoints existentes y SignalR.
+### Actualizacion 2026-04-18 - Correccion de falsos negativos en elegibilidad de SQL Alerts
+- Se ajustó la heurística de elegibilidad en `index` para aceptar mejor resultados `top N`, rankings y agrupados con:
+  - una columna numérica clara
+  - una columna categórica razonable
+  - tamaño compacto y utilizable para monitoreo
+- `findMatchingColumnName(...)` ahora reconoce mejor aliases reales de números de parte y entidades del dominio, incluyendo variantes como:
+  - `part number`
+  - `part_no`
+  - `n/p`
+  - `np`
+  - `numero de parte`
+  - `itemcode`
+  - `sku`
+- Se agregó fallback para detectar la mejor columna categórica aunque `dimensionKey` no haya sido inferido perfectamente en la primera capa.
+- `extractAlertDimensionCandidates(...)` ya no depende rígidamente de una dimensión perfecta y puede derivar candidatos desde la mejor columna categórica del resultado.
+- Se reforzó el diagnóstico con razones más útiles cuando un resultado sí es alertable, por ejemplo rankings por entidad con métrica clara, sin volver a permitir creación libre desde cero.
+### Actualizacion 2026-04-18 - Cache bust para correcciones de SQL Alerts en index
+- Se actualizó el versionado de `index.js` e `index.css` en `index.html` para evitar que el navegador siga sirviendo una versión cacheada anterior de la heurística de elegibilidad y del flujo de creación de alertas.
+- Esto asegura que los ajustes recientes de `SQL Alerts` en `index` realmente se reflejen al recargar la app.
+### Actualizacion 2026-04-18 - Visibilidad y correccion adicional de elegibilidad en SQL Alerts
+- Se eliminó el corte temprano que marcaba falsos negativos cuando aún no se detectaba `metricKey`, permitiendo que la elegibilidad use primero la forma real del resultado (ranking, agrupación, KPI global).
+- Se amplió la inferencia de métricas para dominios tipo Northwind con señales como:
+  - `sales` / `ventas`
+  - `net sales`
+  - `units sold`
+  - `orders` / `pedidos`
+- En el header del resultado SQL, la acción de alerta ahora puede mostrarse deshabilitada con motivo cuando el resultado tiene datos pero aún no es apto, para hacer visible el diagnóstico directamente en la UI.
+### Actualizacion 2026-04-18 - Reubicacion visible del CTA de SQL Alerts en index
+- Se movió el CTA principal `Crear alerta` al panel `Alertas del contexto activo`, que es donde pertenece dentro del flujo operativo.
+- Se eliminó la dependencia visual de la zona de resultado/consola para descubrir la acción de alertas.
+- El panel de alertas ahora concentra:
+  - estado del contexto
+  - motivo de elegibilidad
+  - CTA principal visible
+- Se reforzó el styling del CTA para que tenga más contraste y jerarquía visual dentro del panel de alertas.
+- Se actualizó el versionado de `index.js` e `index.css` para forzar que la nueva ubicación del CTA se refleje al recargar.
+### Actualizacion 2026-04-18 - Simplificacion fuerte del onboarding en admin
+- Se simplificó el onboarding para que el flujo base se lea como wizard real y no como dashboard de bloques superpuestos.
+- Se eliminó del flujo visible el resumen redundante de `estado rápido` inyectado debajo del stepper.
+- El bloque superior de estado quedó reducido a una lectura compacta:
+  - paso actual
+  - acción obligatoria
+  - chips de progreso/contexto
+- Se escondió el footer de acciones secundarias hasta que el flujo base realmente esté completado, evitando que export/import y acciones accesorias compitan desde el principio.
+- El `Domain Pack JSON` salió del foco principal del paso 5 y pasó a una sección colapsable de herramientas posteriores.
+- Se compactó el stepper y se redujo el peso visual del hero superior para que el usuario entre más rápido al paso activo.
+- Se mantuvo la lógica base del wizard y sus CTAs por paso, pero con menos redundancia visual y menos ruido simultáneo.
+- Se actualizó el versionado de `admin.css` y `admin.js` para forzar que el navegador cargue esta limpieza del onboarding.
+- 2026-04-18: El onboarding admin paso a wizard secuencial real de un paso a la vez. Ahora el stepper y los botones Anterior/Siguiente controlan un panel activo, los pasos completados quedan colapsados por defecto y el flujo avanza automaticamente si el usuario estaba en el paso vigente.
+- 2026-04-18: Se corrigio la visibilidad del stepper del onboarding admin, se limpiaron textos rotos de encoding dentro del flujo visible y el bootstrap ahora hace fallback al paso 1 si falla la restauracion del contexto en vez de dejar un error global engañoso.
+- 2026-04-18: Se consolido una capa final de estilos del onboarding admin para que el wizard tenga una sola verdad visual. Se reforzo el stepper, se mejoro la legibilidad de los step chips, se colapsan los pasos no activos y se eliminaron conflictos visuales entre reglas viejas y nuevas.
+
+- 2026-04-18: onboarding admin pulido extra. Se eliminó el bloque fantasma de 'Estado rápido', se reforzó el sidebar de workspaces con fallback desde runtime contexts, se hizo visible el estado vacío/fallback del bootstrap y se limpiaron más cadenas mojibake visibles del flujo de onboarding.

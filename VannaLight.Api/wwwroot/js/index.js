@@ -4,7 +4,7 @@
         const MODES = {
             sql: { key: 'sql', modeVal: 0, label: 'SQL', sub: 'datos', title: 'MODO DATOS — SQL', desc: 'Consultas sobre bases de datos estructuradas KPI', ph: '¿Cuáles son los 5 números de parte con más scrap?', badge: 'DATOS · SQL', icon: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>' },
             docs: { key: 'docs', modeVal: 1, label: 'PDF', sub: 'documentos', title: 'MODO DOCUMENTOS — PDF', desc: 'Work Instructions y procedimientos de planta', ph: '¿Cuál es el empaque del N/P 421084-0006?', badge: 'DOCUMENTOS · PDF', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' },
-            pred: { key: 'pred', modeVal: 2, label: 'ML', sub: 'predicción', title: 'MODO PREDICCIÓN — ML.NET', desc: 'Pronósticos de scrap a nivel turno', ph: 'Ej.: pronóstico de scrap del N/P "ABC123" para el cierre de este turno', badge: 'PREDICCIÓN · ML', icon: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>' }
+            pred: { key: 'pred', modeVal: 2, label: 'ML', sub: 'predicción', title: 'MODO PREDICCIÓN — ML.NET', desc: 'Pronósticos de series de negocio por entidad y horizonte', ph: 'Ej.: pronóstico de ventas del producto "SKU-001" para la próxima semana', badge: 'PREDICCIÓN · ML', icon: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>' }
         };
 
         const DEMO_PROMPTS = {
@@ -43,10 +43,20 @@
         const RUNTIME_CONTEXT_STORAGE_KEY = 'vannalight.runtimeContext';
         const QUERY_HISTORY_STORAGE_KEY = 'vannalight.queryHistory';
         const HISTORY_SIDEBAR_COLLAPSED_KEY = 'vannalight.historySidebarCollapsed';
+        const TTS_ENABLED_STORAGE_KEY = 'vannalight.ttsEnabled';
+        const LOG_PANEL_COLLAPSED_KEY = 'vannalight.logCollapsed';
         const QUERY_HISTORY_LIMIT = 10;
         let queryHistory = [];
         let activeHistoryEntryId = '';
         let previewHistoryEntryId = '';
+        let ttsEnabled = false;
+        let userSqlAlertCatalog = null;
+        let userSqlAlerts = [];
+        let userSqlAlertEvents = [];
+        let lastSqlPayload = null;
+        let lastSqlAlertSuggestion = null;
+        let lastSqlAlertEligibility = null;
+        let indexSqlAlertNameTouched = false;
 
         // datos del último chart para poder redibujar al cambiar tipo
         let lastChartModel = null;   // { labels, values, labelColumn, valueColumn }
@@ -71,9 +81,43 @@
             logLine(`Modo → ${c.title}`, 'sys');
             renderQueryHistory();
             renderDemoPrompts();
+            renderModeHelper();
+            renderUserSqlAlerts();
             hideResult();
             resetFeedbackPanel();
             updateRuntimeContextState();
+        }
+
+        function renderModeHelper() {
+            const helper = document.getElementById('modeHelper');
+            const copy = document.getElementById('modeHelperCopy');
+            if (!helper || !copy) return;
+
+            if (currentMode !== 'pred') {
+                helper.classList.remove('is-visible');
+                return;
+            }
+
+            helper.classList.add('is-visible');
+            copy.textContent = 'ML funciona mejor si defines entidad y horizonte. Usa una plantilla y ajusta los valores entre comillas.';
+        }
+
+        function applyModeHelperTemplate(template) {
+            const txt = document.getElementById('txtQuestion');
+            if (!txt) return;
+
+            const templates = {
+                producto: '¿Cuál es el pronóstico de unidades del producto "SKU-001" para la próxima semana?',
+                cliente: '¿Cuál es el pronóstico de órdenes del cliente "ALFKI" para mañana?',
+                pais: '¿Cómo viene la proyección de ventas para el país "USA" el próximo mes?',
+                manana: '¿Cuál es el pronóstico para mañana de la entidad "ABC123"?',
+                semana: '¿Cuál es el pronóstico semanal para la entidad "ABC123"?'
+            };
+
+            const nextValue = templates[template] || templates.producto;
+            txt.value = nextValue;
+            txt.focus();
+            txt.setSelectionRange(txt.value.length, txt.value.length);
         }
 
         function getTopContextPrompts(limit = 3) {
@@ -230,21 +274,11 @@
         }
 
         function renderRuntimeContextHero(message) {
-            const hero = document.getElementById('runtimeContextHero');
-            const value = document.getElementById('runtimeContextHeroValue');
-            const meta = document.getElementById('runtimeContextHeroMeta');
-            if (!hero || !value || !meta) return;
+            return;
+        }
 
-            if (!currentRuntimeContext) {
-                hero.classList.add('is-empty');
-                value.textContent = 'Sin contexto seleccionado';
-                meta.textContent = message || 'Selecciona una base antes de consultar.';
-                return;
-            }
-
-            hero.classList.remove('is-empty');
-            value.textContent = getContextHeroMeta(currentRuntimeContext);
-            meta.textContent = message || `Etiqueta de contexto: ${getContextDisplayLabel(currentRuntimeContext)}`;
+        function setRuntimeContextErrorState(isError) {
+            document.getElementById('runtimeContextSelect')?.classList.toggle('is-error', !!isError);
         }
 
         function updateRuntimeContextState(message) {
@@ -253,7 +287,6 @@
 
             if (message) {
                 state.textContent = message;
-                renderRuntimeContextHero(message);
                 return;
             }
 
@@ -261,16 +294,15 @@
                 state.textContent = currentMode === 'sql'
                     ? 'Selecciona una base antes de consultar.'
                     : 'El contexto seleccionado se reutiliza cuando aplique.';
-                renderRuntimeContextHero();
                 return;
             }
 
-            state.textContent = `Activo: ${getContextDisplayLabel(currentRuntimeContext)}`;
-            renderRuntimeContextHero();
+            state.textContent = `Activo: ${getContextDisplayLabel(currentRuntimeContext)} · ${getContextHeroMeta(currentRuntimeContext)}`;
         }
 
         function applyRuntimeContext(item, shouldLog = true) {
             currentRuntimeContext = item || null;
+            setRuntimeContextErrorState(false);
 
             if (currentRuntimeContext) {
                 safeStorageSet(RUNTIME_CONTEXT_STORAGE_KEY, getContextStorageKey(currentRuntimeContext));
@@ -294,6 +326,7 @@
                 option.textContent = 'No hay contextos disponibles';
                 select.appendChild(option);
                 select.disabled = true;
+                setRuntimeContextErrorState(false);
                 applyRuntimeContext(null, false);
                 updateRuntimeContextState('No se encontraron contextos activos.');
                 return;
@@ -307,6 +340,7 @@
             });
 
             select.disabled = false;
+            setRuntimeContextErrorState(false);
 
             const savedKey = safeStorageGet(RUNTIME_CONTEXT_STORAGE_KEY);
             const initialContext = runtimeContexts.find(item => getContextStorageKey(item) === savedKey)
@@ -329,6 +363,7 @@
 
             const selected = runtimeContexts.find(item => getContextStorageKey(item) === select.value) || null;
             applyRuntimeContext(selected, true);
+            loadUserSqlAlerts();
         }
 
         async function loadRuntimeContexts() {
@@ -341,17 +376,236 @@
 
                 runtimeContexts = await response.json();
                 renderRuntimeContextOptions();
+                await loadUserSqlAlerts();
             } catch (error) {
                 runtimeContexts = [];
                 renderRuntimeContextOptions();
                 updateRuntimeContextState('No se pudieron cargar los contextos.');
                 logLine(`Error cargando contextos: ${error.message}`, 'err');
+                renderUserSqlAlerts();
             }
         }
 
         async function reloadRuntimeContexts() {
             await loadRuntimeContexts();
             logLine('Lista de contextos actualizada.', 'sys');
+        }
+
+        function getCurrentSqlAlertContext() {
+            if (!currentRuntimeContext) return null;
+            return {
+                tenantKey: currentRuntimeContext.tenantKey || '',
+                tenantDisplayName: currentRuntimeContext.tenantDisplayName || currentRuntimeContext.tenantKey || '',
+                domain: currentRuntimeContext.domain || '',
+                connectionName: currentRuntimeContext.connectionName || ''
+            };
+        }
+
+        function getCurrentSqlAlertContextQuery() {
+            const context = getCurrentSqlAlertContext();
+            if (!context?.tenantKey || !context?.domain || !context?.connectionName) return '';
+            return `tenantKey=${encodeURIComponent(context.tenantKey)}&domain=${encodeURIComponent(context.domain)}&connectionName=${encodeURIComponent(context.connectionName)}`;
+        }
+
+        function canCreateSqlAlertFromCurrentResult() {
+            return currentMode === 'sql'
+                && !!currentRuntimeContext
+                && !!lastSqlPayload
+                && !!lastSqlAlertEligibility?.isAlertable;
+        }
+
+        async function safeJson(response) {
+            try {
+                return await response.json();
+            } catch {
+                return null;
+            }
+        }
+
+        function showSqlAlertToast(message, kind = 'warning', title = 'SQL Alert') {
+            const host = document.getElementById('sqlAlertToastHost');
+            if (!host) return;
+
+            const toast = document.createElement('div');
+            toast.className = `sql-alert-toast ${kind === 'ok' ? 'is-ok' : 'is-warning'}`;
+            toast.innerHTML = `
+                <div class="sql-alert-toast-kicker">${escapeHtml(title)}</div>
+                <div class="sql-alert-toast-message">${escapeHtml(message)}</div>`;
+            host.appendChild(toast);
+            window.setTimeout(() => toast.remove(), 4600);
+        }
+
+        function mapAlertStatusClass(rule) {
+            const runtimeState = String(rule.runtimeState || rule.RuntimeState || 'Closed').toLowerCase();
+            if (runtimeState === 'open') return 'is-open';
+            if (runtimeState === 'acknowledged') return 'is-ack';
+            return 'is-closed';
+        }
+
+        function buildAlertSummary(rule) {
+            const metricKey = rule.metricKey || rule.MetricKey || 'metric';
+            const operator = rule.comparisonOperatorLabel || rule.ComparisonOperatorLabel || '>';
+            const threshold = rule.threshold ?? rule.Threshold ?? 0;
+            const dimensionValue = rule.dimensionValue || rule.DimensionValue || '';
+            const timeScope = rule.timeScopeLabel || rule.TimeScopeLabel || '';
+            const dimensionText = dimensionValue ? ` · ${dimensionValue}` : '';
+            return `${metricKey} ${operator} ${threshold}${dimensionText} · ${timeScope}`;
+        }
+
+        function renderUserSqlAlerts() {
+            const strip = document.getElementById('userAlertsStrip');
+            const list = document.getElementById('userAlertsList');
+            const eventsList = document.getElementById('userAlertEventsList');
+            const count = document.getElementById('userAlertsCount');
+            const subtitle = document.getElementById('userAlertsSubtitle');
+            const createHint = document.getElementById('userAlertsCreateHint');
+            const createButton = document.getElementById('btnCreateAlertFromResult');
+            const sqlBadge = document.getElementById('sbSqlAlertBadge');
+            const eventsMeta = document.getElementById('userAlertEventsMeta');
+            if (!strip || !list || !eventsList || !count || !subtitle) return;
+
+            const context = getCurrentSqlAlertContext();
+            const isSqlContext = currentMode === 'sql' && !!context?.tenantKey;
+            strip.style.display = isSqlContext ? 'flex' : 'none';
+
+            if (!isSqlContext) {
+                if (sqlBadge) sqlBadge.style.display = 'none';
+                if (createButton) createButton.style.display = 'none';
+                return;
+            }
+
+            if (!context) {
+                count.textContent = '0';
+                subtitle.textContent = 'Selecciona un contexto SQL para trabajar con alertas operativas.';
+                if (createHint) createHint.textContent = 'Primero selecciona un contexto SQL.';
+                if (createButton) {
+                    createButton.style.display = 'inline-flex';
+                    createButton.disabled = true;
+                    createButton.textContent = 'CREAR ALERTA';
+                    createButton.title = 'Primero selecciona un contexto SQL.';
+                }
+                list.innerHTML = '<div class="user-alert-empty">Selecciona un contexto SQL para ver o crear alertas operativas.</div>';
+                eventsList.innerHTML = '<div class="user-alert-empty">Aquí aparecerán disparos, resoluciones y acknowledges del contexto activo.</div>';
+                return;
+            }
+
+            count.textContent = String(userSqlAlerts.length || 0);
+            const openCount = userSqlAlerts.filter(item => String(item.runtimeState || item.RuntimeState || '').toLowerCase() === 'open').length;
+            if (sqlBadge) {
+                if (openCount > 0) {
+                    sqlBadge.textContent = String(openCount);
+                    sqlBadge.style.display = 'inline-flex';
+                } else {
+                    sqlBadge.style.display = 'none';
+                }
+            }
+            subtitle.textContent = `Monitorea ${context.tenantDisplayName} / ${context.domain} sin salir del flujo operativo.`;
+            if (createHint) {
+                createHint.textContent = canCreateSqlAlertFromCurrentResult()
+                    ? 'Ya puedes crear una alerta desde el último resultado SQL validado.'
+                    : (lastSqlAlertEligibility?.reason || 'La creación nace desde un resultado SQL válido y usable.');
+            }
+            if (createButton) {
+                createButton.style.display = 'inline-flex';
+                createButton.disabled = !canCreateSqlAlertFromCurrentResult();
+                createButton.textContent = canCreateSqlAlertFromCurrentResult() ? 'CREAR ALERTA' : 'ALERTA NO DISPONIBLE';
+                createButton.title = canCreateSqlAlertFromCurrentResult()
+                    ? 'Crear una alerta a partir del último resultado SQL validado.'
+                    : (lastSqlAlertEligibility?.reason || 'La creación nace desde un resultado SQL válido y usable.');
+            }
+            if (eventsMeta) {
+                eventsMeta.textContent = userSqlAlertEvents.length
+                    ? `${userSqlAlertEvents.length} eventos recientes en este contexto`
+                    : 'Sin eventos recientes en este contexto';
+            }
+
+            if (!userSqlAlerts.length) {
+                list.innerHTML = '<div class="user-alert-empty">No hay alertas activas todavía en este contexto. Cuando valides un resultado SQL apto, podrás convertirlo en alerta desde ese mismo resultado.</div>';
+            } else {
+                list.innerHTML = userSqlAlerts.slice(0, 4).map(rule => {
+                    const id = Number(rule.id || rule.Id || 0);
+                    const statusClass = mapAlertStatusClass(rule);
+                    const active = !!(rule.isActive || rule.IsActive);
+                    const runtimeState = String(rule.runtimeState || rule.RuntimeState || 'Closed');
+                    const lastObserved = rule.lastObservedValue ?? rule.LastObservedValue;
+                    const lastTriggered = rule.lastTriggeredUtc || rule.LastTriggeredUtc || rule.lastAcknowledgedUtc || rule.LastAcknowledgedUtc || '';
+
+                    return `
+                        <div class="user-alert-card ${statusClass} ${active ? '' : 'is-inactive'}">
+                            <div class="user-alert-card-top">
+                                <div class="user-alert-card-name">${escapeHtml(rule.displayName || rule.DisplayName || 'Alerta SQL')}</div>
+                                <span class="user-alert-status ${statusClass}">${escapeHtml(runtimeState)}</span>
+                            </div>
+                            <div class="user-alert-card-summary">${escapeHtml(buildAlertSummary(rule))}</div>
+                            <div class="user-alert-card-meta">${active ? 'Activa' : 'Pausada'}${lastObserved !== null && lastObserved !== undefined ? ` · observado ${escapeHtml(fmtVal(lastObserved))}` : ''}</div>
+                            <div class="user-alert-card-time">${lastTriggered ? `Último cambio: ${escapeHtml(lastTriggered)}` : 'Sin eventos recientes'}</div>
+                            <div class="user-alert-actions">
+                                <button class="user-alert-mini-btn" type="button" onclick="toggleUserSqlAlert(${id}, ${active ? 'false' : 'true'})">${active ? 'PAUSAR' : 'REANUDAR'}</button>
+                                <button class="user-alert-mini-btn" type="button" onclick="ackUserSqlAlert(${id})">ACK</button>
+                                <button class="user-alert-mini-btn" type="button" onclick="clearUserSqlAlert(${id})">CLEAR</button>
+                            </div>
+                        </div>`;
+                }).join('');
+            }
+
+            if (!userSqlAlertEvents.length) {
+                eventsList.innerHTML = '<div class="user-alert-empty">Aquí aparecerán disparos, resoluciones y acknowledges del contexto activo.</div>';
+            } else {
+                eventsList.innerHTML = userSqlAlertEvents.slice(0, 3).map(item => {
+                    const eventType = item.eventType || item.EventType || 'Evento';
+                    const message = item.message || item.Message || '';
+                    const observed = item.observedValue ?? item.ObservedValue;
+                    return `
+                        <div class="user-alert-event-card">
+                            <div class="user-alert-card-top">
+                                <div class="user-alert-card-name">${escapeHtml(String(eventType))}</div>
+                                <span class="user-alert-status is-closed">${escapeHtml(item.eventUtc || item.EventUtc || '')}</span>
+                            </div>
+                            <div class="user-alert-card-summary">${escapeHtml(message)}</div>
+                            <div class="user-alert-card-meta">${observed !== null && observed !== undefined ? `Observado ${escapeHtml(fmtVal(observed))}` : 'Sin valor observado'}</div>
+                        </div>`;
+                }).join('');
+            }
+        }
+
+        async function loadUserSqlAlerts() {
+            const context = getCurrentSqlAlertContext();
+            if (!context?.tenantKey || !context?.domain || !context?.connectionName) {
+                userSqlAlertCatalog = null;
+                userSqlAlerts = [];
+                userSqlAlertEvents = [];
+                renderUserSqlAlerts();
+                return;
+            }
+
+            try {
+                const query = getCurrentSqlAlertContextQuery();
+                const [catalogRes, rulesRes, eventsRes] = await Promise.all([
+                    fetch(`/api/sql-alerts/catalog?domain=${encodeURIComponent(context.domain)}&connectionName=${encodeURIComponent(context.connectionName)}`),
+                    fetch(`/api/sql-alerts?${query}`),
+                    fetch(`/api/sql-alerts/events?${query}&limit=12`)
+                ]);
+
+                const [catalogBody, rulesBody, eventsBody] = await Promise.all([
+                    safeJson(catalogRes),
+                    safeJson(rulesRes),
+                    safeJson(eventsRes)
+                ]);
+
+                if (!catalogRes.ok) throw new Error(catalogBody?.Error || catalogBody?.error || `HTTP ${catalogRes.status}`);
+                if (!rulesRes.ok) throw new Error(rulesBody?.Error || rulesBody?.error || `HTTP ${rulesRes.status}`);
+                if (!eventsRes.ok) throw new Error(eventsBody?.Error || eventsBody?.error || `HTTP ${eventsRes.status}`);
+
+                userSqlAlertCatalog = catalogBody || null;
+                userSqlAlerts = Array.isArray(rulesBody) ? rulesBody : [];
+                userSqlAlertEvents = Array.isArray(eventsBody) ? eventsBody : [];
+                renderUserSqlAlerts();
+            } catch (error) {
+                logLine(`Error cargando alertas SQL del contexto: ${error.message}`, 'err');
+                userSqlAlerts = [];
+                userSqlAlertEvents = [];
+                renderUserSqlAlerts();
+            }
         }
 
         function getModeLabel(modeKey) {
@@ -488,19 +742,19 @@
                 const viewBtn = document.createElement('button');
                 viewBtn.type = 'button';
                 viewBtn.className = 'history-action-btn';
-                viewBtn.textContent = 'VER';
+                viewBtn.textContent = 'ABRIR';
                 viewBtn.onclick = () => previewHistoryEntry(entry.id);
 
                 const useBtn = document.createElement('button');
                 useBtn.type = 'button';
                 useBtn.className = 'history-action-btn';
-                useBtn.textContent = 'USAR COMO BASE';
+                useBtn.textContent = 'USAR';
                 useBtn.onclick = () => useHistoryEntryAsBase(entry.id);
 
                 const rerunBtn = document.createElement('button');
                 rerunBtn.type = 'button';
-                rerunBtn.className = 'history-action-btn is-wide';
-                rerunBtn.textContent = 'RE-EJECUTAR';
+                rerunBtn.className = 'history-action-btn';
+                rerunBtn.textContent = 'REPETIR';
                 rerunBtn.onclick = () => rerunHistoryEntry(entry.id);
 
                 actions.appendChild(viewBtn);
@@ -702,6 +956,36 @@
         const connection = new signalR.HubConnectionBuilder()
             .withUrl('/hub/assistant').withAutomaticReconnect().build();
 
+        connection.onreconnecting(() => {
+            document.getElementById('statusText').textContent = 'Reconectando...';
+            const dot = document.getElementById('statusDot');
+            if (dot) {
+                dot.style.background = '#fbbf24';
+                dot.style.boxShadow = '0 0 7px #fbbf24';
+            }
+            logLine('Reconectando con el servidor...', 'sys');
+        });
+
+        connection.onreconnected(() => {
+            document.getElementById('statusText').textContent = 'Vanna Neural Active';
+            const dot = document.getElementById('statusDot');
+            if (dot) {
+                dot.style.background = '#4ade80';
+                dot.style.boxShadow = '0 0 7px #4ade80';
+            }
+            logLine('Conexion restablecida.', 'ok');
+            loadUserSqlAlerts();
+        });
+
+        connection.onclose(() => {
+            document.getElementById('statusText').textContent = 'Conexion inactiva';
+            const dot = document.getElementById('statusDot');
+            if (dot) {
+                dot.style.background = '#f87171';
+                dot.style.boxShadow = '0 0 7px #f87171';
+            }
+        });
+
         connection.on('JobStatusUpdated', d => {
             logLine(`⏳ ${d.status}`, 'sys');
             if (String(d?.status || '').toLowerCase().includes('analy')) {
@@ -739,13 +1023,7 @@
                 rowCount: rows.length,
                 error: ''
             });
-            setQueryStatus(
-                'success',
-                'Consulta completada',
-                rows.length
-                    ? `Se recuperaron ${rows.length} filas en ${getContextDisplayLabel(currentRuntimeContext)}.`
-                    : `La consulta termino correctamente en ${getContextDisplayLabel(currentRuntimeContext)}.`
-            );
+            clearQueryStatus();
 
             if (data?.IsPredictionRequest === true || data?.type === 'prediction') {
                 renderPred(data);
@@ -758,11 +1036,29 @@
             prepareFeedbackPanel(payload?.JobId || payload?.jobId);
         });
 
+        connection.on('SqlAlertEventRaised', payload => {
+            const message = payload?.message || payload?.Message || 'Se disparó una alerta SQL.';
+            const eventType = String(payload?.eventType || payload?.EventType || '').toLowerCase();
+            logLine(`⚠ ${message}`, eventType === 'resolved' ? 'ok' : 'warn');
+            setQueryStatus(
+                eventType === 'resolved' ? 'info' : 'warning',
+                eventType === 'resolved' ? 'Alerta resuelta' : 'SQL Alert',
+                message
+            );
+            showSqlAlertToast(message, eventType === 'resolved' ? 'ok' : 'warning', eventType === 'resolved' ? 'Alerta resuelta' : 'SQL Alert');
+            loadUserSqlAlerts();
+        });
+
         async function startConnection() {
             try {
                 await connection.start();
                 myConnectionId = connection.connectionId;
                 document.getElementById('statusText').textContent = 'Vanna Neural Active';
+                const dot = document.getElementById('statusDot');
+                if (dot) {
+                    dot.style.background = '#4ade80';
+                    dot.style.boxShadow = '0 0 7px #4ade80';
+                }
                 logLine('Sistema listo.', 'ok');
                 await loadRuntimeContexts();
             } catch { setTimeout(startConnection, 5000); }
@@ -778,6 +1074,7 @@
             if (!q || !myConnectionId) return;
             if (currentMode === 'sql' && !currentRuntimeContext) {
                 logLine('Selecciona una base activa antes de consultar.', 'err');
+                setRuntimeContextErrorState(true);
                 updateRuntimeContextState('Selecciona una base antes de consultar.');
                 setQueryStatus('warning', 'Selecciona una base activa', 'Necesitamos un contexto SQL activo antes de enviar la consulta.');
                 return;
@@ -826,7 +1123,16 @@
 
         function handleKeyPress(e) { if (e.key === 'Enter') sendQuestion(); }
         function resetUI() { document.getElementById('loadingIcon').style.display = 'none'; document.getElementById('btnSend').disabled = false; }
-        function hideResult() { document.getElementById('resultArea').style.display = 'none'; }
+        function hideResult() {
+            document.getElementById('resultArea').style.display = 'none';
+            document.body.classList.remove('has-result');
+            const headerActions = document.getElementById('resultHeaderActions');
+            if (headerActions) headerActions.style.display = 'none';
+            lastSqlPayload = null;
+            lastSqlAlertSuggestion = null;
+            lastSqlAlertEligibility = null;
+            renderUserSqlAlerts();
+        }
 
         function resetFeedbackPanel() {
             lastCompletedJobId = '';
@@ -913,11 +1219,476 @@
             }
         }
 
+        function setIndexSqlAlertPreviewBanner(kind = '', message = '') {
+            const banner = document.getElementById('idxSqlAlertPreviewBanner');
+            if (!banner) return;
+            banner.className = 'sql-alert-preview-banner';
+            banner.textContent = '';
+            if (!message) return;
+            banner.classList.add('is-visible');
+            banner.classList.add(kind === 'err' ? 'is-err' : 'is-ok');
+            banner.textContent = message;
+        }
+
+        function getIndexSqlAlertDimensionLabel(value) {
+            const lookup = {
+                '': 'Todo',
+                part: 'Un número de parte',
+                product: 'Un producto',
+                customer: 'Un cliente',
+                ship_country: 'Un país',
+                country: 'Un país',
+                press: 'Una prensa',
+                department: 'Un departamento',
+                shift: 'Un turno',
+                category: 'Una categoría',
+                employee: 'Un empleado'
+            };
+            return lookup[String(value || '').toLowerCase()] || 'Un elemento';
+        }
+
+        function getIndexSqlAlertDimensionValueLabel(value) {
+            const lookup = {
+                '': 'Elemento',
+                part: 'Número de parte',
+                product: 'Producto',
+                customer: 'Cliente',
+                ship_country: 'País',
+                country: 'País',
+                press: 'Prensa',
+                department: 'Departamento',
+                shift: 'Turno',
+                category: 'Categoría',
+                employee: 'Empleado'
+            };
+            return lookup[String(value || '').toLowerCase()] || 'Elemento';
+        }
+
+        function getIndexSqlAlertOperatorLabel(value) {
+            const lookup = {
+                '1': 'supera',
+                '2': 'llega o supera',
+                '3': 'cae por debajo de',
+                '4': 'llega o cae por debajo de',
+                '5': 'llega a',
+                '6': 'cambia respecto a'
+            };
+            return lookup[String(value || '1')] || 'supera';
+        }
+
+        function getIndexSqlAlertPeriodLabel(value) {
+            const lookup = {
+                '1': 'hoy',
+                '2': 'en las últimas 24 horas',
+                '3': 'en el turno actual',
+                '4': 'en la semana actual',
+                '5': 'en el mes actual'
+            };
+            return lookup[String(value || '1')] || 'hoy';
+        }
+
+        function getSelectedOptionText(id) {
+            const select = document.getElementById(id);
+            if (!select) return '';
+            const option = select.options[select.selectedIndex];
+            return option ? option.textContent.trim() : '';
+        }
+
+        function buildAutoIndexSqlAlertName() {
+            const metricLabel = getSelectedOptionText('idxSqlAlertMetricKey') || 'Indicador';
+            const applyToKey = document.getElementById('idxSqlAlertDimensionKey')?.value || '';
+            const candidateSelect = document.getElementById('idxSqlAlertDimensionCandidate');
+            const candidateValue = candidateSelect && candidateSelect.style.display !== 'none'
+                ? candidateSelect.value.trim()
+                : '';
+            const elementLabel = candidateValue || document.getElementById('idxSqlAlertDimensionValue')?.value.trim() || '';
+            const periodLabel = getSelectedOptionText('idxSqlAlertTimeScope') || 'Hoy';
+            const threshold = document.getElementById('idxSqlAlertThreshold')?.value || '0';
+            const operatorLabel = getIndexSqlAlertOperatorLabel(document.getElementById('idxSqlAlertOperator')?.value || '1');
+            const shortOperator = operatorLabel.includes('debajo') ? '<' : operatorLabel.includes('llega a') ? '=' : '>';
+            const entityText = applyToKey && elementLabel ? ` · ${elementLabel}` : '';
+            return `${metricLabel}${entityText} · ${periodLabel} ${shortOperator} ${threshold}`;
+        }
+
+        function syncIndexSqlAlertEntityPicker(suggestion = null) {
+            const applyToKey = document.getElementById('idxSqlAlertDimensionKey')?.value || '';
+            const candidateSelect = document.getElementById('idxSqlAlertDimensionCandidate');
+            const manualInput = document.getElementById('idxSqlAlertDimensionValue');
+            const manualToggle = document.getElementById('idxSqlAlertManualToggle');
+            const picker = document.getElementById('idxSqlAlertEntityPicker');
+            const hint = document.getElementById('idxSqlAlertEntityHint');
+            if (!candidateSelect || !manualInput || !manualToggle || !picker) return;
+
+            const sourceSuggestion = suggestion || lastSqlAlertSuggestion || {};
+            const suggestionApplyTo = sourceSuggestion.dimensionKey || '';
+            const candidates = applyToKey && applyToKey === suggestionApplyTo
+                ? (Array.isArray(sourceSuggestion.dimensionCandidates) ? sourceSuggestion.dimensionCandidates : [])
+                : [];
+            const uniqueCandidates = Array.from(new Set(candidates
+                .map(item => String(item || '').trim())
+                .filter(Boolean)));
+            const currentManualValue = manualInput.value.trim();
+            const currentCandidateValue = candidateSelect.value.trim();
+
+            picker.classList.toggle('is-guided', !!applyToKey && uniqueCandidates.length > 1);
+
+            if (!applyToKey) {
+                candidateSelect.innerHTML = '';
+                candidateSelect.style.display = 'none';
+                manualToggle.style.display = 'none';
+                manualInput.style.display = 'block';
+                manualInput.disabled = true;
+                manualInput.value = '';
+                if (hint) hint.textContent = 'Esta alerta vigilará el indicador a nivel global dentro del contexto activo.';
+                return;
+            }
+
+            manualInput.disabled = false;
+
+            if (!uniqueCandidates.length) {
+                candidateSelect.innerHTML = '';
+                candidateSelect.style.display = 'none';
+                manualToggle.style.display = 'none';
+                manualInput.style.display = 'block';
+                if (hint) hint.textContent = 'No detectamos elementos claros en el resultado. Puedes escribir uno manualmente como fallback.';
+                return;
+            }
+
+            if (uniqueCandidates.length === 1) {
+                manualInput.value = currentManualValue || uniqueCandidates[0];
+                candidateSelect.innerHTML = '';
+                candidateSelect.style.display = 'none';
+                manualToggle.style.display = 'none';
+                manualInput.style.display = 'block';
+                if (hint) hint.textContent = 'Detectamos un único elemento claro en el resultado y ya lo dejamos preseleccionado.';
+                return;
+            }
+
+            candidateSelect.innerHTML = ['<option value="">Selecciona un elemento detectado en el resultado</option>']
+                .concat(uniqueCandidates.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`))
+                .join('');
+            candidateSelect.style.display = 'block';
+            manualToggle.style.display = 'inline-flex';
+            const preferredValue = currentCandidateValue || currentManualValue || uniqueCandidates[0];
+            candidateSelect.value = uniqueCandidates.includes(preferredValue) ? preferredValue : '';
+            manualInput.style.display = currentManualValue && !uniqueCandidates.includes(currentManualValue) ? 'block' : 'none';
+            if (manualInput.style.display === 'none') {
+                manualInput.value = '';
+            }
+            if (hint) hint.textContent = 'Usa primero los elementos detectados en el resultado. Solo si hace falta, escribe otro manualmente.';
+        }
+
+        function toggleIndexSqlAlertManualValue() {
+            const candidateSelect = document.getElementById('idxSqlAlertDimensionCandidate');
+            const manualInput = document.getElementById('idxSqlAlertDimensionValue');
+            if (!candidateSelect || !manualInput) return;
+            const nextVisible = manualInput.style.display === 'none';
+            manualInput.style.display = nextVisible ? 'block' : 'none';
+            if (!nextVisible) {
+                manualInput.value = '';
+            } else {
+                manualInput.focus();
+            }
+            updateIndexSqlAlertSummary();
+        }
+
+        function updateIndexSqlAlertSummary() {
+            const metricLabel = getSelectedOptionText('idxSqlAlertMetricKey') || 'este indicador';
+            const applyToKey = document.getElementById('idxSqlAlertDimensionKey')?.value || '';
+            const elementInput = document.getElementById('idxSqlAlertDimensionValue');
+            const candidateSelect = document.getElementById('idxSqlAlertDimensionCandidate');
+            const candidateValue = candidateSelect && candidateSelect.style.display !== 'none'
+                ? candidateSelect.value.trim()
+                : '';
+            const elementValue = candidateValue || elementInput?.value.trim() || '';
+            const operatorLabel = getIndexSqlAlertOperatorLabel(document.getElementById('idxSqlAlertOperator')?.value || '1');
+            const threshold = document.getElementById('idxSqlAlertThreshold')?.value || '0';
+            const periodLabel = getIndexSqlAlertPeriodLabel(document.getElementById('idxSqlAlertTimeScope')?.value || '1');
+            const everyMinutes = document.getElementById('idxSqlAlertFrequency')?.value || '5';
+            const summaryNode = document.getElementById('idxSqlAlertSummaryText');
+            const dimensionLabelNode = document.getElementById('idxSqlAlertDimensionValueLabel');
+            const saveBtn = document.getElementById('idxSqlAlertSaveBtn');
+
+            if (dimensionLabelNode) {
+                dimensionLabelNode.textContent = getIndexSqlAlertDimensionValueLabel(applyToKey);
+            }
+            if (elementInput) {
+                const contextualLabel = getIndexSqlAlertDimensionValueLabel(applyToKey);
+                elementInput.disabled = !applyToKey;
+                elementInput.placeholder = applyToKey ? `${contextualLabel} a vigilar` : 'Todo el contexto';
+                if (!applyToKey) {
+                    elementInput.value = '';
+                }
+            }
+
+            syncIndexSqlAlertEntityPicker();
+
+            const scopeText = applyToKey && elementValue
+                ? `${metricLabel} de ${elementValue}`
+                : metricLabel;
+            const sentence = `Te avisaremos si ${scopeText} ${operatorLabel} ${threshold} ${periodLabel}, revisando cada ${everyMinutes} minutos.`;
+            if (summaryNode) summaryNode.textContent = sentence;
+
+            if (!indexSqlAlertNameTouched) {
+                const nameInput = document.getElementById('idxSqlAlertDisplayName');
+                if (nameInput) nameInput.value = buildAutoIndexSqlAlertName();
+            }
+
+            if (saveBtn) {
+                const isActive = !!document.getElementById('idxSqlAlertIsActive')?.checked;
+                saveBtn.textContent = isActive ? 'CREAR Y ACTIVAR ALERTA' : 'GUARDAR ALERTA';
+            }
+        }
+
+        function toggleIndexSqlAlertAdvanced(forceOpen = null) {
+            const body = document.getElementById('idxSqlAlertAdvancedBody');
+            const label = document.getElementById('idxSqlAlertAdvancedToggleLabel');
+            if (!body || !label) return;
+            const nextOpen = forceOpen === null ? body.style.display === 'none' : !!forceOpen;
+            body.style.display = nextOpen ? 'block' : 'none';
+            label.textContent = nextOpen ? 'Ocultar' : 'Mostrar';
+        }
+
+        function toggleIndexSqlAlertPreview(forceOpen = null) {
+            const wrap = document.getElementById('idxSqlAlertPreviewWrap');
+            if (!wrap) return;
+            const nextOpen = forceOpen === null ? wrap.style.display === 'none' : !!forceOpen;
+            wrap.style.display = nextOpen ? 'block' : 'none';
+        }
+
+        function populateIndexSqlAlertCatalog() {
+            const metricSelect = document.getElementById('idxSqlAlertMetricKey');
+            const dimensionSelect = document.getElementById('idxSqlAlertDimensionKey');
+            if (!metricSelect || !dimensionSelect) return;
+
+            const metrics = Array.isArray(userSqlAlertCatalog?.metrics) ? userSqlAlertCatalog.metrics : (Array.isArray(userSqlAlertCatalog?.Metrics) ? userSqlAlertCatalog.Metrics : []);
+            const dimensions = Array.isArray(userSqlAlertCatalog?.dimensions) ? userSqlAlertCatalog.dimensions : (Array.isArray(userSqlAlertCatalog?.Dimensions) ? userSqlAlertCatalog.Dimensions : []);
+
+            metricSelect.innerHTML = metrics.length
+                ? metrics.map(item => `<option value="${escapeHtml(item.key || item.Key || '')}">${escapeHtml(item.displayName || item.DisplayName || item.key || item.Key || '')}</option>`).join('')
+                : '<option value="">Sin métricas disponibles</option>';
+
+            dimensionSelect.innerHTML = ['<option value="">Todo</option>']
+                .concat(dimensions.map(item => {
+                    const key = item.key || item.Key || '';
+                    return `<option value="${escapeHtml(key)}">${escapeHtml(getIndexSqlAlertDimensionLabel(key))}</option>`;
+                }))
+                .join('');
+        }
+
+        function fillIndexSqlAlertFormFromSuggestion(forceFromResult = false) {
+            const context = getCurrentSqlAlertContext();
+            const suggestion = (forceFromResult ? lastSqlAlertSuggestion : null) || lastSqlAlertSuggestion || {};
+            const pills = document.getElementById('idxSqlAlertContextPills');
+            const suggestionStrip = document.getElementById('idxSqlAlertSuggestionStrip');
+            const modalSubtitle = document.getElementById('sqlAlertModalSubtitle');
+            if (pills) {
+                pills.innerHTML = context
+                    ? [
+                        `<span class="sql-alert-context-pill">${escapeHtml(context.tenantDisplayName || context.tenantKey)}</span>`,
+                        `<span class="sql-alert-context-pill">${escapeHtml(context.domain)}</span>`,
+                        `<span class="sql-alert-context-pill">${escapeHtml(context.connectionName)}</span>`
+                    ].join('')
+                    : '<span class="sql-alert-context-pill">Sin contexto activo</span>';
+            }
+            if (suggestionStrip) {
+                const suggestionText = suggestion.summary || '';
+                suggestionStrip.style.display = suggestionText ? 'block' : 'none';
+                suggestionStrip.textContent = suggestionText;
+            }
+            if (modalSubtitle) {
+                modalSubtitle.textContent = suggestion.summary
+                    ? `Tomé como base la última consulta SQL para acelerar la creación. Puedes ajustar la regla antes de guardarla.`
+                    : 'Te avisaremos cuando este indicador se salga del rango esperado en este contexto.';
+            }
+
+            indexSqlAlertNameTouched = false;
+            document.getElementById('idxSqlAlertId').value = '';
+            document.getElementById('idxSqlAlertDisplayName').value = suggestion.displayName || '';
+            document.getElementById('idxSqlAlertDimensionValue').value = suggestion.dimensionValue || '';
+            document.getElementById('idxSqlAlertDimensionCandidate').innerHTML = '';
+            document.getElementById('idxSqlAlertDimensionCandidate').style.display = 'none';
+            document.getElementById('idxSqlAlertManualToggle').style.display = 'none';
+            document.getElementById('idxSqlAlertDimensionValue').style.display = 'block';
+            document.getElementById('idxSqlAlertThreshold').value = String(suggestion.threshold ?? 50);
+            document.getElementById('idxSqlAlertTimeScope').value = String(suggestion.timeScope ?? 1);
+            document.getElementById('idxSqlAlertFrequency').value = String(suggestion.evaluationFrequencyMinutes ?? 5);
+            document.getElementById('idxSqlAlertCooldown').value = String(suggestion.cooldownMinutes ?? 30);
+            document.getElementById('idxSqlAlertNotes').value = suggestion.notes || '';
+            document.getElementById('idxSqlAlertOperator').value = String(suggestion.comparisonOperator ?? 1);
+            document.getElementById('idxSqlAlertIsActive').checked = true;
+            document.getElementById('idxSqlAlertPreview').value = '';
+            setIndexSqlAlertPreviewBanner();
+            populateIndexSqlAlertCatalog();
+            if (suggestion.metricKey) document.getElementById('idxSqlAlertMetricKey').value = suggestion.metricKey;
+            if (suggestion.dimensionKey) document.getElementById('idxSqlAlertDimensionKey').value = suggestion.dimensionKey;
+            toggleIndexSqlAlertAdvanced(false);
+            toggleIndexSqlAlertPreview(false);
+            syncIndexSqlAlertEntityPicker(suggestion);
+            updateIndexSqlAlertSummary();
+        }
+
+        async function openSqlAlertComposer(forceFromResult = false) {
+            const context = getCurrentSqlAlertContext();
+            if (!context?.tenantKey || !context?.domain || !context?.connectionName) {
+                setRuntimeContextErrorState(true);
+                setQueryStatus('warning', 'Selecciona una base activa', 'Necesitamos un contexto SQL activo antes de crear una alerta.');
+                return;
+            }
+
+            if (!canCreateSqlAlertFromCurrentResult()) {
+                setQueryStatus('warning', 'Primero valida un resultado SQL', 'Primero realiza una consulta SQL válida para crear una alerta sobre ese resultado.');
+                return;
+            }
+
+            if (!userSqlAlertCatalog) {
+                await loadUserSqlAlerts();
+            }
+
+            const modal = document.getElementById('sqlAlertModal');
+            if (!modal) return;
+            fillIndexSqlAlertFormFromSuggestion(forceFromResult);
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeSqlAlertComposer() {
+            const modal = document.getElementById('sqlAlertModal');
+            if (!modal) return;
+            modal.classList.remove('is-open');
+            modal.setAttribute('aria-hidden', 'true');
+            toggleIndexSqlAlertAdvanced(false);
+            toggleIndexSqlAlertPreview(false);
+        }
+
+        function buildIndexSqlAlertPayload() {
+            const context = getCurrentSqlAlertContext();
+            if (!context?.tenantKey || !context?.domain || !context?.connectionName) {
+                throw new Error('No hay un contexto SQL activo para crear la alerta.');
+            }
+
+            if (!canCreateSqlAlertFromCurrentResult()) {
+                throw new Error('Primero valida un resultado SQL apto para monitoreo antes de crear una alerta.');
+            }
+
+            const candidateSelect = document.getElementById('idxSqlAlertDimensionCandidate');
+            const manualValue = document.getElementById('idxSqlAlertDimensionValue').value.trim();
+            const candidateValue = candidateSelect && candidateSelect.style.display !== 'none'
+                ? candidateSelect.value.trim()
+                : '';
+            const dimensionValue = candidateValue || manualValue || null;
+
+            return {
+                id: Number(document.getElementById('idxSqlAlertId').value || '0'),
+                ruleKey: null,
+                tenantKey: context.tenantKey,
+                domain: context.domain,
+                connectionName: context.connectionName,
+                displayName: document.getElementById('idxSqlAlertDisplayName').value.trim(),
+                metricKey: document.getElementById('idxSqlAlertMetricKey').value.trim(),
+                dimensionKey: document.getElementById('idxSqlAlertDimensionKey').value.trim() || null,
+                dimensionValue,
+                comparisonOperator: Number(document.getElementById('idxSqlAlertOperator').value || '1'),
+                threshold: Number(document.getElementById('idxSqlAlertThreshold').value || '0'),
+                timeScope: Number(document.getElementById('idxSqlAlertTimeScope').value || '1'),
+                evaluationFrequencyMinutes: Number(document.getElementById('idxSqlAlertFrequency').value || '5'),
+                cooldownMinutes: Number(document.getElementById('idxSqlAlertCooldown').value || '30'),
+                isActive: document.getElementById('idxSqlAlertIsActive').checked,
+                notes: document.getElementById('idxSqlAlertNotes').value.trim() || null
+            };
+        }
+
+        async function previewIndexSqlAlert() {
+            try {
+                const payload = buildIndexSqlAlertPayload();
+                const response = await fetch('/api/sql-alerts/preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const body = await safeJson(response);
+                if (!response.ok) throw new Error(body?.Error || body?.error || `HTTP ${response.status}`);
+                document.getElementById('idxSqlAlertPreview').value = body?.sql || body?.Sql || '';
+                setIndexSqlAlertPreviewBanner('ok', body?.summary || body?.Summary || 'Preview SQL generado correctamente.');
+            } catch (error) {
+                setIndexSqlAlertPreviewBanner('err', String(error.message || error));
+            }
+        }
+
+        async function saveIndexSqlAlert() {
+            const button = document.getElementById('idxSqlAlertSaveBtn');
+            try {
+                const payload = buildIndexSqlAlertPayload();
+                if (!payload.displayName) {
+                    payload.displayName = buildAutoIndexSqlAlertName();
+                    const displayNameInput = document.getElementById('idxSqlAlertDisplayName');
+                    if (displayNameInput) displayNameInput.value = payload.displayName;
+                }
+                if (!payload.metricKey) throw new Error('Selecciona una métrica gobernada.');
+
+                button.disabled = true;
+                const isUpdate = payload.id > 0;
+                const response = await fetch(isUpdate ? `/api/sql-alerts/${payload.id}` : '/api/sql-alerts', {
+                    method: isUpdate ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const body = await safeJson(response);
+                if (!response.ok) throw new Error(body?.Error || body?.error || `HTTP ${response.status}`);
+
+                closeSqlAlertComposer();
+                showSqlAlertToast(payload.displayName || 'Alerta SQL guardada.', 'ok', 'Alerta operativa');
+                await loadUserSqlAlerts();
+            } catch (error) {
+                setIndexSqlAlertPreviewBanner('err', String(error.message || error));
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function toggleUserSqlAlert(id, nextIsActive) {
+            try {
+                const response = await fetch(`/api/sql-alerts/${id}/activate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ isActive: !!nextIsActive })
+                });
+                const body = await safeJson(response);
+                if (!response.ok) throw new Error(body?.Error || body?.error || `HTTP ${response.status}`);
+                await loadUserSqlAlerts();
+            } catch (error) {
+                showSqlAlertToast(String(error.message || error), 'warning', 'Error de alerta');
+            }
+        }
+
+        async function ackUserSqlAlert(id) {
+            try {
+                const response = await fetch(`/api/sql-alerts/${id}/ack`, { method: 'POST' });
+                const body = await safeJson(response);
+                if (!response.ok) throw new Error(body?.Error || body?.error || `HTTP ${response.status}`);
+                await loadUserSqlAlerts();
+            } catch (error) {
+                showSqlAlertToast(String(error.message || error), 'warning', 'Error de alerta');
+            }
+        }
+
+        async function clearUserSqlAlert(id) {
+            try {
+                const response = await fetch(`/api/sql-alerts/${id}/clear`, { method: 'POST' });
+                const body = await safeJson(response);
+                if (!response.ok) throw new Error(body?.Error || body?.error || `HTTP ${response.status}`);
+                await loadUserSqlAlerts();
+            } catch (error) {
+                showSqlAlertToast(String(error.message || error), 'warning', 'Error de alerta');
+            }
+        }
+
         // ═══════════════════════════════════════════════════════════
         // PRE-RENDER CLEANUP
         // ═══════════════════════════════════════════════════════════
         function preRender() {
             document.getElementById('resultArea').style.display = 'flex';
+            document.body.classList.add('has-result');
             document.getElementById('kpiContainer').innerHTML = '';
             document.getElementById('chartContainer').style.display = 'none';
             document.getElementById('tableContainer').style.display = 'none';
@@ -926,6 +1697,7 @@
             document.getElementById('docsCard').style.display = 'none';
             document.getElementById('sqlContainer').style.display = 'none';
             document.getElementById('exportActions').style.display = 'none';
+            document.getElementById('resultHeaderActions').style.display = 'none';
 
             // reset chart toolbar
             document.getElementById('chartToolbar').style.display = 'none';
@@ -983,25 +1755,51 @@
         // ═══════════════════════════════════════════════════════════
         function renderPred(payload) {
             preRender();
-            document.getElementById('resultLabel').textContent = 'RESULTADO — PRONÓSTICO INDUSTRIAL';
+            document.getElementById('resultLabel').textContent = 'RESULTADO — PRONÓSTICO';
             const grid = document.getElementById('predGrid');
             grid.style.display = 'grid';
             const p = payload.data || payload;
 
             if (p && p.PredictedValue !== undefined) {
+                const metricKey = String(p.MetricKey || p.TargetMetricKey || '').trim().toLowerCase();
+                const seriesType = String(p.SeriesType || p.GroupByKey || '').trim().toLowerCase();
+                const entityName = escapeHtml(String(p.EntityName || 'General'));
+                const periodLabel = escapeHtml(String(p.ForecastPeriodLabel || 'Turno'));
+                const analysisText = escapeHtml(String(p.HumanizedMessage || payload.explanation || 'Predicción de cierre de turno generada.'));
+                const metricMap = {
+                    scrap_qty: { category: 'Pronóstico de scrap', unit: 'piezas', baseline: 'Serie temporal observada' },
+                    produced_qty: { category: 'Pronóstico de producción', unit: 'piezas', baseline: 'Serie temporal observada' },
+                    downtime_minutes: { category: 'Pronóstico de downtime', unit: 'min', baseline: 'Serie temporal observada' },
+                    units_sold: { category: 'Pronóstico de unidades', unit: 'unidades', baseline: 'Serie temporal observada' },
+                    net_sales: { category: 'Pronóstico de ventas', unit: 'monto', baseline: 'Serie temporal observada' },
+                    order_count: { category: 'Pronóstico de órdenes', unit: 'órdenes', baseline: 'Serie temporal observada' }
+                };
+                const seriesMap = {
+                    part: 'Número de parte',
+                    product: 'Producto',
+                    category: 'Categoría',
+                    customer: 'Cliente',
+                    ship_country: 'País',
+                    employee: 'Empleado',
+                    press: 'Prensa',
+                    department: 'Departamento'
+                };
+                const metricInfo = metricMap[metricKey] || { category: 'Pronóstico estimado', unit: 'valor', baseline: 'Serie temporal analizada' };
+                const seriesLabel = seriesMap[seriesType] || 'Entidad';
+                const historyLabel = p.HistoryShiftsUsed || p.HistoryPointsUsed || p.HistoryBucketsUsed || 0;
                 grid.innerHTML = `
                 <div class="pred-card">
-                    <div class="pred-category">PRONÓSTICO DE SCRAP (CIERRE)</div>
-                    <div class="pred-value">${fmtVal(p.PredictedValue)}<span style="font-size:1rem;font-weight:400;margin-left:4px;color:var(--muted)">piezas</span></div>
-                    <div class="pred-label">N/P: <strong style="color:var(--text)">${p.EntityName || 'General'}</strong><br><span style="color:var(--dim);font-size:.75rem">Periodo: ${p.ForecastPeriodLabel || 'Turno'}</span></div>
+                    <div class="pred-category">${escapeHtml(metricInfo.category)}</div>
+                    <div class="pred-value">${fmtVal(p.PredictedValue)}<span style="font-size:1rem;font-weight:400;margin-left:4px;color:var(--muted)">${escapeHtml(metricInfo.unit)}</span></div>
+                    <div class="pred-label">${escapeHtml(seriesLabel)}: <strong style="color:var(--text)">${entityName}</strong><br><span style="color:var(--dim);font-size:.75rem">Horizonte: ${periodLabel}</span></div>
                     <div class="pred-confidence">
                         <div class="pred-bar-bg"><div class="pred-bar-fill" style="width:100%"></div></div>
-                        <span class="pred-conf-val">🛡️ ${p.HistoryShiftsUsed || 0} turnos históricos</span>
+                        <span class="pred-conf-val">🛡️ ${historyLabel} puntos históricos</span>
                     </div>
-                    <div class="pred-trend flat">Baseline ML.NET v1.0</div>
+                    <div class="pred-trend flat">${escapeHtml(metricInfo.baseline)}</div>
                 </div>
                 <div style="grid-column:1/-1;margin-top:10px;font-size:.85rem;padding:12px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
-                    <span style="color:var(--pred-c)">🤖 Análisis:</span> ${p.HumanizedMessage || payload.explanation || 'Predicción de cierre de turno generada.'}
+                    <span style="color:var(--pred-c)">🤖 Análisis:</span> ${analysisText}
                 </div>`;
                 speakSummary(p.HumanizedMessage || payload.explanation);
             } else {
@@ -1030,6 +1828,10 @@
                 sql: sqlText,
                 rows: Array.isArray(data) ? data : []
             };
+            lastSqlPayload = payload;
+            lastSqlAlertSuggestion = inferSqlAlertSuggestion(payload, data);
+            lastSqlAlertEligibility = lastSqlAlertSuggestion?.eligibility || null;
+            renderUserSqlAlerts();
             updateExportActions(lastSqlExportState);
 
             if (!data || data.length === 0) {
@@ -1059,6 +1861,290 @@
                 document.getElementById('chartContainer').style.display = 'none';
                 document.getElementById('chartToolbar').style.display = 'none';
             }
+        }
+
+        function isCategoricalAlertCandidateColumn(columnName, rows) {
+            if (!Array.isArray(rows) || !rows.length) return false;
+            if (isMostlyNumericColumn(columnName, rows)) return false;
+            if (isTechnicalIdColumn(columnName)) return false;
+
+            const values = rows
+                .map(row => row?.[columnName])
+                .filter(value => value !== null && value !== undefined)
+                .map(value => String(value).trim())
+                .filter(Boolean);
+
+            if (!values.length) return false;
+
+            const uniqueCount = new Set(values).size;
+            if (uniqueCount <= 1) return false;
+            if (uniqueCount > Math.max(20, rows.length + 4)) return false;
+
+            const averageLength = values.reduce((sum, value) => sum + value.length, 0) / values.length;
+            return averageLength >= 2 && averageLength <= 48;
+        }
+
+        function findBestCategoricalAlertColumn(headers, rows) {
+            if (!Array.isArray(headers) || !Array.isArray(rows) || !rows.length) return '';
+            const scoringHints = {
+                part: ['partnumber', 'part number', 'part_number', 'part no', 'part_no', 'numero parte', 'numero de parte', 'np', 'sku', 'itemcode', 'item code'],
+                product: ['product', 'producto', 'sku', 'item', 'itemcode'],
+                press: ['press', 'prensa', 'machine'],
+                customer: ['customer', 'cliente'],
+                ship_country: ['country', 'pais', 'ship country'],
+                category: ['category', 'categoria'],
+                shift: ['shift', 'turno']
+            };
+
+            const candidates = headers
+                .filter(header => isCategoricalAlertCandidateColumn(header, rows))
+                .map(header => {
+                    const normalized = normalizeColumnName(header).replace(/[_\-\s\/]+/g, ' ');
+                    let score = 0;
+                    Object.values(scoringHints).forEach(hints => {
+                        if (hints.some(hint => normalized.includes(hint))) score += 4;
+                    });
+                    if (normalized.includes('name') || normalized.includes('nombre')) score += 2;
+                    if (normalized.includes('part') || normalized.includes('sku') || normalized.includes('item')) score += 3;
+                    if (normalized.includes('desc') || normalized.includes('description')) score -= 1;
+                    return { header, score };
+                })
+                .sort((a, b) => b.score - a.score);
+
+            return candidates[0]?.header || '';
+        }
+
+        function findMatchingColumnName(headers, dimensionKey) {
+            const key = String(dimensionKey || '').toLowerCase();
+            if (!key || !Array.isArray(headers)) return '';
+            const aliases = {
+                press: ['press', 'prensa', 'machine'],
+                part: ['part', 'parte', 'partnumber', 'part number', 'part_number', 'part no', 'part_no', 'n/p', 'np', 'numero parte', 'numero_de_parte', 'numero de parte', 'número de parte', 'itemcode', 'item code', 'sku'],
+                product: ['product', 'producto', 'item', 'itemcode', 'item code', 'sku'],
+                customer: ['customer', 'cliente'],
+                ship_country: ['country', 'pais', 'shipcountry', 'ship country'],
+                category: ['category', 'categoria'],
+                shift: ['shift', 'turno']
+            };
+            const hints = aliases[key] || [key];
+            const match = headers.find(header => {
+                const normalized = normalizeColumnName(header).replace(/[_\-\s\/]+/g, ' ');
+                return hints.some(hint => normalized.includes(normalizeColumnName(hint).replace(/[_\-\s\/]+/g, ' ')));
+            });
+            return match || '';
+        }
+
+        function extractAlertDimensionCandidates(rows, dimensionKey) {
+            if (!Array.isArray(rows) || !rows.length) return [];
+            const headers = Object.keys(rows[0] || {});
+            const candidateColumn = findMatchingColumnName(headers, dimensionKey) || findBestCategoricalAlertColumn(headers, rows);
+            if (!candidateColumn) return [];
+            return Array.from(new Set(rows
+                .map(row => row?.[candidateColumn])
+                .filter(value => value !== null && value !== undefined)
+                .map(value => String(value).trim())
+                .filter(Boolean)))
+                .slice(0, 20);
+        }
+
+        function evaluateSqlAlertEligibility(rows, metric, dimensionKey, candidates) {
+            const reasonBase = 'La alerta debe nacer de un resultado SQL exitoso, interpretable y útil para monitoreo.';
+            if (!currentRuntimeContext?.tenantKey || currentMode !== 'sql') {
+                return { isAlertable: false, reason: 'Necesitas un contexto SQL activo para crear una alerta.' };
+            }
+            if (!lastSqlPayload) {
+                return { isAlertable: false, reason: 'Primero realiza una consulta SQL válida para crear una alerta sobre ese resultado.' };
+            }
+            if (!Array.isArray(rows) || !rows.length) {
+                return { isAlertable: false, reason: `${reasonBase} El resultado no devolvió datos monitoreables.` };
+            }
+
+            const headers = Object.keys(rows[0] || {});
+            const numericHeaders = headers.filter(header => isMostlyNumericColumn(header, rows));
+            if (!numericHeaders.length) {
+                return { isAlertable: false, reason: `${reasonBase} No encontramos una columna numérica clara para vigilar.` };
+            }
+
+            if (rows.length > 50) {
+                return { isAlertable: false, reason: `${reasonBase} El resultado es demasiado amplio; conviene refinar la consulta primero.` };
+            }
+
+            const categoricalColumn = findMatchingColumnName(headers, dimensionKey) || findBestCategoricalAlertColumn(headers, rows);
+            const hasCategoricalColumn = !!categoricalColumn;
+            const hasCandidates = Array.isArray(candidates) && candidates.length > 0;
+            const isCompactRanking = rows.length >= 2 && rows.length <= 20 && numericHeaders.length >= 1 && hasCategoricalColumn;
+
+            if (!dimensionKey && !hasCategoricalColumn) {
+                return {
+                    isAlertable: true,
+                    reason: metric
+                        ? 'Resultado agregado global listo para convertirse en alerta.'
+                        : 'Resultado agregado global apto para alerta aunque la métrica todavía no se haya identificado con nombre gobernado.'
+                };
+            }
+
+            if (hasCandidates) {
+                return {
+                    isAlertable: true,
+                    reason: candidates.length === 1
+                        ? (metric ? 'Se detectó una entidad clara para vigilar.' : 'Se detectó una entidad clara y una métrica numérica interpretable para vigilar.')
+                        : (metric ? 'Se detectaron varias entidades claras para elegir.' : 'Se detectaron varias entidades claras y una métrica numérica interpretable para elegir.')
+                };
+            }
+
+            if (isCompactRanking) {
+                return {
+                    isAlertable: true,
+                    reason: metric
+                        ? 'Se detectó un ranking por entidad con métrica numérica clara.'
+                        : 'Resultado agrupado apto para alerta con una dimensión categórica y una métrica numérica claras.'
+                };
+            }
+
+            if (!metric && hasCategoricalColumn && numericHeaders.length === 1 && rows.length <= 20) {
+                return {
+                    isAlertable: true,
+                    reason: 'Se detectó un resultado agrupado interpretable que puede vigilarse como alerta operativa.'
+                };
+            }
+
+            return {
+                isAlertable: false,
+                reason: metric
+                    ? `${reasonBase} No pudimos identificar una entidad o agrupación clara para monitorear.`
+                    : `${reasonBase} No detectamos una métrica gobernada ni una agrupación clara suficiente para crear la alerta.`
+            };
+        }
+
+        function inferSqlAlertSuggestion(payload, rows) {
+            const catalogMetrics = Array.isArray(userSqlAlertCatalog?.metrics) ? userSqlAlertCatalog.metrics : (Array.isArray(userSqlAlertCatalog?.Metrics) ? userSqlAlertCatalog.Metrics : []);
+            const catalogDimensions = Array.isArray(userSqlAlertCatalog?.dimensions) ? userSqlAlertCatalog.dimensions : (Array.isArray(userSqlAlertCatalog?.Dimensions) ? userSqlAlertCatalog.Dimensions : []);
+            const question = String(lastAskedQuestion || '').toLowerCase();
+            const sql = String(payload?.sql || payload?.sqlText || '').toLowerCase();
+            const headers = Array.isArray(rows) && rows.length ? Object.keys(rows[0]) : [];
+            const normalizedHeaders = headers.map(normalizeColumnName);
+
+            const pickMetric = () => {
+                const findKey = key => catalogMetrics.find(item => String(item.key || item.Key || '').toLowerCase() === key);
+                const metricHints = {
+                    scrap_qty: ['scrap', 'rechazo', 'merma'],
+                    downtime_minutes: ['downtime', 'paro', 'tiempo muerto'],
+                    produced_qty: ['produc', 'piezas', 'unidades', 'cantidad producida'],
+                    net_sales: ['sales', 'ventas', 'venta neta', 'net sales', 'importe', 'revenue', 'ingresos'],
+                    units_sold: ['units sold', 'unidades vendidas', 'qty sold', 'cantidad vendida'],
+                    order_count: ['orders', 'ordenes', 'pedidos', 'order count', 'conteo de ordenes']
+                };
+
+                for (const [metricKey, hints] of Object.entries(metricHints)) {
+                    if (hints.some(hint => question.includes(hint) || sql.includes(hint) || normalizedHeaders.some(header => header.includes(hint)))) {
+                        return findKey(metricKey);
+                    }
+                }
+
+                const scoredMetrics = catalogMetrics
+                    .map(item => {
+                        const key = String(item.key || item.Key || '').toLowerCase();
+                        const displayName = String(item.displayName || item.DisplayName || key).toLowerCase();
+                        const tokens = Array.from(new Set(
+                            `${key} ${displayName}`
+                                .replace(/[_\-\/]+/g, ' ')
+                                .split(/\s+/)
+                                .map(token => token.trim())
+                                .filter(token => token.length >= 3)
+                        ));
+                        let score = 0;
+                        tokens.forEach(token => {
+                            if (question.includes(token)) score += 3;
+                            if (sql.includes(token)) score += 2;
+                            if (normalizedHeaders.some(header => header.includes(token))) score += 4;
+                        });
+                        return { item, score };
+                    })
+                    .filter(entry => entry.score > 0)
+                    .sort((a, b) => b.score - a.score);
+
+                if (scoredMetrics.length) {
+                    return scoredMetrics[0].item;
+                }
+
+                return null;
+            };
+
+            const pickDimension = () => {
+                const scoring = {
+                    press: ['press', 'prensa'],
+                    part: ['part', 'parte', 'partnumber', 'numero_de_parte'],
+                    product: ['product', 'producto'],
+                    customer: ['customer', 'cliente'],
+                    ship_country: ['country', 'pais'],
+                    category: ['category', 'categoria'],
+                    shift: ['shift', 'turno']
+                };
+
+                for (const dimension of catalogDimensions) {
+                    const key = String(dimension.key || dimension.Key || '').toLowerCase();
+                    const hints = scoring[key] || [key];
+                    if (hints.some(hint => question.includes(hint) || normalizedHeaders.some(header => header.includes(hint)))) {
+                        return dimension;
+                    }
+                }
+
+                return null;
+            };
+
+            const metric = pickMetric();
+            const dimension = pickDimension();
+            const metricKey = metric ? String(metric.key || metric.Key || '') : '';
+            const inferredDimensionKey = dimension ? String(dimension.key || dimension.Key || '') : '';
+            const fallbackDimensionColumn = findBestCategoricalAlertColumn(headers, rows);
+            const fallbackDimensionKey = normalizedHeaders.some(header => header.includes('part') || header.includes('sku') || header.includes('item'))
+                ? 'part'
+                : normalizedHeaders.some(header => header.includes('press') || header.includes('prensa'))
+                    ? 'press'
+                    : normalizedHeaders.some(header => header.includes('product') || header.includes('producto'))
+                        ? 'product'
+                        : normalizedHeaders.some(header => header.includes('customer') || header.includes('cliente'))
+                            ? 'customer'
+                            : normalizedHeaders.some(header => header.includes('country') || header.includes('pais'))
+                                ? 'ship_country'
+                                : normalizedHeaders.some(header => header.includes('category') || header.includes('categoria'))
+                                    ? 'category'
+                                    : normalizedHeaders.some(header => header.includes('shift') || header.includes('turno'))
+                                        ? 'shift'
+                                        : '';
+            const dimensionKey = inferredDimensionKey || (fallbackDimensionColumn ? fallbackDimensionKey : '');
+            const dimensionCandidates = extractAlertDimensionCandidates(rows, dimensionKey);
+            const dimensionValue = dimensionCandidates.length === 1 ? dimensionCandidates[0] : '';
+            const metricLabel = metric ? String(metric.displayName || metric.DisplayName || metricKey || 'métrica') : 'métrica';
+            const scopeLabel = question.includes('turno') ? 'turno actual' : 'periodo actual';
+            const eligibility = evaluateSqlAlertEligibility(rows, metric, dimensionKey, dimensionCandidates);
+
+            return {
+                displayName: buildSuggestedAlertName(metric, dimensionValue),
+                metricKey,
+                dimensionKey,
+                dimensionValue,
+                dimensionCandidates,
+                comparisonOperator: 1,
+                threshold: metric && String(metric.key || metric.Key || '') === 'downtime_minutes' ? 30 : 50,
+                timeScope: question.includes('turno') ? 3 : 1,
+                evaluationFrequencyMinutes: 5,
+                cooldownMinutes: 30,
+                notes: lastAskedQuestion ? `Creada desde la consulta: ${lastAskedQuestion}` : '',
+                eligibility,
+                summary: dimensionValue
+                    ? `Sugerencia detectada: vigilar ${metricLabel} para ${dimensionValue} en ${scopeLabel}.`
+                    : dimensionCandidates.length > 1
+                        ? `Sugerencia detectada: vigilar ${metricLabel} para una de las entidades del resultado en ${scopeLabel}.`
+                    : `Sugerencia detectada: vigilar ${metricLabel} en ${scopeLabel}.`
+            };
+        }
+
+        function buildSuggestedAlertName(metric, dimensionValue) {
+            const metricLabel = metric ? String(metric.displayName || metric.DisplayName || metric.key || metric.Key || 'Métrica') : 'Métrica';
+            return dimensionValue
+                ? `${metricLabel} de ${dimensionValue} fuera de rango`
+                : `${metricLabel} fuera de rango`;
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -1503,6 +2589,7 @@
         // ═══════════════════════════════════════════════════════════
         function logLine(msg, type = 'ok') {
             const la = document.getElementById('logArea');
+            if (!la) return;
             const div = document.createElement('div');
             div.className = 'log-line';
 
@@ -1549,12 +2636,52 @@
         }
 
         function speakSummary(text) {
-            if (!window.speechSynthesis || !text) return;
+            if (!ttsEnabled || !window.speechSynthesis || !text) return;
             window.speechSynthesis.cancel();
-            const sanitizedText = String(text).split('🤖').join('');
+            const sanitizedText = String(text).split('🤖').join('').replace(/\s+/g, ' ').trim().slice(0, 220);
+            if (!sanitizedText) return;
             const u = new SpeechSynthesisUtterance(sanitizedText);
             u.lang = 'es-MX'; u.rate = 1.0;
             window.speechSynthesis.speak(u);
+        }
+
+        function updateTtsToggle() {
+            const button = document.getElementById('sb-tts');
+            if (!button) return;
+            button.classList.toggle('is-toggled', !!ttsEnabled);
+            button.setAttribute('aria-pressed', ttsEnabled ? 'true' : 'false');
+            button.title = ttsEnabled ? 'Desactivar voz automática' : 'Activar voz automática';
+        }
+
+        function toggleTts() {
+            ttsEnabled = !ttsEnabled;
+            safeStorageSet(TTS_ENABLED_STORAGE_KEY, ttsEnabled ? '1' : '0');
+            updateTtsToggle();
+            logLine(ttsEnabled ? 'Voz automática activada.' : 'Voz automática desactivada.', 'sys');
+            if (!ttsEnabled && window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+            }
+        }
+
+        function setLogPanelCollapsed(isCollapsed) {
+            const wrap = document.querySelector('.log-wrap');
+            const button = document.getElementById('logToggleBtn');
+            if (!wrap || !button) return;
+            wrap.classList.toggle('is-collapsed', !!isCollapsed);
+            button.textContent = isCollapsed ? 'Ver consola' : 'Ocultar consola';
+            safeStorageSet(LOG_PANEL_COLLAPSED_KEY, isCollapsed ? '1' : '0');
+        }
+
+        function toggleLogPanel() {
+            const wrap = document.querySelector('.log-wrap');
+            if (!wrap) return;
+            setLogPanelCollapsed(!wrap.classList.contains('is-collapsed'));
+        }
+
+        function loadChatDisplayPreferences() {
+            ttsEnabled = safeStorageGet(TTS_ENABLED_STORAGE_KEY) === '1';
+            updateTtsToggle();
+            setLogPanelCollapsed(safeStorageGet(LOG_PANEL_COLLAPSED_KEY) !== '0');
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -1591,11 +2718,30 @@
 
         // INIT
         loadHistorySidebarPreference();
+        loadChatDisplayPreferences();
         loadQueryHistory();
+        renderUserSqlAlerts();
         window.toggleHistorySidebar = toggleHistorySidebar;
         document.getElementById('historyCollapseBtn')?.addEventListener('click', (event) => {
             event.preventDefault();
             toggleHistorySidebar();
         });
         document.getElementById('runtimeContextSelect')?.addEventListener('change', onRuntimeContextChange);
+        document.getElementById('idxSqlAlertMetricKey')?.addEventListener('change', updateIndexSqlAlertSummary);
+        document.getElementById('idxSqlAlertDimensionKey')?.addEventListener('change', updateIndexSqlAlertSummary);
+        document.getElementById('idxSqlAlertDimensionCandidate')?.addEventListener('change', updateIndexSqlAlertSummary);
+        document.getElementById('idxSqlAlertDimensionValue')?.addEventListener('input', updateIndexSqlAlertSummary);
+        document.getElementById('idxSqlAlertOperator')?.addEventListener('change', updateIndexSqlAlertSummary);
+        document.getElementById('idxSqlAlertThreshold')?.addEventListener('input', updateIndexSqlAlertSummary);
+        document.getElementById('idxSqlAlertTimeScope')?.addEventListener('change', updateIndexSqlAlertSummary);
+        document.getElementById('idxSqlAlertFrequency')?.addEventListener('input', updateIndexSqlAlertSummary);
+        document.getElementById('idxSqlAlertIsActive')?.addEventListener('change', updateIndexSqlAlertSummary);
+        document.getElementById('idxSqlAlertDisplayName')?.addEventListener('input', () => {
+            indexSqlAlertNameTouched = true;
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeSqlAlertComposer();
+            }
+        });
         setMode('sql');

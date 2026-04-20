@@ -6,6 +6,7 @@
     <title>VannaLight — Asistente Industrial</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="/css/index.css?v=20260418-sql-alerts-ux-3" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <style>
@@ -86,7 +87,11 @@
             justify-content: space-between;
             padding: 0 20px 0 0;
             border-bottom: 1px solid var(--border);
-            background: var(--surface)
+            background: rgba(15, 17, 23, .96);
+            position: sticky;
+            top: 0;
+            z-index: 40;
+            backdrop-filter: blur(14px)
         }
 
         .tb-logo {
@@ -363,6 +368,20 @@
                 stroke: var(--pred-c)
             }
 
+        .sb-btn.is-toggled {
+            background: color-mix(in srgb,var(--a) 11%,transparent);
+            color: var(--a);
+            box-shadow: inset 0 0 0 1px color-mix(in srgb,var(--a) 30%,transparent)
+        }
+
+            .sb-btn.is-toggled::before {
+                transform: translateY(-50%) scaleY(1)
+            }
+
+            .sb-btn.is-toggled svg {
+                stroke: var(--a)
+            }
+
         .sb-divider {
             width: 100%;
             height: 1px;
@@ -379,6 +398,11 @@
             flex-direction: column;
             gap: 12px;
             overflow-y: auto
+        }
+
+        .composer-stack {
+            display: grid;
+            gap: 8px;
         }
 
         /* MODE CONTEXT */
@@ -513,58 +537,17 @@
             box-shadow: 0 0 0 3px color-mix(in srgb,var(--a) 10%,transparent);
         }
 
+        .context-select.is-error {
+            border-color: #f87171;
+            box-shadow: 0 0 0 3px rgba(248,113,113,.12);
+        }
+
         .context-state {
-            min-width: 180px;
+            min-width: 220px;
             font-family: var(--mono);
-            font-size: .62rem;
-            color: var(--muted);
-        }
-
-        .context-hero {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid color-mix(in srgb,var(--a) 22%,var(--border));
-            border-radius: var(--radius);
-            background: color-mix(in srgb,var(--a) 10%,var(--surface));
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
-
-        .context-hero-copy {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-        }
-
-        .context-hero-label {
-            font-family: var(--mono);
-            font-size: .56rem;
-            letter-spacing: .12em;
-            text-transform: uppercase;
-            color: var(--a);
-        }
-
-        .context-hero-value {
-            color: var(--text);
-            font-family: var(--mono);
-            font-size: .74rem;
-        }
-
-        .context-hero-meta {
+            font-size: .66rem;
             color: var(--dim);
-            font-size: .74rem;
-        }
-
-        .context-hero.is-empty {
-            border-color: var(--border2);
-            background: var(--surface);
-        }
-
-        .context-hero.is-empty .context-hero-label {
-            color: var(--dim);
+            line-height: 1.5;
         }
 
         .history-strip {
@@ -661,10 +644,11 @@
             display: flex;
             flex-direction: column;
             align-items: stretch;
-            gap: 12px;
-            padding: 12px 14px;
+            gap: 4px;
+            padding: 7px 11px;
             border-top: 1px solid var(--border);
             transition: background .18s ease, border-color .18s ease, box-shadow .18s ease;
+            position: relative;
         }
 
         .history-item:first-child {
@@ -683,32 +667,35 @@
         .history-main {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 3px;
             min-width: 0;
         }
 
         .history-question {
             color: var(--text);
-            font-size: .84rem;
+            font-size: .76rem;
             font-weight: 600;
-            line-height: 1.4;
-            overflow-wrap: anywhere;
+            line-height: 1.18;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
 
         .history-meta {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
             flex-wrap: wrap;
             color: var(--dim);
             font-family: var(--mono);
-            font-size: .58rem;
+            font-size: .52rem;
         }
 
         .history-chip {
             display: inline-flex;
             align-items: center;
-            padding: 2px 7px;
+            padding: 2px 6px;
             border-radius: 999px;
             border: 1px solid var(--border2);
             background: var(--panel);
@@ -718,10 +705,12 @@
         }
 
         .history-context {
-            width: 100%;
+            max-width: 100%;
             color: var(--muted);
-            line-height: 1.45;
-            overflow-wrap: anywhere;
+            line-height: 1.3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .history-time {
@@ -731,7 +720,7 @@
         .history-status {
             display: inline-flex;
             align-items: center;
-            padding: 2px 8px;
+            padding: 2px 6px;
             border-radius: 999px;
             border: 1px solid var(--border2);
             background: var(--panel);
@@ -761,9 +750,21 @@
 
         .history-item-actions {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 4px;
             width: 100%;
+            opacity: 0;
+            max-height: 0;
+            overflow: hidden;
+            pointer-events: none;
+            transition: opacity .18s ease, max-height .18s ease;
+        }
+
+        .history-item:hover .history-item-actions,
+        .history-item.is-active .history-item-actions {
+            opacity: 1;
+            max-height: 28px;
+            pointer-events: auto;
         }
 
         .history-action-btn {
@@ -771,8 +772,8 @@
             border: 1px solid var(--border2);
             color: var(--text);
             font-family: var(--mono);
-            font-size: .56rem;
-            padding: 7px 10px;
+            font-size: .46rem;
+            padding: 4px 5px;
             border-radius: var(--radius);
             cursor: pointer;
             transition: border-color .2s, color .2s, background .2s;
@@ -786,10 +787,6 @@
         .history-action-btn:hover {
             border-color: var(--a);
             color: var(--a);
-        }
-
-        .history-action-btn.is-wide {
-            grid-column: 1 / -1;
         }
 
         body.history-collapsed .sidebar {
@@ -923,11 +920,21 @@
         .demo-strip {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            padding: 12px 14px;
+            gap: 6px;
+            padding: 9px 12px;
             border: 1px solid color-mix(in srgb, var(--a) 18%, var(--border));
             border-radius: var(--radius);
             background: linear-gradient(180deg, color-mix(in srgb, var(--a) 7%, var(--surface)), var(--surface));
+        }
+
+        body.has-result .demo-strip {
+            padding: 7px 10px;
+            gap: 4px;
+            opacity: .84;
+        }
+
+        body.has-result .demo-strip-subtitle {
+            display: none;
         }
 
         .demo-strip-head {
@@ -955,6 +962,43 @@
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
+        }
+
+        .mode-helper {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 7px 10px;
+            border: 1px dashed color-mix(in srgb, var(--a) 22%, var(--border2));
+            border-radius: var(--radius);
+            background: color-mix(in srgb, var(--a) 5%, transparent);
+        }
+
+        .mode-helper.is-visible {
+            display: flex;
+        }
+
+        .mode-helper-copy {
+            color: var(--dim);
+            font-size: .74rem;
+            line-height: 1.4;
+        }
+
+        .mode-helper-chip {
+            border: 1px solid color-mix(in srgb, var(--a) 22%, var(--border2));
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--a) 10%, var(--panel));
+            color: var(--text);
+            padding: 6px 10px;
+            font-size: .68rem;
+            cursor: pointer;
+            transition: border-color .18s ease, color .18s ease, background .18s ease;
+        }
+
+        .mode-helper-chip:hover {
+            border-color: var(--a);
+            color: #fff;
         }
 
         .demo-chip {
@@ -1116,6 +1160,10 @@
             overflow: hidden
         }
 
+        .log-wrap.is-collapsed #logArea {
+            display: none;
+        }
+
         .log-bar {
             display: flex;
             align-items: center;
@@ -1131,6 +1179,26 @@
             letter-spacing: .12em;
             color: var(--muted);
             text-transform: uppercase
+        }
+
+        .log-toggle-btn {
+            background: transparent;
+            border: 1px solid var(--border2);
+            color: var(--dim);
+            font-family: var(--mono);
+            font-size: .54rem;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            border-radius: 999px;
+            padding: 5px 10px;
+            cursor: pointer;
+            transition: border-color .2s ease, color .2s ease, background .2s ease;
+        }
+
+        .log-toggle-btn:hover {
+            border-color: var(--a);
+            color: var(--a);
+            background: color-mix(in srgb, var(--a) 8%, transparent);
         }
 
         #logArea {
@@ -1797,6 +1865,13 @@
                 padding: 12px 12px 92px
             }
 
+            .history-item-actions {
+                opacity: 1;
+                max-height: none;
+                pointer-events: auto;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
             .chart-type-group {
                 flex-wrap: wrap;
             }
@@ -1812,6 +1887,7 @@
     </style>
 </head>
 <body>
+    <div class="sql-alert-toast-host" id="sqlAlertToastHost" aria-live="polite" aria-atomic="true"></div>
     <div class="app">
         <!-- TOPBAR -->
         <header class="topbar">
@@ -1845,7 +1921,7 @@
             </div>
             <div class="sidebar-rail">
                 <button class="sb-btn active-sql" id="sb-sql" onclick="setMode('sql')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg><span class="sb-label">SQL</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg><span class="sb-label">SQL</span><span class="sb-status-badge" id="sbSqlAlertBadge" style="display:none;">0</span>
                 </button>
                 <button class="sb-btn" id="sb-docs" onclick="setMode('docs')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg><span class="sb-label">PDF</span>
@@ -1856,6 +1932,9 @@
                 <div class="sb-divider"></div>
                 <button class="sb-btn" id="sb-mic" onclick="startDictation()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg><span class="sb-label">VOZ</span>
+                </button>
+                <button class="sb-btn" id="sb-tts" onclick="toggleTts()" aria-pressed="false" title="Activar o desactivar voz automática">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9 9 0 0 1 0 13"></path></svg><span class="sb-label">TTS</span>
                 </button>
             </div>
             <section class="sidebar-history">
@@ -1900,51 +1979,84 @@
                     <button class="sql-toggle-btn" type="button" onclick="reloadRuntimeContexts()">RECARGAR</button>
                 </div>
                 <div class="context-state" id="runtimeContextState">Cargando contextos...</div>
-                <div class="context-hero is-empty" id="runtimeContextHero">
-                    <div class="context-hero-copy">
-                        <div class="context-hero-label">Contexto activo</div>
-                        <div class="context-hero-value" id="runtimeContextHeroValue">Sin contexto seleccionado</div>
-                    </div>
-                    <div class="context-hero-meta" id="runtimeContextHeroMeta">Selecciona una base antes de consultar.</div>
-                </div>
             </div>
 
-            <div class="input-panel">
-                <div class="input-row">
-                    <div class="inp-pill">
-                        <span class="inp-key" id="inpKey">SQL</span>
-                        <span class="inp-sub" id="inpSub">datos</span>
+            <section class="user-alerts-strip" id="userAlertsStrip">
+                <div class="user-alerts-head">
+                    <div class="user-alerts-copy">
+                        <div class="user-alerts-title">Alertas del contexto activo</div>
+                        <div class="user-alerts-subtitle" id="userAlertsSubtitle">Convierte una consulta diaria en monitoreo operativo sin salir del chat.</div>
                     </div>
-                    <input type="text" id="txtQuestion" placeholder="Escribe tu consulta..."
-                           onkeypress="handleKeyPress(event)" autocomplete="off" />
-                    <div class="input-actions">
-                        <button class="iact-btn" id="btnMic" onclick="startDictation()">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                            </svg>
-                        </button>
-                        <button class="btn-send" id="btnSend" onclick="sendQuestion()">
-                            <div class="spinner" id="loadingIcon"></div>
-                            <span id="btnLabel">EJECUTAR</span>
-                        </button>
+                    <div class="user-alerts-actions">
+                        <button class="sql-toggle-btn user-alerts-primary-btn" type="button" id="btnCreateAlertFromResult" onclick="openSqlAlertComposer(true)">CREAR ALERTA</button>
+                        <span class="user-alerts-badge" id="userAlertsCount">0</span>
+                        <span class="user-alerts-helper" id="userAlertsCreateHint">La creación nace desde un resultado SQL válido.</span>
                     </div>
                 </div>
-            </div>
+                <div class="user-alerts-list" id="userAlertsList">
+                    <div class="user-alert-empty">Selecciona un contexto SQL para ver o crear alertas operativas.</div>
+                </div>
+                <div class="user-alerts-events" id="userAlertEvents">
+                    <div class="user-alert-events-head">
+                        <div class="user-alert-events-title">Actividad reciente</div>
+                        <div class="user-alert-events-meta" id="userAlertEventsMeta">Últimos cambios relevantes del contexto.</div>
+                    </div>
+                    <div class="user-alert-events-list" id="userAlertEventsList">
+                        <div class="user-alert-empty">Aquí aparecerán disparos, resoluciones y acknowledges del contexto activo.</div>
+                    </div>
+                </div>
+            </section>
 
-            <section class="demo-strip" id="demoStrip">
-                <div class="demo-strip-head">
-                    <div>
-                        <div class="demo-strip-title">Preguntas sugeridas para demo</div>
-                        <div class="demo-strip-subtitle" id="demoStripSubtitle">Usa una pregunta lista o cárgala como base antes de presentarla.</div>
+            <section class="composer-stack">
+                <div class="input-panel">
+                    <div class="input-row">
+                        <div class="inp-pill">
+                            <span class="inp-key" id="inpKey">SQL</span>
+                            <span class="inp-sub" id="inpSub">datos</span>
+                        </div>
+                        <input type="text" id="txtQuestion" placeholder="Escribe tu consulta..."
+                               onkeypress="handleKeyPress(event)" autocomplete="off" />
+                        <div class="input-actions">
+                            <button class="iact-btn" id="btnMic" onclick="startDictation()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                </svg>
+                            </button>
+                            <button class="btn-send" id="btnSend" onclick="sendQuestion()">
+                                <div class="spinner" id="loadingIcon"></div>
+                                <span id="btnLabel">EJECUTAR</span>
+                            </button>
+                        </div>
                     </div>
-                    <button class="sql-toggle-btn" type="button" onclick="loadDemoPrompt(false)">CARGAR OTRA</button>
                 </div>
-                <div class="demo-actions" id="demoActions"></div>
+
+                <div class="mode-helper" id="modeHelper">
+                    <div class="mode-helper-copy" id="modeHelperCopy">Usa una entidad concreta y un horizonte claro.</div>
+                    <button class="mode-helper-chip" type="button" onclick="applyModeHelperTemplate('producto')">Producto</button>
+                    <button class="mode-helper-chip" type="button" onclick="applyModeHelperTemplate('cliente')">Cliente</button>
+                    <button class="mode-helper-chip" type="button" onclick="applyModeHelperTemplate('pais')">País</button>
+                    <button class="mode-helper-chip" type="button" onclick="applyModeHelperTemplate('manana')">Mañana</button>
+                    <button class="mode-helper-chip" type="button" onclick="applyModeHelperTemplate('semana')">Semana</button>
+                </div>
+
+                <section class="demo-strip" id="demoStrip">
+                    <div class="demo-strip-head">
+                        <div>
+                            <div class="demo-strip-title">Preguntas sugeridas para demo</div>
+                            <div class="demo-strip-subtitle" id="demoStripSubtitle">Usa una pregunta lista o cárgala como base antes de presentarla.</div>
+                        </div>
+                        <button class="sql-toggle-btn" type="button" onclick="loadDemoPrompt(false)">CARGAR OTRA</button>
+                    </div>
+                    <div class="demo-actions" id="demoActions"></div>
+                </section>
             </section>
 
             <div class="log-wrap">
-                <div class="log-bar"><span class="log-bar-label">Consola del sistema</span></div>
+                <div class="log-bar">
+                    <span class="log-bar-label">Consola del sistema</span>
+                    <button class="log-toggle-btn" type="button" id="logToggleBtn" onclick="toggleLogPanel()">Ver consola</button>
+                </div>
                 <div id="logArea"></div>
             </div>
 
@@ -1960,6 +2072,7 @@
             <div id="resultArea">
                 <div class="result-header">
                     <div class="result-label" id="resultLabel">RESULTADO</div>
+                    <div class="result-header-actions" id="resultHeaderActions" style="display:none;"></div>
                 </div>
                 <div class="docs-card" id="docsCard" style="display:none;"></div>
                 <div class="kpi-grid" id="kpiContainer"></div>
@@ -2055,7 +2168,144 @@
         </main>
     </div>
 
-        <script src="/js/index.js"></script>
+    <div class="sql-alert-modal" id="sqlAlertModal" aria-hidden="true">
+        <div class="sql-alert-modal-backdrop" onclick="closeSqlAlertComposer()"></div>
+        <div class="sql-alert-modal-panel" role="dialog" aria-modal="true" aria-labelledby="sqlAlertModalTitle">
+            <div class="sql-alert-modal-head">
+                <div>
+                    <div class="sql-alert-modal-title" id="sqlAlertModalTitle">Crear alerta operativa</div>
+                    <div class="sql-alert-modal-subtitle" id="sqlAlertModalSubtitle">Te avisaremos cuando este indicador se salga del rango esperado en este contexto.</div>
+                </div>
+                <button class="sql-alert-modal-close" type="button" onclick="closeSqlAlertComposer()">×</button>
+            </div>
+
+            <input type="hidden" id="idxSqlAlertId" />
+
+            <div class="sql-alert-context-pills" id="idxSqlAlertContextPills"></div>
+            <div class="sql-alert-suggestion-strip" id="idxSqlAlertSuggestionStrip" style="display:none;"></div>
+
+            <div class="sql-alert-live-summary" id="idxSqlAlertLiveSummary">
+                <div class="sql-alert-live-summary-kicker">Resumen de la alerta</div>
+                <div class="sql-alert-live-summary-text" id="idxSqlAlertSummaryText">Te avisaremos cuando este indicador se salga del rango esperado en este contexto.</div>
+            </div>
+
+            <section class="sql-alert-form-section">
+                <div class="sql-alert-form-section-title">Qué quieres vigilar</div>
+                <div class="sql-alert-form-grid sql-alert-form-grid-3">
+                    <label class="sql-alert-field">
+                        <span>Indicador</span>
+                        <select id="idxSqlAlertMetricKey"></select>
+                    </label>
+                    <label class="sql-alert-field">
+                        <span>Aplicar a</span>
+                        <select id="idxSqlAlertDimensionKey"></select>
+                    </label>
+                    <label class="sql-alert-field">
+                        <span id="idxSqlAlertDimensionValueLabel">Elemento</span>
+                        <div class="sql-alert-entity-picker" id="idxSqlAlertEntityPicker">
+                            <select id="idxSqlAlertDimensionCandidate" style="display:none;"></select>
+                            <input type="text" id="idxSqlAlertDimensionValue" placeholder="Todo el contexto" />
+                            <button class="sql-toggle-btn sql-alert-fallback-btn" type="button" id="idxSqlAlertManualToggle" style="display:none;" onclick="toggleIndexSqlAlertManualValue()">ESCRIBIR OTRO</button>
+                        </div>
+                        <div class="sql-alert-field-hint" id="idxSqlAlertEntityHint">Usaremos valores detectados en el último resultado cuando estén disponibles.</div>
+                    </label>
+                </div>
+            </section>
+
+            <section class="sql-alert-form-section">
+                <div class="sql-alert-form-section-title">Cuándo quieres que te avise</div>
+                <div class="sql-alert-form-grid sql-alert-form-grid-3">
+                    <label class="sql-alert-field">
+                        <span>Condición</span>
+                        <select id="idxSqlAlertOperator">
+                            <option value="1">Supera</option>
+                            <option value="2">Llega o supera</option>
+                            <option value="3">Cae por debajo de</option>
+                            <option value="4">Llega o cae por debajo de</option>
+                            <option value="5">Llega a</option>
+                            <option value="6">Cambia respecto a</option>
+                        </select>
+                    </label>
+                    <label class="sql-alert-field">
+                        <span>Límite</span>
+                        <input type="number" id="idxSqlAlertThreshold" min="0" step="0.01" value="50" />
+                    </label>
+                    <label class="sql-alert-field">
+                        <span>Periodo</span>
+                        <select id="idxSqlAlertTimeScope">
+                            <option value="1">Hoy</option>
+                            <option value="2">Últimas 24h</option>
+                            <option value="3">Turno actual</option>
+                            <option value="4">Semana actual</option>
+                            <option value="5">Mes actual</option>
+                        </select>
+                    </label>
+                </div>
+            </section>
+
+            <section class="sql-alert-form-section">
+                <div class="sql-alert-form-section-title">Cómo lo revisamos</div>
+                <div class="sql-alert-form-grid sql-alert-form-grid-2">
+                    <label class="sql-alert-field">
+                        <span>Revisar cada</span>
+                        <input type="number" id="idxSqlAlertFrequency" min="1" value="5" />
+                    </label>
+                    <label class="sql-alert-field sql-alert-switch-field">
+                        <span>Activar alerta</span>
+                        <label class="sql-alert-switch sql-alert-switch-inline">
+                            <input type="checkbox" id="idxSqlAlertIsActive" checked />
+                            <span>Dejarla activa desde ahora</span>
+                        </label>
+                    </label>
+                </div>
+            </section>
+
+            <section class="sql-alert-advanced" id="idxSqlAlertAdvanced">
+                <button class="sql-alert-advanced-toggle" type="button" onclick="toggleIndexSqlAlertAdvanced()">
+                    <span>Opciones avanzadas</span>
+                    <span id="idxSqlAlertAdvancedToggleLabel">Mostrar</span>
+                </button>
+                <div class="sql-alert-advanced-body" id="idxSqlAlertAdvancedBody" style="display:none;">
+                    <div class="sql-alert-form-grid sql-alert-form-grid-2">
+                        <label class="sql-alert-field">
+                            <span>Nombre editable</span>
+                            <input type="text" id="idxSqlAlertDisplayName" placeholder="Ventas netas · Hoy > 50" />
+                        </label>
+                        <label class="sql-alert-field">
+                            <span>No repetir aviso por</span>
+                            <input type="number" id="idxSqlAlertCooldown" min="0" value="30" />
+                        </label>
+                    </div>
+
+                    <label class="sql-alert-field">
+                        <span>Notas operativas <em>opcional</em></span>
+                        <textarea id="idxSqlAlertNotes" rows="3" placeholder="Qué debe hacer el equipo cuando esta alerta se dispare."></textarea>
+                    </label>
+
+                    <div class="sql-alert-preview-banner" id="idxSqlAlertPreviewBanner"></div>
+
+                    <div class="sql-alert-advanced-preview">
+                        <button class="sql-toggle-btn" type="button" onclick="toggleIndexSqlAlertPreview()">VER CONSULTA TÉCNICA</button>
+                        <div class="sql-alert-preview-wrap" id="idxSqlAlertPreviewWrap" style="display:none;">
+                            <textarea class="sql-alert-preview-box" id="idxSqlAlertPreview" rows="5" readonly placeholder="Aquí podrás revisar la consulta técnica si necesitas auditarla."></textarea>
+                            <div class="sql-alert-preview-actions">
+                                <button class="sql-toggle-btn" type="button" onclick="previewIndexSqlAlert()">ACTUALIZAR CONSULTA</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="sql-alert-modal-footer">
+                <div class="sql-alert-modal-actions">
+                    <button class="sql-toggle-btn" type="button" onclick="closeSqlAlertComposer()">CANCELAR</button>
+                    <button class="btn-send sql-alert-save-btn" type="button" id="idxSqlAlertSaveBtn" onclick="saveIndexSqlAlert()">CREAR Y ACTIVAR ALERTA</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script src="/js/index.js?v=20260418-sql-alerts-ux-3"></script>
 
 </body>
 </html>
