@@ -23,6 +23,10 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
         if (!match.IsMatch)
             return string.Empty;
 
+        var specificDimensionSql = TryBuildSpecificDimensionAggregate(match);
+        if (!string.IsNullOrWhiteSpace(specificDimensionSql))
+            return specificDimensionSql;
+
         var templateSql = TryBuildFromTemplate(match);
         if (!string.IsNullOrWhiteSpace(templateSql))
             return templateSql;
@@ -52,7 +56,7 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
             if (string.IsNullOrWhiteSpace(filterAlias))
                 return null;
 
-            return BuildTimeFilter(filterAlias, match.TimeScope, ShouldIncludeIsOpenForDowntime(match));
+            return BuildTimeFilter(filterAlias, ResolveSourceView(rendered, match), match.TimeScope, ShouldIncludeIsOpenForDowntime(match));
         });
 
         rendered = ReplaceToken(rendered, "viewname", _ => ResolveViewName(match));
@@ -73,7 +77,7 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
             if (string.IsNullOrWhiteSpace(filterAlias))
                 return string.Empty;
 
-            return BuildDimensionFilter(filterAlias, match.Dimension);
+            return BuildDimensionFilter(filterAlias, match.Dimension, match.DimensionValue);
         });
         rendered = ReplaceToken(rendered, "dimensiongroupby", token =>
         {
@@ -121,8 +125,8 @@ public class TemplateSqlBuilder : ITemplateSqlBuilder
         }
 
         var top = match.TopN > 0 ? match.TopN : 5;
-        var timeFilter = BuildTimeFilter("x", match.TimeScope, ShouldIncludeIsOpenForDowntime(match));
-        var dimensionFilter = BuildDimensionFilter("x", match.Dimension);
+        var timeFilter = BuildTimeFilter("x", viewName, match.TimeScope, ShouldIncludeIsOpenForDowntime(match));
+        var dimensionFilter = BuildDimensionFilter("x", match.Dimension, match.DimensionValue);
 
         return $@"
 SELECT TOP ({top})
@@ -148,11 +152,40 @@ ORDER BY {metricOrderBy}, {dimensionOrderBy};".Trim();
 SELECT
     {metricProjection}
 FROM {viewName} x
-WHERE {BuildTimeFilter("x", match.TimeScope, ShouldIncludeIsOpenForDowntime(match))};".Trim();
+WHERE {BuildTimeFilter("x", viewName, match.TimeScope, ShouldIncludeIsOpenForDowntime(match))};".Trim();
+    }
+
+    private string TryBuildSpecificDimensionAggregate(PatternMatchResult match)
+    {
+        if (match.Dimension == PatternDimension.Unknown || string.IsNullOrWhiteSpace(match.DimensionValue))
+            return string.Empty;
+
+        var viewName = ResolveViewName(match);
+        var dimensionProjection = BuildDimensionProjection("x", match.Dimension);
+        var dimensionGroupBy = BuildDimensionGroupBy("x", match.Dimension);
+        var metricProjection = BuildMetricProjection("x", match.Metric);
+        var dimensionFilter = BuildDimensionFilter("x", match.Dimension, match.DimensionValue);
+
+        if (string.IsNullOrWhiteSpace(viewName) ||
+            string.IsNullOrWhiteSpace(dimensionProjection) ||
+            string.IsNullOrWhiteSpace(dimensionGroupBy) ||
+            string.IsNullOrWhiteSpace(metricProjection) ||
+            string.IsNullOrWhiteSpace(dimensionFilter))
+        {
+            return string.Empty;
+        }
+
+        return $@"
+SELECT
+    {dimensionProjection},
+    {metricProjection}
+FROM {viewName} x
+WHERE {BuildTimeFilter("x", viewName, match.TimeScope, ShouldIncludeIsOpenForDowntime(match))}{dimensionFilter}
+GROUP BY {dimensionGroupBy};".Trim();
     }
 
 
-    private string BuildTimeFilter(string alias, PatternTimeScope scope, bool includeIsOpenForDowntime)
+    private string BuildTimeFilter(string alias, string? sourceView, PatternTimeScope scope, bool includeIsOpenForDowntime)
     {
         var sb = new StringBuilder();
 
@@ -173,9 +206,9 @@ WHERE {BuildTimeFilter("x", match.TimeScope, ShouldIncludeIsOpenForDowntime(matc
             case PatternTimeScope.CurrentShift:
                 sb.Append($@"CAST({alias}.OperationDate AS date) = CAST(GETDATE() AS date)
   AND {alias}.ShiftId = (
-      SELECT MAX(x.ShiftId)
-      FROM {ResolveViewForAlias(alias)} x
-      WHERE CAST(x.OperationDate AS date) = CAST(GETDATE() AS date)
+      SELECT MAX(shift_src.ShiftId)
+      FROM {sourceView} shift_src
+      WHERE CAST(shift_src.OperationDate AS date) = CAST(GETDATE() AS date)
   )");
                 break;
 
@@ -194,9 +227,17 @@ WHERE {BuildTimeFilter("x", match.TimeScope, ShouldIncludeIsOpenForDowntime(matc
         return sb.ToString();
     }
 
-    private string ResolveViewForAlias(string alias)
+    private string ResolveSourceView(string sql, PatternMatchResult match)
     {
-        return _kpiViews.ResolveByAlias(alias);
+        var aliasMatch = FromAliasRegex.Match(sql);
+        if (aliasMatch.Success)
+        {
+            var source = aliasMatch.Groups["source"].Value.Trim();
+            if (!string.IsNullOrWhiteSpace(source))
+                return source;
+        }
+
+        return ResolveViewName(match) ?? _kpiViews.ProductionViewQualifiedName;
     }
 
     private static string ReplaceSimpleToken(string sql, string tokenName, string value)
@@ -279,8 +320,22 @@ WHERE {BuildTimeFilter("x", match.TimeScope, ShouldIncludeIsOpenForDowntime(matc
         };
     }
 
-    private static string BuildDimensionFilter(string alias, PatternDimension dimension)
+    private static string BuildDimensionFilter(string alias, PatternDimension dimension, string? dimensionValue = null)
     {
+        if (!string.IsNullOrWhiteSpace(dimensionValue))
+        {
+            var value = EscapeSqlLiteral(dimensionValue.Trim());
+            return dimension switch
+            {
+                PatternDimension.Press => $"\n  AND (UPPER(LTRIM(RTRIM({alias}.PressName))) = UPPER('{value}') OR CAST({alias}.PressId AS varchar(32)) = '{value}')",
+                PatternDimension.PartNumber => $"\n  AND UPPER(LTRIM(RTRIM({alias}.PartNumber))) = UPPER('{value}')",
+                PatternDimension.Mold => $"\n  AND (UPPER(LTRIM(RTRIM({alias}.MoldName))) = UPPER('{value}') OR CAST({alias}.MoldId AS varchar(32)) = '{value}')",
+                PatternDimension.Failure => $"\n  AND (UPPER(LTRIM(RTRIM({alias}.FailureName))) = UPPER('{value}') OR CAST({alias}.FailureId AS varchar(32)) = '{value}')",
+                PatternDimension.Department => $"\n  AND (UPPER(LTRIM(RTRIM({alias}.DepartmentName))) = UPPER('{value}') OR CAST({alias}.DepartmentId AS varchar(32)) = '{value}')",
+                _ => string.Empty
+            };
+        }
+
         return dimension switch
         {
             PatternDimension.PartNumber => $"\n  AND NULLIF(LTRIM(RTRIM({alias}.PartNumber)), '') IS NOT NULL",
@@ -300,6 +355,11 @@ WHERE {BuildTimeFilter("x", match.TimeScope, ShouldIncludeIsOpenForDowntime(matc
             return TryBuildGenericTotal(match);
 
         return string.Empty;
+    }
+
+    private static string EscapeSqlLiteral(string value)
+    {
+        return value.Replace("'", "''", StringComparison.Ordinal);
     }
 
     private static string? BuildDimensionGroupBy(string alias, PatternDimension dimension)

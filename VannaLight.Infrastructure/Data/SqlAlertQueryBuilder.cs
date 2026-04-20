@@ -39,15 +39,17 @@ public sealed class SqlAlertQueryBuilder(
 
         var metricExpression = NormalizeSafeIdentifier(metric.SqlExpression, "SqlExpression", allowFunctions: true);
         var dimensionExpression = dimension is null ? null : NormalizeSafeIdentifier(dimension.SqlExpression, "DimensionSqlExpression");
+        var scopedDimensionExpression = dimensionExpression is null ? null : QualifyIdentifier(dimensionExpression, "src");
 
         var parameters = new Dictionary<string, object?>();
         var filters = new List<string>();
+        var shiftDimension = catalog.Dimensions.FirstOrDefault(x => string.Equals(x.Key, "shift", StringComparison.OrdinalIgnoreCase));
 
-        filters.Add(await BuildTimeFilterAsync(rule, metric, parameters, ct));
+        filters.Add(await BuildTimeFilterAsync(rule, metric, shiftDimension, parameters, ct));
 
-        if (!string.IsNullOrWhiteSpace(dimensionExpression) && !string.IsNullOrWhiteSpace(rule.DimensionValue))
+        if (!string.IsNullOrWhiteSpace(scopedDimensionExpression) && !string.IsNullOrWhiteSpace(rule.DimensionValue))
         {
-            filters.Add($"{dimensionExpression} = @DimensionValue");
+            filters.Add($"{scopedDimensionExpression} = @DimensionValue");
             parameters["DimensionValue"] = rule.DimensionValue!.Trim();
         }
 
@@ -69,40 +71,84 @@ FROM {baseObject} src
         };
     }
 
-    private async Task<string> BuildTimeFilterAsync(SqlAlertRule rule, MetricDefinition metric, IDictionary<string, object?> parameters, CancellationToken ct)
+    private async Task<string> BuildTimeFilterAsync(SqlAlertRule rule, MetricDefinition metric, DimensionDefinition? shiftDimension, IDictionary<string, object?> parameters, CancellationToken ct)
     {
         var timeColumn = NormalizeSafeIdentifier(metric.TimeColumn, nameof(metric.TimeColumn));
+        var srcTimeColumn = QualifyIdentifier(timeColumn, "src");
         return rule.TimeScope switch
         {
-            SqlAlertTimeScope.Today => $"CAST({timeColumn} AS date) = CAST(GETDATE() AS date)",
-            SqlAlertTimeScope.Last24Hours => $"{timeColumn} >= DATEADD(hour, -24, GETDATE())",
-            SqlAlertTimeScope.CurrentWeek => $"{timeColumn} >= DATEADD(day, -((DATEPART(weekday, GETDATE()) + @@DATEFIRST - 2) % 7), CAST(GETDATE() AS date))",
-            SqlAlertTimeScope.CurrentMonth => $"{timeColumn} >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)",
-            SqlAlertTimeScope.CurrentShift => await BuildCurrentShiftFilterAsync(rule, parameters, ct),
+            SqlAlertTimeScope.Today => $"CAST({srcTimeColumn} AS date) = CAST(GETDATE() AS date)",
+            SqlAlertTimeScope.Last24Hours => $"{srcTimeColumn} >= DATEADD(hour, -24, GETDATE())",
+            SqlAlertTimeScope.CurrentWeek => $"{srcTimeColumn} >= DATEADD(day, -((DATEPART(weekday, GETDATE()) + @@DATEFIRST - 2) % 7), CAST(GETDATE() AS date))",
+            SqlAlertTimeScope.CurrentMonth => $"{srcTimeColumn} >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)",
+            SqlAlertTimeScope.CurrentShift => await BuildCurrentShiftFilterAsync(rule, metric, shiftDimension, parameters, ct),
             _ => throw new InvalidOperationException($"TimeScope no soportado: {rule.TimeScope}")
         };
     }
 
-    private async Task<string> BuildCurrentShiftFilterAsync(SqlAlertRule rule, IDictionary<string, object?> parameters, CancellationToken ct)
+    private async Task<string> BuildCurrentShiftFilterAsync(SqlAlertRule rule, MetricDefinition metric, DimensionDefinition? shiftDimension, IDictionary<string, object?> parameters, CancellationToken ct)
     {
+        var timeColumn = NormalizeSafeIdentifier(metric.TimeColumn, nameof(metric.TimeColumn));
+        var shiftExpression = NormalizeSafeIdentifier(shiftDimension?.SqlExpression ?? "ShiftId", "ShiftDimensionSqlExpression");
+        var srcTimeColumn = QualifyIdentifier(timeColumn, "src");
+        var srcShiftExpression = QualifyIdentifier(shiftExpression, "src");
+        var subTimeColumn = QualifyIdentifier(timeColumn, "shift_src");
+        var subShiftExpression = QualifyIdentifier(shiftExpression, "shift_src");
+
         var profile = await mlTrainingProfileProvider.GetActiveProfileAsync(ct);
-        var shiftTable = NormalizeSafeIdentifier(profile.ShiftTableQualifiedName, "ShiftTableQualifiedName");
-        var (schemaName, objectName) = ParseQualifiedObject(shiftTable);
-        var isAllowed = await allowedObjectStore.IsAllowedAsync(rule.Domain, schemaName, objectName, ct);
-        if (!isAllowed)
-            throw new InvalidOperationException($"La tabla de turnos '{shiftTable}' no esta permitida para el dominio '{rule.Domain}'.");
-
-        parameters["CurrentTicks"] = DateTime.Now.TimeOfDay.Ticks;
-
-        return $@"
-CAST(src.OperationDate AS date) = CAST(GETDATE() AS date)
-AND src.ShiftId IN (
+        var shiftTableRaw = profile.ShiftTableQualifiedName?.Trim();
+        if (!string.IsNullOrWhiteSpace(shiftTableRaw))
+        {
+            try
+            {
+                var shiftTable = NormalizeSafeIdentifier(shiftTableRaw, "ShiftTableQualifiedName");
+                var (schemaName, objectName) = ParseQualifiedObject(shiftTable);
+                var isAllowed = await allowedObjectStore.IsAllowedAsync(rule.Domain, schemaName, objectName, ct);
+                if (isAllowed)
+                {
+                    parameters["CurrentTicks"] = DateTime.Now.TimeOfDay.Ticks;
+                    return $@"
+CAST({srcTimeColumn} AS date) = CAST(GETDATE() AS date)
+AND {srcShiftExpression} IN (
     SELECT Id
     FROM {shiftTable}
     WHERE disponibleProduccion = 1
       AND ((inicio <= fin AND @CurrentTicks BETWEEN inicio AND fin)
         OR (inicio > fin AND (@CurrentTicks >= inicio OR @CurrentTicks <= fin)))
 )".Trim();
+                }
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        }
+
+        return $@"
+CAST({srcTimeColumn} AS date) = CAST(GETDATE() AS date)
+AND {srcShiftExpression} = (
+    SELECT MAX({subShiftExpression})
+    FROM {NormalizeSafeIdentifier(metric.BaseObject, "BaseObject")} shift_src
+    WHERE CAST({subTimeColumn} AS date) = CAST(GETDATE() AS date)
+)".Trim();
+    }
+
+
+    private static string QualifyIdentifier(string expression, string alias)
+    {
+        var trimmed = expression.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return trimmed;
+
+        if (trimmed.Contains('(', StringComparison.Ordinal) || trimmed.Contains(' ', StringComparison.Ordinal))
+            return trimmed;
+
+        if (trimmed.Contains('.', StringComparison.Ordinal))
+            return trimmed;
+
+        if (trimmed.StartsWith("[", StringComparison.Ordinal) && trimmed.EndsWith("]", StringComparison.Ordinal))
+            return $"{alias}.{trimmed}";
+
+        return $"{alias}.{trimmed}";
     }
 
     private static string BuildSummary(SqlAlertRule rule, MetricDefinition metric, DimensionDefinition? dimension)

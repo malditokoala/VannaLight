@@ -529,6 +529,7 @@
                     const runtimeState = String(rule.runtimeState || rule.RuntimeState || 'Closed');
                     const lastObserved = rule.lastObservedValue ?? rule.LastObservedValue;
                     const lastTriggered = rule.lastTriggeredUtc || rule.LastTriggeredUtc || rule.lastAcknowledgedUtc || rule.LastAcknowledgedUtc || '';
+                    const lastTriggeredLabel = formatIndexDateTime(lastTriggered) || lastTriggered;
 
                     return `
                         <div class="user-alert-card ${statusClass} ${active ? '' : 'is-inactive'}">
@@ -555,11 +556,13 @@
                     const eventType = item.eventType || item.EventType || 'Evento';
                     const message = item.message || item.Message || '';
                     const observed = item.observedValue ?? item.ObservedValue;
+                    const eventUtc = item.eventUtc || item.EventUtc || '';
+                    const eventLabel = formatIndexDateTime(eventUtc) || eventUtc;
                     return `
                         <div class="user-alert-event-card">
                             <div class="user-alert-card-top">
                                 <div class="user-alert-card-name">${escapeHtml(String(eventType))}</div>
-                                <span class="user-alert-status is-closed">${escapeHtml(item.eventUtc || item.EventUtc || '')}</span>
+                                <span class="user-alert-status is-closed"${eventUtc ? ` title="UTC: ${escapeHtml(eventUtc)}"` : ''}>${escapeHtml(eventLabel)}</span>
                             </div>
                             <div class="user-alert-card-summary">${escapeHtml(message)}</div>
                             <div class="user-alert-card-meta">${observed !== null && observed !== undefined ? `Observado ${escapeHtml(fmtVal(observed))}` : 'Sin valor observado'}</div>
@@ -612,10 +615,39 @@
             return MODES[modeKey]?.label || String(modeKey || '').toUpperCase();
         }
 
+        function parseIndexDate(timestamp) {
+            if (!timestamp) return null;
+            if (timestamp instanceof Date) return Number.isNaN(timestamp.getTime()) ? null : timestamp;
+            const raw = String(timestamp).trim();
+            if (!raw) return null;
+
+            const normalized = /z$|[+-]\d{2}:\d{2}$/i.test(raw)
+                ? raw
+                : raw.includes('T')
+                    ? `${raw}Z`
+                    : `${raw.replace(' ', 'T')}Z`;
+
+            const date = new Date(normalized);
+            return Number.isNaN(date.getTime()) ? null : date;
+        }
+
+        function formatIndexDateTime(timestamp) {
+            if (!timestamp) return '';
+            const date = parseIndexDate(timestamp);
+            if (!date) return String(timestamp);
+            return date.toLocaleString('es-MX', {
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
         function formatHistoryTime(timestamp) {
             if (!timestamp) return 'Sin fecha';
-            const date = new Date(timestamp);
-            if (Number.isNaN(date.getTime())) return 'Sin fecha';
+            const date = parseIndexDate(timestamp);
+            if (!date) return 'Sin fecha';
 
             const diffMs = Date.now() - date.getTime();
             const diffMinutes = Math.max(0, Math.round(diffMs / 60000));

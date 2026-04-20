@@ -127,6 +127,10 @@
     - `Ejecutar prueba`
   - se mantienen las capacidades avanzadas, pero se empujan fuera del foco principal del wizard
   - se mejora contraste y legibilidad en helper text, labels secundarios, resumenes compactos y tarjetas de soporte del onboarding
+- Correccion del carril SQL por patrones para preguntas con entidad concreta:
+  - ahora el matcher extrae valores de dimension como `prensa A4` y los pasa al builder
+  - el SQL templated/generico ya no responde con `TOP N` cuando la pregunta pide una entidad especifica
+  - para `turno actual` el subquery de `ShiftId` ahora usa la misma vista base de la consulta y evita mezclar `scrap` con `production` por alias generico
 - Correccion del modo `ML / Prediccion` para no sugerir preguntas invalidas por default:
   - la UI ya no invita a ejecutar una sugerencia generica de forecast sin entidad concreta
   - las sugerencias base de `ML` ahora muestran ejemplos con entidad explicita entre comillas
@@ -1153,3 +1157,34 @@ Fuera de alcance por ahora:
 - 2026-04-18: Se consolido una capa final de estilos del onboarding admin para que el wizard tenga una sola verdad visual. Se reforzo el stepper, se mejoro la legibilidad de los step chips, se colapsan los pasos no activos y se eliminaron conflictos visuales entre reglas viejas y nuevas.
 
 - 2026-04-18: onboarding admin pulido extra. Se eliminó el bloque fantasma de 'Estado rápido', se reforzó el sidebar de workspaces con fallback desde runtime contexts, se hizo visible el estado vacío/fallback del bootstrap y se limpiaron más cadenas mojibake visibles del flujo de onboarding.
+
+### Actualizacion 2026-04-20 - Correccion operativa de SQL Alerts en CurrentShift
+- Ajuste equivalente en `index` para experiencia operativa:
+  - las alertas y eventos visibles ya no muestran el ISO UTC crudo
+  - `Ultimo cambio` y `Actividad reciente` ahora se renderizan en hora local del navegador
+  - el UTC original queda disponible en tooltip para soporte/auditoria
+- Ajuste UX adicional en SQL Alerts admin para evitar confusion horaria:
+  - las cards de `Actividad reciente` y el metadata de `Ultimo disparo` ahora se muestran en hora local del navegador
+  - el valor UTC original se conserva en `title`/tooltip para auditoria
+  - decision: persistencia en backend sigue en UTC; solo cambia la presentacion frontend
+- Se corrigio el incidente detectado al probar alertas SQL tipo `CurrentShift` en `erp-kpi-pilot`:
+  - la evaluacion fallaba con `La tabla de turnos 'dbo.Turnos' no esta permitida para el dominio ...`
+  - esto bloqueaba la alerta antes de calcular `ObservedValue`, aunque la metrica y el umbral fueran validos
+- Se endurecio `SqlAlertQueryBuilder` para `CurrentShift`:
+  - si la tabla de turnos configurada existe y esta permitida, se sigue usando como fuente preferida
+  - si no esta permitida, el motor ya no falla duro
+  - ahora cae a un fallback generico sobre la propia vista/base object de la metrica, usando el `ShiftId` mas reciente del dia
+- Se corrigio tambien el filtrado SQL compilado para dimensiones:
+  - ahora se califica con alias `src` para evitar ambiguedad y mantener consistencia en el preview generado
+- Se mejoro la UX de `Alert Monitor` en admin:
+  - el selector de dimensiones ahora se filtra por metrica elegida
+  - el hint contextual explica mejor que dimensiones soporta la metrica
+  - para `CurrentShift`, el formulario deja claro que puede usar tabla de turnos o fallback por vista
+- Se corrigio la regla local de prueba que habia quedado mal guardada:
+  - antes: `scrap_qty` + `shift = A4`
+  - ahora: `scrap_qty` + `press = A4`
+  - se limpio tambien el estado runtime local para permitir reevaluacion limpia
+- Aprendizaje a conservar:
+  - `ACK` no corrige la regla ni resuelve fallos de compilacion/evaluacion
+  - solo marca la alerta como reconocida manualmente
+  - los errores estructurales de configuracion deben corregirse en la regla o en el builder, no con `ACK`

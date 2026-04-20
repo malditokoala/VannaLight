@@ -366,6 +366,7 @@ public sealed class PatternMatcherService : IPatternMatcherService
                 TopN = topN > 0 ? topN : 5,
                 Metric = PatternMetric.ScrapQty,
                 Dimension = PatternDimension.PartNumber,
+                DimensionValue = ExtractDimensionValue(question, PatternDimension.PartNumber),
                 TimeScope = timeScope
             };
         }
@@ -381,6 +382,7 @@ public sealed class PatternMatcherService : IPatternMatcherService
                 TopN = topN > 0 ? topN : 5,
                 Metric = PatternMetric.ScrapQty,
                 Dimension = PatternDimension.Press,
+                DimensionValue = ExtractDimensionValue(question, PatternDimension.Press),
                 TimeScope = timeScope
             };
         }
@@ -466,6 +468,53 @@ public sealed class PatternMatcherService : IPatternMatcherService
             return PatternTimeScope.CurrentWeek;
 
         return PatternTimeScope.CurrentShift;
+    }
+
+    private static string ExtractDimensionValue(string question, PatternDimension dimension)
+    {
+        if (string.IsNullOrWhiteSpace(question))
+            return string.Empty;
+
+        return dimension switch
+        {
+            PatternDimension.Press => ExtractTokenAfterKeyword(question, new[] { "prensa", "press" }),
+            PatternDimension.PartNumber => ExtractTokenAfterKeyword(question, new[] { "numero de parte", "numeros de parte", "part number", "n/p", "np" }),
+            PatternDimension.Mold => ExtractTokenAfterKeyword(question, new[] { "molde", "mold" }),
+            PatternDimension.Failure => ExtractTokenAfterKeyword(question, new[] { "falla", "failure" }),
+            PatternDimension.Department => ExtractTokenAfterKeyword(question, new[] { "departamento", "area", "department" }),
+            _ => string.Empty
+        };
+    }
+
+    private static string ExtractTokenAfterKeyword(string question, IReadOnlyList<string> keywords)
+    {
+        foreach (var keyword in keywords)
+        {
+            var pattern = $@"\b{Regex.Escape(keyword)}\b\s+(?<value>[A-Za-z0-9][A-Za-z0-9_./-]*)";
+            var match = Regex.Match(question, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (!match.Success)
+                continue;
+
+            var value = match.Groups["value"].Value.Trim();
+            if (IsIgnorableDimensionValue(value))
+                continue;
+
+            return value;
+        }
+
+        return string.Empty;
+    }
+
+    private static bool IsIgnorableDimensionValue(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+
+        return NormalizeKey(value) switch
+        {
+            "actual" or "actuales" or "del" or "de" or "con" or "que" or "mas" or "lleva" or "tiene" or "current" => true,
+            _ => false
+        };
     }
 
     private static bool ContainsAny(string normalizedQuestion, params string[] phrases)

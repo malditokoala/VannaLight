@@ -40,5 +40,6 @@ public sealed record PatternMatchResult
     public int TopN { get; init; } = 0;
     public PatternMetric Metric { get; init; } = PatternMetric.Unknown;
     public PatternDimension Dimension { get; init; } = PatternDimension.Unknown;
+    public string DimensionValue { get; init; } = string.Empty;
     public PatternTimeScope TimeScope { get; init; } = PatternTimeScope.Unknown;
 }
