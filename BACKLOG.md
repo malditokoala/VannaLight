@@ -25,6 +25,165 @@
   - hacer que el sistema indique claramente cuando un dominio/contexto ya esta operativo y que falta para quedar listo
   - mover gradualmente la configuracion especifica de la base de datos al onboarding, evitando seguir dispersandola en menus tecnicos
 
+### Prioridad 0 - Urgente: mover comportamiento de negocio desde codigo hacia Admin
+- Objetivo de esta linea de trabajo:
+  - dejar de resolver familias de preguntas del dominio entrando a `PatternMatcherService.cs`
+  - convertir `Admin` en la fuente principal de configuracion para comportamiento semantico del dominio
+  - reservar cambios en codigo para bugs estructurales, seguridad, ejecucion y validacion del motor
+- Riesgo actual que justifica esta prioridad:
+  - hoy el sistema sigue en estado intermedio
+  - `Admin` ya permite configurar una parte del dominio, pero matcher, builder y algunas rutas built-in todavia capturan demasiado comportamiento de negocio
+  - esto no escala bien para el piloto si cada nueva familia de preguntas obliga a tocar C# y redeployar
+
+#### Fase 1 - Contener el hardcodeo y definir fronteras
+- Hacer inventario completo de comportamiento de negocio que hoy vive en codigo:
+  - revisar `PatternMatcherService.cs`
+  - revisar `TemplateSqlBuilder.cs`
+  - revisar cualquier fallback SQL o branch de intencion embebido en `InferenceWorker` o servicios relacionados
+- Clasificar cada regla encontrada en una de estas categorias:
+  - infraestructura del motor
+  - comportamiento del dominio
+  - compatibilidad legacy temporal
+- Definir y documentar la frontera oficial:
+  - en codigo solo debe quedar:
+    - pipeline general
+    - resolucion de contexto
+    - ejecucion segura
+    - validacion estructural
+    - fallback minimo
+    - compilacion declarativa generica
+  - en Admin debe vivir:
+    - patrones de intencion
+    - metrica
+    - dimension
+    - aliases semanticos
+    - hints de columnas
+    - reglas de negocio
+    - ejemplos verificados
+- Criterio de terminado:
+  - lista trazable de ramas hardcoded actuales
+  - cada rama marcada como `se queda`, `migra a Admin` o `legacy temporal`
+  - documento corto en backlog o auditoria tecnica que deje clara la frontera
+
+#### Fase 2 - Dar prioridad real a Query Patterns sobre matcher built-in
+- Revisar el orden de resolucion de preguntas SQL:
+  - confirmar si hoy el matcher built-in gana antes que patrones configurados
+  - cambiar el orden para que `Query Patterns` configurados del dominio sean la fuente principal en preguntas repetibles del piloto
+- Reducir el built-in a modo minimo:
+  - deteccion general de intencion
+  - fallback minimo para no dejar preguntas criticas sin ruta
+  - compatibilidad temporal para casos ya sembrados mientras migran a Admin
+- Evitar agregar nuevos casos de negocio al matcher built-in:
+  - no seguir creciendo ramas como `production_by_press`, `scrap_by_partnumber`, `downtime_by_failure` salvo que sea un bug base unavoidable
+- Criterio de terminado:
+  - preguntas configuradas en `Query Patterns` del dominio se resuelven por esa via antes de caer al built-in
+  - backlog deja explicitamente prohibido seguir agregando logica de negocio frecuente al matcher salvo excepcion documentada
+
+#### Fase 3 - Declarativizar mas el builder SQL
+- Revisar `TemplateSqlBuilder.cs` para reducir branching por `PatternKey` y por casos concretos del dominio
+- Llevar el builder a una forma mas declarativa basada en:
+  - `Metric`
+  - `Dimension`
+  - `TimeScope`
+  - tokens genericos de template
+  - validaciones de shape del resultado
+- Estandarizar soporte para:
+  - entidad concreta en pregunta -> filtro `WHERE`
+  - preguntas `top N` -> `GROUP BY + ORDER BY + TOP`
+  - total global -> agregado sin dimension
+  - `turno actual` -> filtro temporal consistente con la vista base
+- Reducir SQL embebido especifico por dominio cuando se pueda reemplazar por construccion generica
+- Criterio de terminado:
+  - builder resuelve las familias demo principales con piezas declarativas y menos branches especiales
+  - se reduce el numero de casos donde corregir una familia de preguntas obliga a tocar el builder
+
+#### Fase 4 - Validacion semantica formal antes de ejecutar SQL
+- Crear una capa nueva de validacion semantica entre intencion detectada y SQL final
+- Reglas iniciales obligatorias:
+  - si la pregunta menciona una entidad concreta, el SQL debe filtrarla
+  - si la pregunta pide `turno actual`, el SQL debe incluir filtro temporal equivalente
+  - si la pregunta pide una sola entidad, el SQL no debe responder con agregado global sin `WHERE`
+  - si la pregunta pide `top N`, el SQL debe agrupar y ordenar por la dimension esperada
+- Hacer que la validacion no solo registre warning:
+  - debe marcar consulta sospechosa
+  - debe intentar enrutar a correccion/revision cuando contradice claramente la intencion
+- Definir salida clara para UI y logs:
+  - motivo de rechazo o revision
+  - regla semantica violada
+  - sugerencia de ajuste
+- Criterio de terminado:
+  - el sistema detecta automaticamente errores como:
+    - pregunta con `prensa E4` pero SQL sin filtro de prensa
+    - pregunta de `turno actual` sin `ShiftId`
+    - pregunta singular respondida con ranking global
+
+#### Fase 5 - Convertir Admin en el lugar real de correccion del dominio
+- Diseñar flujo operativo claro para que una mala respuesta se corrija desde Admin:
+  - corregir SQL en `Entrenamiento RAG`
+  - guardar ejemplo verificado
+  - crear o ajustar `Query Pattern`
+  - agregar `Semantic Hint` si falta mapeo de columnas
+  - agregar `Business Rule` si falta restriccion de negocio
+- Hacer mas explicito en Admin para que sirve cada modulo:
+  - `Entrenamiento RAG` = corregir ejemplos reales
+  - `Query Patterns` = familias repetibles de preguntas
+  - `Semantic Hints` = mapeo semantico del dominio
+  - `Business Rules` = restricciones y comportamiento esperado
+- Agregar copy/UX en Admin para que el usuario sepa:
+  - que se arregla con ejemplo
+  - que se arregla con pattern
+  - que se arregla con hint o regla
+  - cuando un problema sigue siendo bug estructural y no configuracion
+- Criterio de terminado:
+  - existe un flujo reproducible donde un caso de negocio comun se mejora sin deploy
+  - el usuario no tecnico entiende donde intervenir para cada tipo de problema
+
+#### Fase 6 - Migrar primero las familias de preguntas del piloto
+- Tomar las familias de preguntas mas frecuentes y moverlas a configuracion declarativa en Admin:
+  - produccion por prensa
+  - scrap por prensa
+  - scrap por numero de parte
+  - downtime por falla
+  - scrap cost por molde
+  - comparativos produccion vs scrap por molde/parte cuando aplique
+- Para cada familia:
+  - definir `MetricKey`
+  - definir `DimensionKey`
+  - definir `TimeScope`
+  - definir aliases frecuentes del usuario
+  - definir SQL template o forma declarativa equivalente
+  - guardar al menos un ejemplo verificado en memoria
+- Criterio de terminado:
+  - las familias demo del piloto ya no dependen principalmente de branches hardcoded en C#
+  - al menos los casos mas repetidos se pueden ajustar desde Admin
+
+#### Fase 7 - Documentacion operativa y criterio de escalacion
+- Documentar explicitamente:
+  - que cosas se corrigen desde Admin
+  - que cosas todavia requieren codigo
+  - que se considera bug estructural
+  - cuando una nueva pregunta debe resolverse con pattern y cuando con ejemplo/hint
+- Crear politica interna para nuevas correcciones:
+  - si es familia repetible del dominio -> primero intentar en Admin
+  - si es falla de infraestructura, validacion o enrutamiento base -> codigo
+  - si un fix en codigo se hace por urgencia, debe dejar ticket de migracion a Admin si corresponde
+- Criterio de terminado:
+  - el equipo tiene una regla clara para no seguir cargando negocio en codigo por costumbre
+
+#### Entregables minimos esperados de esta linea urgente
+- Inventario de hardcodeo actual en matcher/builder
+- Priorizacion de migracion de casos de negocio a `Query Patterns`
+- Primera version de validacion semantica pre-ejecucion
+- Flujo de correccion desde Admin mas claro y mas usable
+- Migracion de las familias de preguntas demo mas importantes
+- Documentacion de frontera entre motor y dominio
+
+#### Definicion de exito
+- una nueva familia de preguntas del dominio no deberia requerir tocar C# salvo que exista bug estructural
+- `Admin` debe convertirse en la via principal para configurar comportamiento del dominio durante el piloto
+- el numero de fixes puntuales en `PatternMatcherService.cs` debe bajar de forma visible
+- el sistema debe rechazar o marcar consultas semanticamente contradictorias antes de ejecutarlas
+
 ### Hecho hoy
 - Ajuste adicional del onboarding para compactar el Paso 1 y reforzar el cierre del Paso 4:
   - el editor inline de conexion se hizo visualmente mas compacto y menos invasivo
@@ -1188,3 +1347,4 @@ Fuera de alcance por ahora:
   - `ACK` no corrige la regla ni resuelve fallos de compilacion/evaluacion
   - solo marca la alerta como reconocida manualmente
   - los errores estructurales de configuracion deben corregirse en la regla o en el builder, no con `ACK`
+

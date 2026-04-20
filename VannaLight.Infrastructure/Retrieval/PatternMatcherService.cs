@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using VannaLight.Core.Abstractions;
@@ -388,6 +388,21 @@ public sealed class PatternMatcherService : IPatternMatcherService
         }
 
         if (ContainsAny(normalizedQuestion, "produccion", "production", "producido") &&
+            ContainsAny(normalizedQuestion, "prensa", "prensas", "press"))
+        {
+            return new PatternMatchResult
+            {
+                IsMatch = true,
+                PatternKey = "production_by_press",
+                IntentName = "production_by_press",
+                Metric = PatternMetric.ProducedQty,
+                Dimension = PatternDimension.Press,
+                DimensionValue = ExtractDimensionValue(question, PatternDimension.Press),
+                TimeScope = timeScope
+            };
+        }
+
+        if (ContainsAny(normalizedQuestion, "produccion", "production", "producido") &&
             ContainsAny(normalizedQuestion, "total", "cuanto", "cuanta"))
         {
             return new PatternMatchResult
@@ -546,3 +561,4 @@ public sealed class PatternMatcherService : IPatternMatcherService
         int ExtractedTopN,
         PatternTimeScope ResolvedTimeScope);
 }
+
