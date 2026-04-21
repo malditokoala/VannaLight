@@ -140,6 +140,7 @@ public class AskUseCase(
                                 inferredIntentName,
                                 allowedObjectNames,
                                 profileKey,
+                                semanticExpectation: null,
                                 exampleIdToTouch: verifiedExactMatch.Id,
                                 reviewReasonPrefix: "VerifiedExample",
                                 ct: ct);
@@ -173,6 +174,7 @@ public class AskUseCase(
                 inferredIntentName,
                 allowedObjectNames,
                 profileKey,
+                semanticExpectation: patternMatch,
                 reviewReasonPrefix: "Pattern",
                 ct: ct);
         }
@@ -226,6 +228,7 @@ public class AskUseCase(
                     inferredIntentName,
                     allowedObjectNames,
                     profileKey,
+                    semanticExpectation: null,
                     existingContext: context,
                     existingRules: rules,
                     existingSemanticHints: semanticHints,
@@ -244,6 +247,7 @@ public class AskUseCase(
     string? intentName,
     IReadOnlyList<string> allowedObjectNames,
     string? profileKey,
+    PatternMatchResult? semanticExpectation,
     CancellationToken ct, // ✅ ahora va antes
     RetrievalContext? existingContext = null,
     IReadOnlyList<BusinessRule>? existingRules = null,
@@ -264,8 +268,10 @@ public class AskUseCase(
 
         var firstAttempt = await ValidateSqlCandidateAsync(
             initialSql,
+            question,
             sqlServerConnString,
             normalizedDomain,
+            semanticExpectation,
             ct);
 
         if (firstAttempt.Success)
@@ -321,8 +327,10 @@ public class AskUseCase(
                 {
                     var secondAttempt = await ValidateSqlCandidateAsync(
                         normalizedCorrectedSql,
+                        question,
                         sqlServerConnString,
                         normalizedDomain,
+                        semanticExpectation,
                         ct);
 
                     if (secondAttempt.Success)
@@ -830,10 +838,18 @@ public class AskUseCase(
 
     private async Task<(bool Success, AskFailureKind FailureKind, string? Error, bool PassedDryRun)> ValidateSqlCandidateAsync(
         string sql,
+        string question,
         string sqlServerConnString,
         string normalizedDomain,
+        PatternMatchResult? semanticExpectation,
         CancellationToken ct)
     {
+        var semanticError = ValidateSemanticAlignment(question, sql, semanticExpectation);
+        if (!string.IsNullOrWhiteSpace(semanticError))
+        {
+            return (false, AskFailureKind.ValidationError, $"Validacion semantica fallida: {semanticError}", false);
+        }
+
         if (!validator.TryValidate(sql, normalizedDomain, out var validationError))
         {
             return (false, AskFailureKind.ValidationError, $"Validacion fallida: {validationError}", false);
@@ -851,6 +867,121 @@ public class AskUseCase(
         }
 
         return (true, AskFailureKind.None, null, true);
+    }
+
+    private static string? ValidateSemanticAlignment(
+        string question,
+        string sql,
+        PatternMatchResult? semanticExpectation)
+    {
+        if (string.IsNullOrWhiteSpace(sql))
+        {
+            return "La consulta candidata esta vacia.";
+        }
+
+        if (semanticExpectation is null)
+        {
+            return null;
+        }
+
+        var upperSql = sql.ToUpperInvariant();
+        var upperQuestion = question?.ToUpperInvariant() ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(semanticExpectation.DimensionValue))
+        {
+            if (!upperSql.Contains("WHERE", StringComparison.Ordinal))
+            {
+                return $"La pregunta pide una entidad concreta ({semanticExpectation.DimensionValue}) pero el SQL no incluye WHERE.";
+            }
+
+            var normalizedDimensionValue = semanticExpectation.DimensionValue.Trim().ToUpperInvariant();
+            if (!HasEntitySpecificFilter(upperSql, normalizedDimensionValue))
+            {
+                return $"La pregunta pide la entidad '{semanticExpectation.DimensionValue}' pero el SQL no refleja ese filtro.";
+            }
+
+            if (semanticExpectation.Dimension != PatternDimension.Unknown &&
+                !HasDimensionFilterClause(upperSql, semanticExpectation.Dimension))
+            {
+                return $"La pregunta pide una sola entidad ({semanticExpectation.DimensionValue}) pero el SQL parece responder con agregado global sin filtro de dimension.";
+            }
+        }
+
+        if (semanticExpectation.TimeScope == PatternTimeScope.CurrentShift ||
+            upperQuestion.Contains("TURNO ACTUAL", StringComparison.Ordinal))
+        {
+            if (!HasCurrentShiftFilter(upperSql))
+            {
+                return "La pregunta pide turno actual pero el SQL no incluye un filtro temporal equivalente por fecha actual y ShiftId.";
+            }
+        }
+
+        if (semanticExpectation.TopN > 0)
+        {
+            if (!Regex.IsMatch(upperSql, @"\bSELECT\s+TOP\s*\(", RegexOptions.CultureInvariant) &&
+                !Regex.IsMatch(upperSql, @"\bSELECT\s+TOP\s+\d+", RegexOptions.CultureInvariant))
+            {
+                return $"La pregunta pide top {semanticExpectation.TopN} pero el SQL no incluye TOP.";
+            }
+
+            if (semanticExpectation.Dimension != PatternDimension.Unknown &&
+                !upperSql.Contains("GROUP BY", StringComparison.Ordinal))
+            {
+                return $"La pregunta pide top {semanticExpectation.TopN} por dimension pero el SQL no incluye GROUP BY.";
+            }
+
+            if (!upperSql.Contains("ORDER BY", StringComparison.Ordinal))
+            {
+                return $"La pregunta pide top {semanticExpectation.TopN} pero el SQL no incluye ORDER BY.";
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HasEntitySpecificFilter(string upperSql, string normalizedDimensionValue)
+    {
+        return !string.IsNullOrWhiteSpace(normalizedDimensionValue) &&
+               upperSql.Contains(normalizedDimensionValue, StringComparison.Ordinal);
+    }
+
+    private static bool HasDimensionFilterClause(string upperSql, PatternDimension dimension)
+    {
+        var dimensionSignals = dimension switch
+        {
+            PatternDimension.Press => new[] { "PRESSNAME", "PRESSID" },
+            PatternDimension.PartNumber => new[] { "PARTNUMBER" },
+            PatternDimension.Mold => new[] { "MOLDNAME", "MOLDID" },
+            PatternDimension.Failure => new[] { "FAILURENAME", "FAILUREID" },
+            PatternDimension.Department => new[] { "DEPARTMENTNAME", "DEPARTMENTID" },
+            _ => Array.Empty<string>()
+        };
+
+        if (dimensionSignals.Length == 0)
+        {
+            return true;
+        }
+
+        var whereIndex = upperSql.IndexOf("WHERE", StringComparison.Ordinal);
+        if (whereIndex < 0)
+        {
+            return false;
+        }
+
+        var tail = upperSql[whereIndex..];
+        return dimensionSignals.Any(signal => tail.Contains(signal, StringComparison.Ordinal));
+    }
+
+    private static bool HasCurrentShiftFilter(string upperSql)
+    {
+        var hasShiftId = upperSql.Contains("SHIFTID", StringComparison.Ordinal);
+        var hasCurrentDateReference =
+            upperSql.Contains("OPERATIONDATE", StringComparison.Ordinal) &&
+            (upperSql.Contains("GETDATE()", StringComparison.Ordinal) ||
+             upperSql.Contains("CAST(GETDATE() AS DATE)", StringComparison.Ordinal) ||
+             upperSql.Contains("CONVERT(DATE, GETDATE())", StringComparison.Ordinal));
+
+        return hasShiftId && hasCurrentDateReference;
     }
 
     private async Task<string> TrySelfCorrectSqlAsync(

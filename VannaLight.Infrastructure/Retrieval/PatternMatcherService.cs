@@ -30,10 +30,10 @@ public sealed class PatternMatcherService : IPatternMatcherService
             return builtIn;
 
         var evaluated = BuildResult(evaluation);
-        if (builtIn.IsMatch && !evaluated.IsMatch)
-            return builtIn;
+        if (evaluated.IsMatch || evaluation.HasIntentEvidence)
+            return evaluated;
 
-        return evaluated;
+        return builtIn.IsMatch ? builtIn : evaluated;
     }
 
     public async Task<string?> InferIntentNameAsync(string question, string? domain, CancellationToken ct = default)
@@ -162,6 +162,7 @@ public sealed class PatternMatcherService : IPatternMatcherService
             hasIntentEvidence,
             isStrongRouteMatch,
             ExtractTopN(rawQuestion),
+            ExtractDimensionValue(rawQuestion, ParseDimension(pattern.DimensionKey)),
             ResolveTimeScope(rawQuestion, pattern, matchedTerms));
     }
 
@@ -180,6 +181,7 @@ public sealed class PatternMatcherService : IPatternMatcherService
                 : pattern.DefaultTopN.GetValueOrDefault(),
             Metric = ParseMetric(pattern.MetricKey),
             Dimension = ParseDimension(pattern.DimensionKey),
+            DimensionValue = evaluation.ExtractedDimensionValue,
             TimeScope = evaluation.ResolvedTimeScope
         };
     }
@@ -559,6 +561,7 @@ public sealed class PatternMatcherService : IPatternMatcherService
         bool HasIntentEvidence,
         bool IsStrongRouteMatch,
         int ExtractedTopN,
+        string ExtractedDimensionValue,
         PatternTimeScope ResolvedTimeScope);
 }
 

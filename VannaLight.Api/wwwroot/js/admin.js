@@ -1380,57 +1380,73 @@ function getOnboardingFlowState() {
     const hasSemanticHints = !!(health?.hasSemanticHints ?? health?.HasSemanticHints);
     const isInitialized = hasSchemaDocs && hasSemanticHints;
     const hasValidation = isOnboardingValidationSuccessful(globalOnboardingValidation);
+    const blockers = [];
+
+    if (!hasWorkspace) blockers.push('workspace');
+    if (!hasAllowed) blockers.push('tablas');
+    if (!isInitialized) blockers.push('contexto');
+    if (!hasValidation) blockers.push('prueba');
 
     let currentStep = 1;
     let currentStepLabel = 'Paso 1 Â· Workspace';
     let currentStepHint = 'Empieza configurando el workspace, el dominio y la conexiÃ³n a la base.';
     let requiredAction = needsInitialOnboardingSetup()
-        ? 'Crear o seleccionar una conexiÃ³n vÃ¡lida y guardar el workspace.'
-        : 'Completar tenant, dominio y conexiÃ³n, luego guardar el workspace.';
+        ? 'Obligatorio ahora: crea o selecciona una conexion valida y guarda el workspace.'
+        : 'Obligatorio ahora: completa tenant, dominio y conexion, luego guarda el workspace.';
     let nextAction = 'Descubrir el schema para elegir tablas permitidas.';
     let progress = 0;
     let progressHint = 'AÃºn no hay pasos obligatorios completados.';
+    let readinessLabel = 'Bloqueado';
+    let readinessTone = 'verify-pending';
+    let readinessSummary = 'Todavia faltan pasos base antes de que el dominio quede operativo.';
 
     if (hasWorkspace) {
         currentStep = 2;
         currentStepLabel = 'Paso 2 Â· Tablas permitidas';
         currentStepHint = 'Ya existe contexto mÃ­nimo; ahora toca definir el perÃ­metro seguro del dominio.';
         requiredAction = hasAllowedSelection
-            ? 'Guardar la selecciÃ³n actual de tablas permitidas.'
-            : 'Descubrir schema y seleccionar al menos una tabla o vista permitida.';
+            ? 'Obligatorio ahora: guarda la seleccion actual de tablas permitidas.'
+            : 'Obligatorio ahora: descubre schema y selecciona al menos una tabla o vista permitida.';
         nextAction = 'Preparar el dominio para generar schema docs e hints.';
         progress = 1;
         progressHint = 'El workspace base ya quedÃ³ configurado.';
+        readinessSummary = 'El workspace ya existe, pero el motor todavia no tiene perimetro seguro.';
     }
 
     if (hasAllowed) {
         currentStep = 3;
         currentStepLabel = 'Paso 3 Â· Preparar dominio';
         currentStepHint = 'El perÃ­metro seguro ya existe; ahora falta generar el contexto tÃ©cnico mÃ­nimo.';
-        requiredAction = 'Ejecutar la preparaciÃ³n del dominio para generar schema docs y semantic hints base.';
+        requiredAction = 'Obligatorio ahora: ejecuta la preparacion del dominio para generar schema docs y semantic hints base.';
         nextAction = 'Hacer una pregunta real para validar el dominio.';
         progress = 2;
         progressHint = 'El dominio ya sabe quÃ© objetos puede consultar.';
+        readinessSummary = 'Ya hay tablas permitidas, pero el motor aun no tiene el contexto tecnico minimo.';
     }
 
     if (isInitialized) {
         currentStep = 4;
         currentStepLabel = 'Paso 4 Â· Prueba real';
         currentStepHint = 'El motor ya tiene contexto tÃ©cnico suficiente para intentar una consulta de negocio.';
-        requiredAction = 'Ejecutar una pregunta real y revisar que el SQL y el resultado sean correctos.';
+        requiredAction = 'Obligatorio ahora: ejecuta una pregunta real y revisa que el SQL y el resultado sean correctos.';
         nextAction = 'Si responde bien, el dominio ya puede considerarse listo para salida inicial.';
         progress = 3;
         progressHint = 'El dominio ya fue preparado e indexado.';
+        readinessLabel = 'Listo para validar';
+        readinessSummary = 'El flujo base ya casi cierra; falta una prueba real para confirmar salida inicial.';
     }
 
     if (hasValidation) {
         currentStep = 4;
         currentStepLabel = 'Listo Â· Onboarding base completo';
         currentStepHint = 'El flujo base ya quedÃ³ operativo para una primera salida.';
-        requiredAction = 'No hay bloqueos base pendientes; lo siguiente es afinaciÃ³n opcional.';
+        requiredAction = 'Sin bloqueos base: el dominio ya puede operar. Lo siguiente es afinacion opcional.';
         nextAction = 'Business Rules, Semantic Hints manuales y Query Patterns pueden refinarse despuÃ©s.';
         progress = 4;
         progressHint = 'Los 4 pasos obligatorios del onboarding base estÃ¡n completos.';
+        readinessLabel = 'Operativo';
+        readinessTone = 'verify-ok';
+        readinessSummary = 'El dominio ya paso la prueba base y puede salir a uso interno.';
     }
 
     return {
@@ -1448,7 +1464,11 @@ function getOnboardingFlowState() {
         requiredAction,
         nextAction,
         progress,
-        progressHint
+        progressHint,
+        blockers,
+        readinessLabel,
+        readinessTone,
+        readinessSummary
     };
 }
 
@@ -1519,16 +1539,16 @@ function renderOnboardingActionGuidance() {
 
     if (!state.hasWorkspace) {
         hint = needsInitialOnboardingSetup()
-            ? 'Guarda el workspace y una conexion valida para habilitar el resto del flujo.'
-            : 'Guarda el workspace para habilitar el resto del flujo.';
+            ? 'Bloquea salida: sin workspace y conexion validos no se habilita el resto del flujo.'
+            : 'Bloquea salida: sin workspace guardado el resto del flujo no avanza.';
     } else if (!state.hasAllowed) {
-        hint = 'Selecciona solo las tablas o vistas necesarias y guardalas.';
+        hint = 'Bloquea salida: selecciona solo las tablas o vistas necesarias y guardalas.';
     } else if (!state.isInitialized) {
-        hint = 'Prepara el dominio para generar el contexto tecnico base.';
+        hint = 'Bloquea salida: prepara el dominio para generar el contexto tecnico base.';
     } else if (!state.hasValidation) {
-        hint = 'Haz una prueba real con una pregunta simple y valida el resultado.';
+        hint = 'Bloquea salida: haz una prueba real con una pregunta simple y valida el resultado.';
     } else {
-        hint = 'Flujo base listo. La afinacion avanzada ya es opcional.';
+        hint = 'Flujo base listo. Lo siguiente ya es opcional: Query Patterns, Business Rules y Semantic Hints manuales.';
     }
 
     meta.innerHTML = `<span class="meta-empty">${escHtml(hint)}</span>`;
@@ -7011,56 +7031,49 @@ function renderOnboardingValidation() {
 }
 
 function renderOnboardingReadiness() {
-    const health = globalOnboardingStatus?.health ?? globalOnboardingStatus?.Health ?? null;
-    const hasWorkspace = !!getValue('txtOnboardingTenantKey').trim() && !!getValue('txtOnboardingDomain').trim() && !!getValue('txtOnboardingConnectionName').trim();
-    const hasContext = !!(health?.hasAllowedObjects ?? health?.HasAllowedObjects) && !!(health?.hasSchemaDocs ?? health?.HasSchemaDocs) && !!(health?.hasSemanticHints ?? health?.HasSemanticHints);
-    const hasValidation = isOnboardingValidationSuccessful(globalOnboardingValidation);
+    const state = getOnboardingFlowState();
     const meta = document.getElementById('onboardingReadinessMeta');
     const recommendation = document.getElementById('txtOnboardingFinalRecommendation');
     const finalPanel = document.getElementById('onboardingStepPanel5');
     const advancedHub = document.querySelector('#onboardingStepPanel5 .onboarding-advanced-hub');
     const advancedButton = document.getElementById('btnToggleOnboardingAdvancedArea');
 
-    updateReadinessCard('readinessConnectionCard', hasWorkspace);
-    updateReadinessCard('readinessSchemaCard', hasContext);
-    updateReadinessCard('readinessValidationCard', hasValidation);
-    finalPanel?.classList.toggle('is-success', hasWorkspace && hasContext && hasValidation);
-    finalPanel?.classList.toggle('is-pending', !hasValidation);
+    updateReadinessCard('readinessConnectionCard', state.hasWorkspace);
+    updateReadinessCard('readinessSchemaCard', state.hasAllowed && state.isInitialized);
+    updateReadinessCard('readinessValidationCard', state.hasValidation);
+    finalPanel?.classList.toggle('is-success', state.hasValidation);
+    finalPanel?.classList.toggle('is-pending', !state.hasValidation);
 
     if (meta) {
-        if (hasWorkspace && hasContext && hasValidation) {
+        if (state.hasValidation) {
             meta.innerHTML = `<span class="meta-chip verify-ok">Dominio listo</span><span class="meta-chip training-no">${escHtml(getValue('txtOnboardingDomain').trim() || 'sin-domain')}</span><span class="meta-chip training-no">${escHtml(getValue('txtOnboardingConnectionName').trim() || 'sin-conexion')}</span><span class="meta-chip status-ok">Onboarding base completado</span>`;
         } else {
-            const missing = [];
-            if (!hasWorkspace) missing.push('workspace');
-            if (!hasContext) missing.push('contexto');
-            if (!hasValidation) missing.push('prueba');
-            meta.innerHTML = `<span class="meta-chip verify-pending">Pendiente</span><span class="meta-empty">Falta cerrar: ${escHtml(missing.join(', '))}</span>`;
+            meta.innerHTML = `<span class="meta-chip verify-pending">${escHtml(state.readinessLabel)}</span><span class="meta-empty">Bloquea salida: ${escHtml(state.blockers.join(', '))}</span>`;
         }
     }
 
     if (recommendation) {
-        recommendation.textContent = hasWorkspace && hasContext && hasValidation
+        recommendation.textContent = state.hasValidation
             ? 'El onboarding base ya quedo listo. Si quieres, ahora puedes exportar un pack o seguir con afinacion avanzada.'
-            : (!hasWorkspace ? 'Primero asegura tenant, dominio y conexion.' : (!hasContext ? 'El siguiente foco es preparar bien el dominio.' : 'Haz una prueba real para confirmar que el dominio ya responde bien.'));
+            : `${state.readinessSummary} Siguiente foco: ${state.nextAction}`;
     }
 
-    if (!hasValidation) {
+    if (!state.hasValidation) {
         toggleOnboardingAdvancedArea(false);
     }
 
     if (advancedHub) {
-        advancedHub.classList.toggle('is-available', hasValidation);
+        advancedHub.classList.toggle('is-available', state.hasValidation);
     }
 
     if (advancedButton) {
-        advancedButton.disabled = !hasValidation;
-        advancedButton.textContent = hasValidation
+        advancedButton.disabled = !state.hasValidation;
+        advancedButton.textContent = state.hasValidation
             ? (onboardingAdvancedAreaOpen ? 'Ocultar ajustes avanzados' : 'Mostrar ajustes avanzados')
             : 'Disponible al cerrar onboarding';
     }
 
-    if (!hasValidation) {
+    if (!state.hasValidation) {
         toggleOnboardingFinalTools(false);
     }
 
@@ -8104,8 +8117,6 @@ renderOnboardingFlowSummary = function () {
     const state = getOnboardingFlowState();
     setText('txtOnboardingCurrentStep', state.currentStepLabel);
     setText('txtOnboardingRequiredAction', state.requiredAction);
-    setText('txtOnboardingCurrentStepHint', state.currentStepHint);
-    setText('txtOnboardingNextAction', state.nextAction);
 
     const meta = document.getElementById('onboardingFlowSummaryMeta');
     if (!meta) return;
@@ -8113,18 +8124,14 @@ renderOnboardingFlowSummary = function () {
     const selectedDomain = getValue('txtOnboardingDomain').trim() || 'sin-domain';
     const selectedConnection = getValue('txtOnboardingConnectionName').trim() || 'sin-conexion';
     const chips = [
+        `<span class="meta-chip ${state.readinessTone}">${escHtml(state.readinessLabel)}</span>`,
         `<span class="meta-chip training-no">${state.progress} / 4</span>`,
         `<span class="meta-chip training-no">${escHtml(selectedDomain)}</span>`,
-        `<span class="meta-chip training-no">${escHtml(selectedConnection)}</span>`
+        `<span class="meta-chip training-no">${escHtml(selectedConnection)}</span>`,
+        state.blockers.length
+            ? `<span class="meta-chip verify-pending">Bloquea salida: ${escHtml(state.blockers.join(', '))}</span>`
+            : '<span class="meta-chip status-ok">Sin bloqueos base</span>'
     ];
-
-    if (state.hasValidation) {
-        chips.unshift('<span class="meta-chip verify-ok">Operativo</span>');
-    } else if (state.isInitialized) {
-        chips.unshift('<span class="meta-chip verify-pending">Falta validar</span>');
-    } else {
-        chips.unshift('<span class="meta-chip training-no">En curso</span>');
-    }
 
     meta.innerHTML = chips.join('');
 
