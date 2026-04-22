@@ -354,117 +354,92 @@ public sealed class PatternMatcherService : IPatternMatcherService
 
         var topN = ExtractTopN(question);
         var timeScope = ResolveBuiltInTimeScope(normalizedQuestion);
+        var metric = ResolveBuiltInMetric(normalizedQuestion);
+        if (metric == PatternMetric.Unknown)
+            return new PatternMatchResult();
 
-        var isScrapQuestion = normalizedQuestion.Contains("scrap", StringComparison.Ordinal);
+        var dimension = ResolveBuiltInDimension(normalizedQuestion);
+        var asksForTotal = ContainsAny(normalizedQuestion, "total", "cuanto", "cuanta", "cuantos", "cuantas");
 
-        if (isScrapQuestion &&
-            ContainsAny(normalizedQuestion, "numero de parte", "numeros de parte", "part number", "part numbers"))
+        if (dimension == PatternDimension.Unknown && !asksForTotal)
+            return new PatternMatchResult();
+
+        return new PatternMatchResult
         {
-            return new PatternMatchResult
-            {
-                IsMatch = true,
-                PatternKey = "top_scrap_by_partnumber",
-                IntentName = "top_scrap_by_partnumber",
-                TopN = topN > 0 ? topN : 5,
-                Metric = PatternMetric.ScrapQty,
-                Dimension = PatternDimension.PartNumber,
-                DimensionValue = ExtractDimensionValue(question, PatternDimension.PartNumber),
-                TimeScope = timeScope
-            };
-        }
+            IsMatch = true,
+            PatternKey = BuildBuiltInPatternKey(metric, dimension, asksForTotal),
+            IntentName = BuildBuiltInIntentName(metric, dimension, asksForTotal),
+            TopN = dimension != PatternDimension.Unknown
+                ? (topN > 0 ? topN : 5)
+                : 0,
+            Metric = metric,
+            Dimension = dimension,
+            DimensionValue = ExtractDimensionValue(question, dimension),
+            TimeScope = timeScope
+        };
+    }
 
-        if (isScrapQuestion &&
-            ContainsAny(normalizedQuestion, "prensa", "prensas", "press"))
-        {
-            return new PatternMatchResult
-            {
-                IsMatch = true,
-                PatternKey = "top_scrap_by_press",
-                IntentName = "top_scrap_by_press",
-                TopN = topN > 0 ? topN : 5,
-                Metric = PatternMetric.ScrapQty,
-                Dimension = PatternDimension.Press,
-                DimensionValue = ExtractDimensionValue(question, PatternDimension.Press),
-                TimeScope = timeScope
-            };
-        }
+    private static PatternMetric ResolveBuiltInMetric(string normalizedQuestion)
+    {
+        var isScrap = normalizedQuestion.Contains("scrap", StringComparison.Ordinal);
+        var isDowntime = ContainsAny(normalizedQuestion, "downtime", "paro");
+        var isProduction = ContainsAny(normalizedQuestion, "produccion", "production", "producido");
+        var asksForCost = ContainsAny(normalizedQuestion, "costo", "cost");
 
-        if (ContainsAny(normalizedQuestion, "produccion", "production", "producido") &&
-            ContainsAny(normalizedQuestion, "prensa", "prensas", "press"))
-        {
-            return new PatternMatchResult
-            {
-                IsMatch = true,
-                PatternKey = "production_by_press",
-                IntentName = "production_by_press",
-                Metric = PatternMetric.ProducedQty,
-                Dimension = PatternDimension.Press,
-                DimensionValue = ExtractDimensionValue(question, PatternDimension.Press),
-                TimeScope = timeScope
-            };
-        }
+        if (isScrap && asksForCost)
+            return PatternMetric.ScrapCost;
 
-        if (ContainsAny(normalizedQuestion, "produccion", "production", "producido") &&
-            ContainsAny(normalizedQuestion, "total", "cuanto", "cuanta"))
-        {
-            return new PatternMatchResult
-            {
-                IsMatch = true,
-                PatternKey = "total_production",
-                IntentName = "total_production",
-                Metric = PatternMetric.ProducedQty,
-                Dimension = PatternDimension.Unknown,
-                TimeScope = timeScope
-            };
-        }
+        if (isScrap)
+            return PatternMetric.ScrapQty;
 
-        if (ContainsAny(normalizedQuestion, "downtime", "paro") &&
-            ContainsAny(normalizedQuestion, "falla", "fallas", "failure"))
-        {
-            return new PatternMatchResult
-            {
-                IsMatch = true,
-                PatternKey = "top_downtime_by_failure",
-                IntentName = "top_downtime_by_failure",
-                TopN = topN > 0 ? topN : 5,
-                Metric = PatternMetric.DownTimeMinutes,
-                Dimension = PatternDimension.Failure,
-                TimeScope = timeScope
-            };
-        }
+        if (isDowntime && asksForCost)
+            return PatternMetric.DownTimeCost;
 
-        if (ContainsAny(normalizedQuestion, "downtime", "paro") &&
-            ContainsAny(normalizedQuestion, "departamento", "department", "area"))
-        {
-            return new PatternMatchResult
-            {
-                IsMatch = true,
-                PatternKey = "downtime_by_department",
-                IntentName = "downtime_by_department",
-                TopN = topN > 0 ? topN : 5,
-                Metric = PatternMetric.DownTimeMinutes,
-                Dimension = PatternDimension.Department,
-                TimeScope = timeScope
-            };
-        }
+        if (isDowntime)
+            return PatternMetric.DownTimeMinutes;
 
-        if (isScrapQuestion &&
-            ContainsAny(normalizedQuestion, "costo", "cost") &&
-            ContainsAny(normalizedQuestion, "molde", "mold"))
-        {
-            return new PatternMatchResult
-            {
-                IsMatch = true,
-                PatternKey = "top_scrap_cost_by_mold",
-                IntentName = "top_scrap_cost_by_mold",
-                TopN = topN > 0 ? topN : 5,
-                Metric = PatternMetric.ScrapCost,
-                Dimension = PatternDimension.Mold,
-                TimeScope = timeScope
-            };
-        }
+        if (isProduction)
+            return PatternMetric.ProducedQty;
 
-        return new PatternMatchResult();
+        return PatternMetric.Unknown;
+    }
+
+    private static PatternDimension ResolveBuiltInDimension(string normalizedQuestion)
+    {
+        if (ContainsAny(normalizedQuestion, "numero de parte", "numeros de parte", "part number", "part numbers", "n p", "np"))
+            return PatternDimension.PartNumber;
+
+        if (ContainsAny(normalizedQuestion, "prensa", "prensas", "press"))
+            return PatternDimension.Press;
+
+        if (ContainsAny(normalizedQuestion, "molde", "mold"))
+            return PatternDimension.Mold;
+
+        if (ContainsAny(normalizedQuestion, "falla", "fallas", "failure"))
+            return PatternDimension.Failure;
+
+        if (ContainsAny(normalizedQuestion, "departamento", "department", "area"))
+            return PatternDimension.Department;
+
+        return PatternDimension.Unknown;
+    }
+
+    private static string BuildBuiltInPatternKey(PatternMetric metric, PatternDimension dimension, bool asksForTotal)
+    {
+        var metricKey = metric.ToString().ToLowerInvariant();
+        if (dimension == PatternDimension.Unknown && asksForTotal)
+            return $"builtin_total_{metricKey}";
+
+        return $"builtin_{metricKey}_by_{dimension.ToString().ToLowerInvariant()}";
+    }
+
+    private static string BuildBuiltInIntentName(PatternMetric metric, PatternDimension dimension, bool asksForTotal)
+    {
+        var metricKey = metric.ToString().ToLowerInvariant();
+        if (dimension == PatternDimension.Unknown && asksForTotal)
+            return $"builtin_total_{metricKey}";
+
+        return $"builtin_{metricKey}_by_{dimension.ToString().ToLowerInvariant()}";
     }
 
     private static PatternTimeScope ResolveBuiltInTimeScope(string normalizedQuestion)

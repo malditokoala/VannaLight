@@ -118,6 +118,9 @@ public class AskUseCase(
         var inferredIntentName = string.IsNullOrWhiteSpace(patternMatch.IntentName)
             ? null
             : patternMatch.IntentName;
+        var inferredSemanticExpectation = HasSemanticExpectation(patternMatch)
+            ? patternMatch
+            : null;
 
         var verifiedExactMatch = await trainingStore.GetVerifiedExactMatchAsync(
             memoryDbPath,
@@ -140,7 +143,7 @@ public class AskUseCase(
                                 inferredIntentName,
                                 allowedObjectNames,
                                 profileKey,
-                                semanticExpectation: null,
+                                semanticExpectation: inferredSemanticExpectation,
                                 exampleIdToTouch: verifiedExactMatch.Id,
                                 reviewReasonPrefix: "VerifiedExample",
                                 ct: ct);
@@ -228,7 +231,7 @@ public class AskUseCase(
                     inferredIntentName,
                     allowedObjectNames,
                     profileKey,
-                    semanticExpectation: null,
+                    semanticExpectation: inferredSemanticExpectation,
                     existingContext: context,
                     existingRules: rules,
                     existingSemanticHints: semanticHints,
@@ -937,6 +940,20 @@ public class AskUseCase(
         }
 
         return null;
+    }
+
+    private static bool HasSemanticExpectation(PatternMatchResult? match)
+    {
+        if (match is null)
+        {
+            return false;
+        }
+
+        return match.Metric != PatternMetric.Unknown
+            || match.Dimension != PatternDimension.Unknown
+            || !string.IsNullOrWhiteSpace(match.DimensionValue)
+            || match.TimeScope != PatternTimeScope.Unknown
+            || match.TopN > 0;
     }
 
     private static bool HasEntitySpecificFilter(string upperSql, string normalizedDimensionValue)

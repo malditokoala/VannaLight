@@ -185,6 +185,84 @@
 - el sistema debe rechazar o marcar consultas semanticamente contradictorias antes de ejecutarlas
 
 ### Hecho hoy
+- Migracion adicional de comportamiento demo desde hardcodeo hacia configuracion + memoria del piloto:
+  - el matcher built-in se redujo de varias ramas especificas del dominio a un fallback mas generico por:
+    - metrica
+    - dimension
+    - `top N`
+    - scope temporal
+  - objetivo:
+    - dejar de seguir creciendo familias demo una por una dentro de `PatternMatcherService.cs`
+    - empujar mas peso hacia `Query Patterns` y `TrainingExamples`
+- Refuerzo del piloto ERP con `Query Patterns` seed para familias demo frecuentes:
+  - se agrego / reforzo `production_by_press` como pattern declarativo del piloto
+  - el arranque del API ya deja sembradas las rutas demo frecuentes en `QueryPatterns` + `QueryPatternTerms`
+  - objetivo:
+    - que estas familias entren primero por configuracion
+    - no por ramas ad-hoc en codigo
+- Refuerzo del piloto ERP con `TrainingExamples` verificados por contexto:
+  - el arranque del API ahora deja sembrados examples verificados por `tenant/domain/connection` para:
+    - `production_by_press`
+    - `top_downtime_by_failure`
+    - `top_scrap_cost_by_mold`
+    - `top_scrap_by_press`
+    - `top_scrap_by_partnumber`
+    - `downtime_by_department`
+    - `total_production`
+  - los SQL de seed usan `KpiViewOptions`, por lo que respetan las vistas reales configuradas del ambiente
+  - objetivo:
+    - mejorar retrieval y fast path contextual del piloto
+    - hacer mas probable que la mejora del dominio ocurra desde `Admin` + memoria en lugar de desde C#
+- Validacion semantica ampliada a mas rutas del carril SQL:
+  - la expectativa semantica inferida ya no protege solo la ruta `Pattern`
+  - tambien se reutiliza al validar SQL que llegue por:
+    - `VerifiedExample`
+    - `Llm`
+  - objetivo:
+    - evitar que un SQL plausible pero contradictorio se cuele solo porque no salio del builder declarativo
+- Refuerzo del onboarding guiado para dejar mas explicito que bloquea la salida inicial del dominio:
+  - el estado del flujo ahora expone bloqueos base concretos:
+    - `workspace`
+    - `tablas`
+    - `contexto`
+    - `prueba`
+  - el resumen superior y el cierre del onboarding ahora distinguen mejor entre:
+    - `Bloqueado`
+    - `Listo para validar`
+    - `Operativo`
+  - el copy del wizard se endurecio para separar:
+    - `Obligatorio ahora`
+    - afinacion opcional posterior
+  - objetivo:
+    - que el operador sepa exactamente que impide salir a uso interno
+    - que no confunda afinacion avanzada con prerequisitos del flujo base
+- Prioridad real de `Query Patterns` sobre matcher built-in en el carril SQL:
+  - `PatternMatcherService` ya devuelve primero el resultado de patrones configurados cuando existe evidencia suficiente de intencion o de ruta
+  - el built-in queda mas cerca de fallback minimo y deja de ser la ruta preferida cuando `Admin` ya trae configuracion util
+  - se preserva `DimensionValue` al resolver patrones configurados para no perder filtros concretos como:
+    - prensa
+    - molde
+    - falla
+    - departamento
+    - numero de parte
+  - objetivo:
+    - mover mas comportamiento del dominio hacia `Admin`
+    - bajar dependencia de branches hardcoded en `PatternMatcherService.cs`
+- Primera version de validacion semantica pre-ejecucion en `AskUseCase`:
+  - antes de ejecutar dry run o SQL real, el pipeline ya rechaza consultas semanticamente contradictorias con la intencion detectada
+  - reglas activas en esta iteracion:
+    - si la pregunta pide una entidad concreta, el SQL debe incluir `WHERE`
+    - si la pregunta pide una entidad concreta, el SQL debe reflejar el valor concreto solicitado
+    - si la pregunta pide una sola entidad, el SQL no debe quedarse en agregado global sin filtro de dimension
+    - si la pregunta pide `turno actual`, el SQL debe incluir filtro temporal equivalente con fecha actual y `ShiftId`
+    - si la pregunta pide `top N`, el SQL debe incluir `TOP`
+    - si la pregunta pide `top N` por dimension, el SQL debe incluir `GROUP BY`
+    - si la pregunta pide `top N`, el SQL debe incluir `ORDER BY`
+  - comportamiento esperado:
+    - errores semanticos graves ya caen como `ValidationError` / `RequiresReview`
+    - el sistema deja de aceptar tan facil respuestas plausibles pero contradictorias con la pregunta
+  - validacion tecnica:
+    - `dotnet build VannaLight.Core/VannaLight.Core.csproj`
 - Ajuste adicional del onboarding para compactar el Paso 1 y reforzar el cierre del Paso 4:
   - el editor inline de conexion se hizo visualmente mas compacto y menos invasivo
   - el toggle `+ Nueva` ahora refleja mejor su estado:

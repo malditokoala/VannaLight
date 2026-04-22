@@ -252,6 +252,23 @@ function setScopedTabContextBanner(config, message, isEmpty = false) {
     banner.classList.toggle('is-empty', !!isEmpty);
 }
 
+function getAdminCorrectionPurpose(tabKey) {
+    switch (tabKey) {
+        case 'rag':
+            return 'Entrenamiento RAG = corrige un caso real y guarda un ejemplo verificado para futuras preguntas parecidas.';
+        case 'allowed':
+            return 'Allowed Objects = define que objetos SQL puede consultar el motor dentro de este contexto.';
+        case 'business-rules':
+            return 'Business Rules = restricciones y comportamiento esperado del dominio cuando una respuesta debe respetar una regla de negocio.';
+        case 'semantics':
+            return 'Semantic Hints = mapea conceptos del usuario a objetos, columnas y significado real del dominio.';
+        case 'patterns':
+            return 'Query Patterns = familias repetibles de preguntas que deben resolverse por configuracion antes que por hardcodeo.';
+        default:
+            return '';
+    }
+}
+
 function buildRagHistoryQuery() {
     const context = getActiveAdminContext();
     if (!context?.tenantKey || !context?.domain || !context?.connectionName) {
@@ -271,12 +288,12 @@ function renderRagContextBanner() {
 
     const context = getActiveAdminContext();
     if (!context?.tenantKey || !context?.domain || !context?.connectionName) {
-        banner.textContent = 'Selecciona primero un workspace y un contexto vÃ¡lido en Onboarding.';
+        banner.textContent = `Selecciona primero un workspace y un contexto valido en Onboarding. ${getAdminCorrectionPurpose('rag')}`;
         banner.classList.add('is-empty');
         return;
     }
 
-    banner.textContent = `Contexto activo: ${context.tenantDisplayName} / ${context.domain} / ${context.connectionName}`;
+    banner.textContent = `Contexto activo: ${context.tenantDisplayName} / ${context.domain} / ${context.connectionName}. ${getAdminCorrectionPurpose('rag')}`;
     banner.classList.remove('is-empty');
 }
 
@@ -469,12 +486,19 @@ function syncAdminScopedFiltersToContext(context) {
             setValue(config.editorDomainId, domain);
         }
 
+        const purpose = getAdminCorrectionPurpose(config.load === loadAllowedObjects
+            ? 'allowed'
+            : config.load === loadBusinessRules
+                ? 'business-rules'
+                : config.load === loadSemanticHints
+                    ? 'semantics'
+                    : 'patterns');
         if (domain) {
-            setScopedTabHint(config, `Contexto activo: ${tenantDisplayName} / ${domain} / ${connectionName}`);
-            setScopedTabContextBanner(config, `${tenantDisplayName} / ${domain} / ${connectionName}`);
+            setScopedTabHint(config, `${purpose} Contexto activo: ${tenantDisplayName} / ${domain} / ${connectionName}`);
+            setScopedTabContextBanner(config, `${tenantDisplayName} / ${domain} / ${connectionName}. ${purpose}`);
         } else {
-            setScopedTabHint(config, `Selecciona un contexto en Onboarding para ver ${config.label}.`);
-        setScopedTabContextBanner(config, 'Selecciona un workspace y un contexto vÃ¡lido en Onboarding.', true);
+            setScopedTabHint(config, `${purpose} Selecciona un contexto en Onboarding para ver ${config.label}.`);
+        setScopedTabContextBanner(config, `Selecciona un workspace y un contexto valido en Onboarding. ${purpose}`, true);
         }
     });
 
@@ -489,8 +513,9 @@ function renderContextRequiredState(tabKey, message = 'Selecciona primero un con
     config.reset?.();
     setValue(config.filterId, '');
     setValue(config.editorDomainId, '');
-    setScopedTabHint(config, message);
-    setScopedTabContextBanner(config, message, true);
+    const purpose = getAdminCorrectionPurpose(tabKey);
+    setScopedTabHint(config, `${purpose} ${message}`);
+    setScopedTabContextBanner(config, `${message} ${purpose}`, true);
     renderScopedTabEmptyState(config, message);
 }
 

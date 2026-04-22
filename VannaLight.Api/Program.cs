@@ -219,6 +219,7 @@ await EnsureRuntimeDatabaseSetupAsync(app.Services);
 await EnsureCorePilotQueryPatternSeedsAsync(app.Services, builder.Configuration);
 await EnsureQueryPatternTimeScopeSeedsAsync(app.Services);
 await EnsureCorePilotSemanticHintSeedsAsync(app.Services, builder.Configuration, sqlitePath);
+await EnsureCorePilotTrainingExampleSeedsAsync(app.Services, builder.Configuration);
 await ReportPilotContextMemoryHealthAsync(sqlitePath, builder.Configuration);
 
 if (app.Environment.IsDevelopment())
@@ -1843,6 +1844,23 @@ WHERE {TimeFilter:x};
             },
             CancellationToken.None);
 
+        var productionByPressId = await queryPatternStore.UpsertAsync(
+            new QueryPattern
+            {
+                Domain = domain,
+                PatternKey = "production_by_press",
+                IntentName = "production_by_press",
+                Description = "Produccion por prensa para preguntas demo del piloto ERP.",
+                SqlTemplate = groupedTopTemplate,
+                DefaultTopN = 5,
+                MetricKey = "producedqty",
+                DimensionKey = "press",
+                DefaultTimeScopeKey = "current_shift",
+                Priority = 23,
+                IsActive = true
+            },
+            CancellationToken.None);
+
         var topDowntimeByPressId = await queryPatternStore.UpsertAsync(
             new QueryPattern
             {
@@ -1980,6 +1998,34 @@ WHERE {TimeFilter:x};
                 new QueryPatternTerm
                 {
                     PatternId = totalProductionId,
+                    Term = term.Term,
+                    TermGroup = term.Group,
+                    MatchMode = "contains",
+                    IsRequired = term.Required,
+                    IsActive = true
+                },
+                CancellationToken.None);
+        }
+
+        var productionByPressTerms = new (string Term, string Group, bool Required)[]
+        {
+            ("produccion", "metric_production", true),
+            ("production", "metric_production", true),
+            ("producido", "metric_production", false),
+            ("prensa", "dimension_press", true),
+            ("prensas", "dimension_press", true),
+            ("press", "dimension_press", true),
+            ("por", "dimension_relation", false),
+            ("top", "ranking_top", false),
+            ("mas", "ranking_top", false)
+        };
+
+        foreach (var term in productionByPressTerms)
+        {
+            await queryPatternTermStore.UpsertAsync(
+                new QueryPatternTerm
+                {
+                    PatternId = productionByPressId,
                     Term = term.Term,
                     TermGroup = term.Group,
                     MatchMode = "contains",
@@ -2271,6 +2317,212 @@ static async Task EnsureCorePilotSemanticHintSeedsAsync(IServiceProvider service
         {
             await semanticHintStore.UpsertAsync(sqlitePath, seed, CancellationToken.None);
         }
+    }
+}
+
+static async Task EnsureCorePilotTrainingExampleSeedsAsync(IServiceProvider services, IConfiguration configuration)
+{
+    using var scope = services.CreateScope();
+
+    var trainingStore = scope.ServiceProvider.GetRequiredService<ITrainingStore>();
+    var kpiViews = scope.ServiceProvider.GetRequiredService<KpiViewOptions>();
+
+    var configuredSeeds =
+        configuration.GetSection("PilotContexts:OverrideMappings").Get<List<PilotContextSeed>>() ??
+        configuration.GetSection("PilotContexts:Mappings").Get<List<PilotContextSeed>>() ??
+        [];
+
+    if (configuredSeeds.Count == 0)
+    {
+        configuredSeeds =
+        [
+            new PilotContextSeed("default", "Default", "Workspace principal del piloto ERP.", "erp-kpi-pilot", "ErpDb", true),
+            new PilotContextSeed("northwind-demo", "NorthWind Demo", "Workspace demo Northwind para validación local.", "northwind-sales", "NorthwindDb", true)
+        ];
+    }
+
+    var erpSeeds = configuredSeeds
+        .Where(seed =>
+            !string.IsNullOrWhiteSpace(seed.TenantKey) &&
+            !string.IsNullOrWhiteSpace(seed.Domain) &&
+            !string.IsNullOrWhiteSpace(seed.ConnectionName) &&
+            (seed.Domain.Contains("erp", StringComparison.OrdinalIgnoreCase) ||
+             seed.ConnectionName.Contains("erp", StringComparison.OrdinalIgnoreCase)))
+        .ToList();
+
+    if (erpSeeds.Count == 0)
+        return;
+
+    var productionView = kpiViews.ProductionViewQualifiedName;
+    var scrapView = kpiViews.ScrapViewQualifiedName;
+    var downtimeView = kpiViews.DowntimeViewQualifiedName;
+
+    foreach (var seed in erpSeeds)
+    {
+        await trainingStore.UpsertAsync(
+            new TrainingExampleUpsert(
+                Question: "top 5 de scrap por prensa del turno actual",
+                Sql: $"""
+SELECT TOP (5)
+    COALESCE(NULLIF(LTRIM(RTRIM(x.PressName)), ''), CONCAT('Prensa ', CAST(x.PressId AS varchar(32)))) AS Press,
+    x.PressId AS PressId,
+    SUM(ISNULL(x.ScrapQty, 0)) AS TotalScrapQty
+FROM {scrapView} x
+WHERE CAST(x.OperationDate AS date) = CAST(GETDATE() AS date)
+  AND x.ShiftId = (
+      SELECT MAX(shift_src.ShiftId)
+      FROM {scrapView} shift_src
+      WHERE CAST(shift_src.OperationDate AS date) = CAST(GETDATE() AS date)
+  )
+  AND (x.PressId IS NOT NULL OR NULLIF(LTRIM(RTRIM(x.PressName)), '') IS NOT NULL)
+GROUP BY x.PressId, x.PressName
+ORDER BY TotalScrapQty DESC, Press;
+""",
+                TenantKey: seed.TenantKey,
+                Domain: seed.Domain,
+                ConnectionName: seed.ConnectionName,
+                IntentName: "top_scrap_by_press",
+                IsVerified: true,
+                Priority: 90),
+            CancellationToken.None);
+
+        await trainingStore.UpsertAsync(
+            new TrainingExampleUpsert(
+                Question: "top 5 de scrap por numero de parte de hoy",
+                Sql: $"""
+SELECT TOP (5)
+    LTRIM(RTRIM(x.PartNumber)) AS PartNumber,
+    SUM(ISNULL(x.ScrapQty, 0)) AS TotalScrapQty
+FROM {scrapView} x
+WHERE CAST(x.OperationDate AS date) = CAST(GETDATE() AS date)
+  AND NULLIF(LTRIM(RTRIM(x.PartNumber)), '') IS NOT NULL
+GROUP BY LTRIM(RTRIM(x.PartNumber))
+ORDER BY TotalScrapQty DESC, PartNumber;
+""",
+                TenantKey: seed.TenantKey,
+                Domain: seed.Domain,
+                ConnectionName: seed.ConnectionName,
+                IntentName: "top_scrap_by_partnumber",
+                IsVerified: true,
+                Priority: 90),
+            CancellationToken.None);
+
+        await trainingStore.UpsertAsync(
+            new TrainingExampleUpsert(
+                Question: "downtime por departamento de la semana actual",
+                Sql: $"""
+SELECT TOP (5)
+    x.DepartmentId AS DepartmentId,
+    x.DepartmentName AS Department,
+    SUM(ISNULL(x.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
+    SUM(ISNULL(x.DownTimeCost, 0)) AS TotalDownTimeCost
+FROM {downtimeView} x
+WHERE x.YearNumber = YEAR(GETDATE())
+  AND x.WeekOfYear = DATEPART(ISO_WEEK, GETDATE())
+  AND x.IsOpen = 0
+  AND (x.DepartmentId IS NOT NULL OR NULLIF(LTRIM(RTRIM(x.DepartmentName)), '') IS NOT NULL)
+GROUP BY x.DepartmentId, x.DepartmentName
+ORDER BY TotalDownTimeMinutes DESC, Department;
+""",
+                TenantKey: seed.TenantKey,
+                Domain: seed.Domain,
+                ConnectionName: seed.ConnectionName,
+                IntentName: "downtime_by_department",
+                IsVerified: true,
+                Priority: 90),
+            CancellationToken.None);
+
+        await trainingStore.UpsertAsync(
+            new TrainingExampleUpsert(
+                Question: "total de produccion de la semana actual",
+                Sql: $"""
+SELECT
+    SUM(ISNULL(x.ProducedQty, 0)) AS TotalProducedQty
+FROM {productionView} x
+WHERE x.YearNumber = YEAR(GETDATE())
+  AND x.WeekOfYear = DATEPART(ISO_WEEK, GETDATE());
+""",
+                TenantKey: seed.TenantKey,
+                Domain: seed.Domain,
+                ConnectionName: seed.ConnectionName,
+                IntentName: "total_production",
+                IsVerified: true,
+                Priority: 90),
+            CancellationToken.None);
+
+        await trainingStore.UpsertAsync(
+            new TrainingExampleUpsert(
+                Question: "top 5 de produccion por prensa del turno actual",
+                Sql: $"""
+SELECT TOP (5)
+    COALESCE(NULLIF(LTRIM(RTRIM(x.PressName)), ''), CONCAT('Prensa ', CAST(x.PressId AS varchar(32)))) AS Press,
+    x.PressId AS PressId,
+    SUM(ISNULL(x.ProducedQty, 0)) AS TotalProducedQty
+FROM {productionView} x
+WHERE CAST(x.OperationDate AS date) = CAST(GETDATE() AS date)
+  AND x.ShiftId = (
+      SELECT MAX(shift_src.ShiftId)
+      FROM {productionView} shift_src
+      WHERE CAST(shift_src.OperationDate AS date) = CAST(GETDATE() AS date)
+  )
+  AND (x.PressId IS NOT NULL OR NULLIF(LTRIM(RTRIM(x.PressName)), '') IS NOT NULL)
+GROUP BY x.PressId, x.PressName
+ORDER BY TotalProducedQty DESC, Press;
+""",
+                TenantKey: seed.TenantKey,
+                Domain: seed.Domain,
+                ConnectionName: seed.ConnectionName,
+                IntentName: "production_by_press",
+                IsVerified: true,
+                Priority: 90),
+            CancellationToken.None);
+
+        await trainingStore.UpsertAsync(
+            new TrainingExampleUpsert(
+                Question: "top 5 de downtime por falla de la semana actual",
+                Sql: $"""
+SELECT TOP (5)
+    COALESCE(NULLIF(LTRIM(RTRIM(x.FailureName)), ''), CONCAT('Falla ', CAST(x.FailureId AS varchar(32)))) AS Failure,
+    x.FailureId AS FailureId,
+    SUM(ISNULL(x.DownTimeMinutes, 0)) AS TotalDownTimeMinutes,
+    SUM(ISNULL(x.DownTimeCost, 0)) AS TotalDownTimeCost
+FROM {downtimeView} x
+WHERE x.YearNumber = YEAR(GETDATE())
+  AND x.WeekOfYear = DATEPART(ISO_WEEK, GETDATE())
+  AND x.IsOpen = 0
+  AND (x.FailureId IS NOT NULL OR NULLIF(LTRIM(RTRIM(x.FailureName)), '') IS NOT NULL)
+GROUP BY x.FailureId, x.FailureName
+ORDER BY TotalDownTimeMinutes DESC, Failure;
+""",
+                TenantKey: seed.TenantKey,
+                Domain: seed.Domain,
+                ConnectionName: seed.ConnectionName,
+                IntentName: "top_downtime_by_failure",
+                IsVerified: true,
+                Priority: 90),
+            CancellationToken.None);
+
+        await trainingStore.UpsertAsync(
+            new TrainingExampleUpsert(
+                Question: "top 5 de costo de scrap por molde del mes actual",
+                Sql: $"""
+SELECT TOP (5)
+    COALESCE(NULLIF(LTRIM(RTRIM(x.MoldName)), ''), CONCAT('Molde ', CAST(x.MoldId AS varchar(32)))) AS Mold,
+    x.MoldId AS MoldId,
+    SUM(ISNULL(x.ScrapCost, 0)) AS TotalScrapCost
+FROM {scrapView} x
+WHERE x.YearMonth = CONVERT(char(7), GETDATE(), 120)
+  AND (x.MoldId IS NOT NULL OR NULLIF(LTRIM(RTRIM(x.MoldName)), '') IS NOT NULL)
+GROUP BY x.MoldId, x.MoldName
+ORDER BY TotalScrapCost DESC, Mold;
+""",
+                TenantKey: seed.TenantKey,
+                Domain: seed.Domain,
+                ConnectionName: seed.ConnectionName,
+                IntentName: "top_scrap_cost_by_mold",
+                IsVerified: true,
+                Priority: 90),
+            CancellationToken.None);
     }
 }
 
