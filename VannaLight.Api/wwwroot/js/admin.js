@@ -109,31 +109,31 @@ const onboardingTourSteps = [
         targetId: 'onboardingStepPanel1',
         stepLabel: 'Paso 1',
         title: 'Configura el workspace',
-        body: 'AquÃ­ defines el workspace, el contexto de datos y la conexiÃ³n que usarÃ¡ todo el flujo. Cuando guardas este paso, habilitas el resto del wizard.'
+        body: 'Aqui defines el workspace, el contexto de datos y la conexion que usara todo el flujo. Cuando guardas este paso, habilitas el resto del wizard.'
     },
     {
         targetId: 'onboardingStepPanel2b',
         stepLabel: 'Paso 2',
         title: 'Elige las tablas permitidas',
-        body: 'Descubre el schema y deja marcadas solo las tablas o vistas que el motor podrÃ¡ consultar. AquÃ­ defines el perÃ­metro seguro del dominio.'
+        body: 'Descubre el schema y deja marcadas solo las tablas o vistas que el motor podra consultar. Aqui defines el perimetro seguro del dominio.'
     },
     {
         targetId: 'onboardingStepPanel3',
         stepLabel: 'Paso 3',
         title: 'Prepara el dominio',
-        body: 'Este paso genera el contexto tÃ©cnico del motor: schema docs y pistas del dominio. Cuando sale bien, ya puedes probar una pregunta real.'
+        body: 'Este paso genera el contexto tecnico del motor: schema docs y pistas del dominio. Cuando sale bien, ya puedes probar una pregunta real.'
     },
     {
         targetId: 'onboardingStepPanel4',
         stepLabel: 'Paso 4',
         title: 'Haz una prueba real',
-        body: 'Corre una pregunta guiada contra el pipeline real. El wizard te muestra el SQL generado, el resultado y si el dominio ya respondiÃ³ correctamente.'
+        body: 'Corre una pregunta guiada contra el pipeline real. El wizard te muestra el SQL generado, el resultado y si el dominio ya respondio correctamente.'
     },
     {
         targetId: 'onboardingStepPanel5',
         stepLabel: 'Checklist final',
         title: 'Confirma readiness',
-        body: 'Este resumen te dice si el dominio ya estÃ¡ listo para usuarios internos o si todavÃ­a necesita mÃ¡s curaciÃ³n antes de salir a operaciÃ³n.'
+        body: 'Este resumen te dice si el dominio ya esta listo para usuarios internos o si todavia necesita mas curacion antes de salir a operacion.'
     }
 ];
 function getOnboardingDefaults() {
@@ -645,7 +645,7 @@ async function loadOnboardingBootstrap() {
         } catch (hydrateError) {
             console.error('Onboarding bootstrap hydrated with fallback.', hydrateError);
             resetOnboardingForm();
-            showOnboardingBanner('warn', 'Cargamos el onboarding, pero no pudimos restaurar el contexto anterior. ContinÃºa desde el paso 1.');
+            showOnboardingBanner('warn', 'Cargamos el onboarding, pero no pudimos restaurar el contexto anterior. Continua desde el paso 1.');
         }
     } catch (e) {
         list.innerHTML = `
@@ -1413,46 +1413,46 @@ function getOnboardingFlowState() {
     if (!hasValidation) blockers.push('prueba');
 
     let currentStep = 1;
-    let currentStepLabel = 'Paso 1 Â· Workspace';
-    let currentStepHint = 'Empieza configurando el workspace, el dominio y la conexiÃ³n a la base.';
+    let currentStepLabel = 'Paso 1 · Workspace';
+    let currentStepHint = 'Empieza configurando el workspace, el dominio y la conexion a la base.';
     let requiredAction = needsInitialOnboardingSetup()
         ? 'Obligatorio ahora: crea o selecciona una conexion valida y guarda el workspace.'
         : 'Obligatorio ahora: completa tenant, dominio y conexion, luego guarda el workspace.';
     let nextAction = 'Descubrir el schema para elegir tablas permitidas.';
     let progress = 0;
-    let progressHint = 'AÃºn no hay pasos obligatorios completados.';
+    let progressHint = 'Aun no hay pasos obligatorios completados.';
     let readinessLabel = 'Bloqueado';
     let readinessTone = 'verify-pending';
     let readinessSummary = 'Todavia faltan pasos base antes de que el dominio quede operativo.';
 
     if (hasWorkspace) {
         currentStep = 2;
-        currentStepLabel = 'Paso 2 Â· Tablas permitidas';
-        currentStepHint = 'Ya existe contexto mÃ­nimo; ahora toca definir el perÃ­metro seguro del dominio.';
+        currentStepLabel = 'Paso 2 · Tablas permitidas';
+        currentStepHint = 'Ya existe contexto minimo; ahora toca definir el perimetro seguro del dominio.';
         requiredAction = hasAllowedSelection
             ? 'Obligatorio ahora: guarda la seleccion actual de tablas permitidas.'
             : 'Obligatorio ahora: descubre schema y selecciona al menos una tabla o vista permitida.';
         nextAction = 'Preparar el dominio para generar schema docs e hints.';
         progress = 1;
-        progressHint = 'El workspace base ya quedÃ³ configurado.';
+        progressHint = 'El workspace base ya quedo configurado.';
         readinessSummary = 'El workspace ya existe, pero el motor todavia no tiene perimetro seguro.';
     }
 
     if (hasAllowed) {
         currentStep = 3;
-        currentStepLabel = 'Paso 3 Â· Preparar dominio';
-        currentStepHint = 'El perÃ­metro seguro ya existe; ahora falta generar el contexto tÃ©cnico mÃ­nimo.';
+        currentStepLabel = 'Paso 3 · Preparar dominio';
+        currentStepHint = 'El perimetro seguro ya existe; ahora falta generar el contexto tecnico minimo.';
         requiredAction = 'Obligatorio ahora: ejecuta la preparacion del dominio para generar schema docs y semantic hints base.';
         nextAction = 'Hacer una pregunta real para validar el dominio.';
         progress = 2;
-        progressHint = 'El dominio ya sabe quÃ© objetos puede consultar.';
+        progressHint = 'El dominio ya sabe que objetos puede consultar.';
         readinessSummary = 'Ya hay tablas permitidas, pero el motor aun no tiene el contexto tecnico minimo.';
     }
 
     if (isInitialized) {
         currentStep = 4;
-        currentStepLabel = 'Paso 4 Â· Prueba real';
-        currentStepHint = 'El motor ya tiene contexto tÃ©cnico suficiente para intentar una consulta de negocio.';
+        currentStepLabel = 'Paso 4 · Prueba real';
+        currentStepHint = 'El motor ya tiene contexto tecnico suficiente para intentar una consulta de negocio.';
         requiredAction = 'Obligatorio ahora: ejecuta una pregunta real y revisa que el SQL y el resultado sean correctos.';
         nextAction = 'Si responde bien, el dominio ya puede considerarse listo para salida inicial.';
         progress = 3;
@@ -1463,12 +1463,12 @@ function getOnboardingFlowState() {
 
     if (hasValidation) {
         currentStep = 4;
-        currentStepLabel = 'Listo Â· Onboarding base completo';
-        currentStepHint = 'El flujo base ya quedÃ³ operativo para una primera salida.';
+        currentStepLabel = 'Listo · Onboarding base completo';
+        currentStepHint = 'El flujo base ya quedo operativo para una primera salida.';
         requiredAction = 'Sin bloqueos base: el dominio ya puede operar. Lo siguiente es afinacion opcional.';
-        nextAction = 'Business Rules, Semantic Hints manuales y Query Patterns pueden refinarse despuÃ©s.';
+        nextAction = 'Business Rules, Semantic Hints manuales y Query Patterns pueden refinarse despues.';
         progress = 4;
-        progressHint = 'Los 4 pasos obligatorios del onboarding base estÃ¡n completos.';
+        progressHint = 'Los 4 pasos obligatorios del onboarding base estan completos.';
         readinessLabel = 'Operativo';
         readinessTone = 'verify-ok';
         readinessSummary = 'El dominio ya paso la prueba base y puede salir a uso interno.';
@@ -7654,11 +7654,11 @@ function ensureOnboardingSummarySupportUI() {
         support.className = 'onboarding-summary-support';
         support.innerHTML = `
             <div class="onboarding-summary-block">
-                <span class="onboarding-summary-label">QuÃ© dejas listo</span>
+                <span class="onboarding-summary-label">Que dejas listo</span>
                 <span class="onboarding-summary-support-text" id="txtOnboardingCurrentStepHint"></span>
             </div>
             <div class="onboarding-summary-block">
-                <span class="onboarding-summary-label">QuÃ© sigue despuÃ©s</span>
+                <span class="onboarding-summary-label">Que sigue despues</span>
                 <span class="onboarding-summary-support-text" id="txtOnboardingNextAction"></span>
             </div>`;
         summary.insertBefore(support, summary.querySelector('.onboarding-wizard-nav') || null);
@@ -7984,7 +7984,7 @@ loadOnboardingBootstrap = async function () {
         renderOnboardingTenantList();
         const message = renderError?.message || String(renderError || 'Error de hidrataciÃ³n de UI');
         setOnboardingSidebarStatus('err', `El bootstrap respondiÃ³, pero el sidebar no pudo hidratarse completo. ${message}`);
-        showOnboardingBanner('warn', 'El onboarding cargÃ³ parcialmente. Puedes reintentar el bootstrap y revisar la consola para ver el detalle tÃ©cnico.');
+        showOnboardingBanner('warn', 'El onboarding cargo parcialmente. Puedes reintentar el bootstrap y revisar la consola para ver el detalle tecnico.');
         return;
     }
 
@@ -8142,23 +8142,46 @@ renderOnboardingFlowSummary = function () {
     const state = getOnboardingFlowState();
     setText('txtOnboardingCurrentStep', state.currentStepLabel);
     setText('txtOnboardingRequiredAction', state.requiredAction);
+    setText('txtOnboardingCurrentStepHint', state.currentStepHint);
+    setText('txtOnboardingNextAction', state.nextAction);
 
     const meta = document.getElementById('onboardingFlowSummaryMeta');
     if (!meta) return;
 
     const selectedDomain = getValue('txtOnboardingDomain').trim() || 'sin-domain';
     const selectedConnection = getValue('txtOnboardingConnectionName').trim() || 'sin-conexion';
-    const chips = [
-        `<span class="meta-chip ${state.readinessTone}">${escHtml(state.readinessLabel)}</span>`,
-        `<span class="meta-chip training-no">${state.progress} / 4</span>`,
-        `<span class="meta-chip training-no">${escHtml(selectedDomain)}</span>`,
-        `<span class="meta-chip training-no">${escHtml(selectedConnection)}</span>`,
-        state.blockers.length
-            ? `<span class="meta-chip verify-pending">Bloquea salida: ${escHtml(state.blockers.join(', '))}</span>`
-            : '<span class="meta-chip status-ok">Sin bloqueos base</span>'
+    const blockerText = state.blockers.length
+        ? state.blockers.join(', ')
+        : 'Sin bloqueos base';
+    const blockerTone = state.blockers.length ? 'verify-pending' : 'status-ok';
+    const checklist = [
+        {
+            label: 'Estado actual',
+            value: state.readinessLabel,
+            tone: state.readinessTone
+        },
+        {
+            label: 'Progreso base',
+            value: `${state.progress} / 4 pasos listos`,
+            tone: 'training-no'
+        },
+        {
+            label: 'Bloquea salida',
+            value: blockerText,
+            tone: blockerTone
+        },
+        {
+            label: 'Contexto activo',
+            value: `${selectedDomain} · ${selectedConnection}`,
+            tone: 'training-no'
+        }
     ];
 
-    meta.innerHTML = chips.join('');
+    meta.innerHTML = `<div class="onboarding-inline-checklist">${checklist.map(item => `
+        <div class="onboarding-inline-check">
+            <span class="onboarding-inline-check-label">${escHtml(item.label)}</span>
+            <span class="meta-chip ${escAttr(item.tone)}">${escHtml(item.value)}</span>
+        </div>`).join('')}</div>`;
 
     const prevBtn = document.getElementById('btnOnboardingPrevStep');
     const nextBtn = document.getElementById('btnOnboardingNextStep');
@@ -8250,10 +8273,10 @@ syncOnboardingFooterActions = function () {
         activeButton = document.getElementById('btnOnboardingSaveStep1');
     } else if (!state.hasAllowed) {
         activeButton = document.getElementById('btnOnboardingSaveAllowedObjects');
-        footerCopy = 'Guarda solo las tablas necesarias. Lo demÃ¡s puede esperar.';
+        footerCopy = 'Guarda solo las tablas necesarias. Lo demas puede esperar.';
     } else if (!state.isInitialized) {
         activeButton = document.getElementById('btnOnboardingInitialize');
-        footerCopy = 'Este paso genera el contexto tÃ©cnico mÃ­nimo para que el motor ya pueda intentar una consulta real.';
+        footerCopy = 'Este paso genera el contexto tecnico minimo para que el motor ya pueda intentar una consulta real.';
     } else if (!state.hasValidation) {
         activeButton = document.getElementById('btnOnboardingRunValidation');
         footerCopy = 'La prueba real es el cierre del flujo base. Si sale bien, el dominio ya queda operativo.';
@@ -8278,7 +8301,7 @@ syncOnboardingFooterActions = function () {
     if (exportPackButton) exportPackButton.style.display = state.hasValidation ? 'inline-flex' : 'none';
     if (importPackButton) importPackButton.style.display = state.hasValidation ? 'inline-flex' : 'none';
 
-    infoInner.innerHTML = `<div class="subpanel-title">AcciÃ³n obligatoria ahora</div><div class="subpanel-desc" id="onboardingFooterHint">${escHtml(footerCopy)}</div>`;
+    infoInner.innerHTML = `<div class="subpanel-title">Accion obligatoria ahora</div><div class="subpanel-desc" id="onboardingFooterHint">${escHtml(footerCopy)}</div>`;
     if (stepLabel) stepLabel.textContent = state.currentStepLabel;
     if (progress) progress.textContent = `${state.progress} / 4 completados`;
     footer.style.display = 'grid';
