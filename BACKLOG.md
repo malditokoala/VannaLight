@@ -97,6 +97,21 @@
   - builder resuelve las familias demo principales con piezas declarativas y menos branches especiales
   - se reduce el numero de casos donde corregir una familia de preguntas obliga a tocar el builder
 
+- Hallazgo operativo confirmado en ERP sobre `turno actual`:
+  - la tabla `dbo.Turnos` usa IDs no consecutivos para turnos productivos
+  - ejemplo real:
+    - `Id = 1` -> `Turno 1`
+    - `Id = 3` -> `Turno 2`
+  - esto confirma que `ShiftId` no debe interpretarse como nombre de turno ni como orden natural del turno
+  - tambien confirma que la regla actual basada en `MAX(ShiftId)` para resolver `turno actual` es incorrecta
+- Correccion requerida para esta linea:
+  - dejar de usar `MAX(ShiftId)` como aproximacion de `turno actual`
+  - resolver `turno actual` usando la tabla `dbo.Turnos`, `inicio`, `fin` y la hora real del servidor
+  - cuando se necesite mostrar o explicar el turno, usar `nombre` del turno y no asumir que `Id = numero visible`
+  - revisar cualquier parte del sistema donde `ShiftId = 3` pueda estar siendo interpretado como `Turno 3` cuando en realidad es `Turno 2`
+- Criterio de terminado adicional:
+  - una pregunta como `cuanto scrap lleva la prensa A10 en turno` debe resolver el turno activo real por horario
+  - el sistema no debe volver a confundir `Id` del turno con el nombre operativo del turno
 #### Fase 4 - Validacion semantica formal antes de ejecutar SQL
 - Crear una capa nueva de validacion semantica entre intencion detectada y SQL final
 - Reglas iniciales obligatorias:
@@ -1425,4 +1440,5 @@ Fuera de alcance por ahora:
   - `ACK` no corrige la regla ni resuelve fallos de compilacion/evaluacion
   - solo marca la alerta como reconocida manualmente
   - los errores estructurales de configuracion deben corregirse en la regla o en el builder, no con `ACK`
+
 
